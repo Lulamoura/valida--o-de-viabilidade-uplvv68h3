@@ -39,7 +39,7 @@ export const updateUsuarioEquipe = (id: string, data: Record<string, any>) =>
 export const deleteUsuarioEquipe = (id: string) => pb.collection('com_usuarios_equipes').delete(id)
 
 export const getParametros = (): Promise<RecordModel[]> =>
-  pb.collection('com_parametros').getFullList({ sort: '-created' })
+  pb.collection('com_parametros').getFullList({ sort: '-created', expand: 'autor_id' })
 export const createParametro = (data: Record<string, any>) =>
   pb.collection('com_parametros').create(data)
 export const updateParametro = (id: string, data: Record<string, any>) =>

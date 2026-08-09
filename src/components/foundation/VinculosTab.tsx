@@ -10,8 +10,11 @@ import {
   getPerfis,
 } from '@/services/foundation'
 import { getUsers } from '@/services/users'
+import { getEscopoLabel } from '@/lib/status-labels'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -52,6 +55,9 @@ export function VinculosTab() {
     equipe_id: '',
     perfil_id: '',
     escopo: 'proprios',
+    ativo: true,
+    inicio_vigencia: '',
+    fim_vigencia: '',
   })
   const [errors, setErrors] = useState<FieldErrors>({})
 
@@ -76,7 +82,15 @@ export function VinculosTab() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ usuario_id: '', equipe_id: '', perfil_id: '', escopo: 'proprios' })
+    setForm({
+      usuario_id: '',
+      equipe_id: '',
+      perfil_id: '',
+      escopo: 'proprios',
+      ativo: true,
+      inicio_vigencia: '',
+      fim_vigencia: '',
+    })
     setErrors({})
     setOpen(true)
   }
@@ -87,6 +101,11 @@ export function VinculosTab() {
       equipe_id: r.equipe_id || '',
       perfil_id: r.perfil_id || '',
       escopo: r.escopo,
+      ativo: r.ativo !== false,
+      inicio_vigencia: r.inicio_vigencia
+        ? String(r.inicio_vigencia).split('T')[0].split(' ')[0]
+        : '',
+      fim_vigencia: r.fim_vigencia ? String(r.fim_vigencia).split('T')[0].split(' ')[0] : '',
     })
     setErrors({})
     setOpen(true)
@@ -188,11 +207,36 @@ export function VinculosTab() {
                   <SelectContent>
                     {ESCOPO_OPTIONS.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {getEscopoLabel(s)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Início Vigência</Label>
+                  <Input
+                    type="date"
+                    value={form.inicio_vigencia}
+                    onChange={(e) => setForm({ ...form, inicio_vigencia: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Fim Vigência</Label>
+                  <Input
+                    type="date"
+                    value={form.fim_vigencia}
+                    onChange={(e) => setForm({ ...form, fim_vigencia: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={form.ativo}
+                  onCheckedChange={(v) => setForm({ ...form, ativo: v })}
+                />
+                <Label>Ativo</Label>
               </div>
               <Button onClick={submit} className="w-full">
                 Salvar
@@ -208,6 +252,8 @@ export function VinculosTab() {
             <TableHead>Equipe</TableHead>
             <TableHead>Perfil</TableHead>
             <TableHead>Escopo</TableHead>
+            <TableHead>Vigência</TableHead>
+            <TableHead>Ativo</TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
@@ -220,7 +266,16 @@ export function VinculosTab() {
               <TableCell className="text-gray-500">{r.expand?.equipe_id?.nome || '-'}</TableCell>
               <TableCell className="text-gray-500">{r.expand?.perfil_id?.nome || '-'}</TableCell>
               <TableCell>
-                <Badge variant="outline">{r.escopo}</Badge>
+                <Badge variant="outline">{getEscopoLabel(r.escopo)}</Badge>
+              </TableCell>
+              <TableCell className="text-xs text-gray-500">
+                {r.inicio_vigencia ? new Date(r.inicio_vigencia).toLocaleDateString('pt-BR') : '-'}
+                {r.fim_vigencia ? ' — ' + new Date(r.fim_vigencia).toLocaleDateString('pt-BR') : ''}
+              </TableCell>
+              <TableCell>
+                <Badge variant={r.ativo !== false ? 'default' : 'secondary'}>
+                  {r.ativo !== false ? 'Sim' : 'Não'}
+                </Badge>
               </TableCell>
               <TableCell className="text-right">
                 <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>

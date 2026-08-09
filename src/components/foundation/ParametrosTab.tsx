@@ -12,9 +12,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Pencil, History, Ban, CheckCircle } from 'lucide-react'
+import { Plus, Pencil, History, Ban, CheckCircle, Eye } from 'lucide-react'
 import { ParametroForm } from './ParametroForm'
 import { ParametroVersionHistory } from './ParametroVersionHistory'
+import { ParametroDetail } from './ParametroDetail'
 import type { RecordModel } from 'pocketbase'
 
 export function ParametrosTab() {
@@ -24,6 +25,8 @@ export function ParametrosTab() {
   const [editing, setEditing] = useState<RecordModel | null>(null)
   const [histOpen, setHistOpen] = useState(false)
   const [histId, setHistId] = useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailParam, setDetailParam] = useState<RecordModel | null>(null)
 
   const load = async () => setRecords(await getParametros())
   useEffect(() => {
@@ -44,6 +47,10 @@ export function ParametrosTab() {
   const openHistory = (id: string) => {
     setHistId(id)
     setHistOpen(true)
+  }
+  const openDetail = (r: RecordModel) => {
+    setDetailParam(r)
+    setDetailOpen(true)
   }
 
   const toggleAtivo = async (r: RecordModel) => {

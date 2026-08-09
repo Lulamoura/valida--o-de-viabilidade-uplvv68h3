@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from '@/hooks/use-auth'
 import { getUsers } from '@/services/users'
+import { getUsuariosEquipes } from '@/services/foundation'
 import {
   Table,
   TableBody,
@@ -20,6 +21,7 @@ import type { RecordModel } from 'pocketbase'
 export function UsuariosTab() {
   const { user } = useAuth()
   const [records, setRecords] = useState<RecordModel[]>([])
+  const [userProfiles, setUserProfiles] = useState<Record<string, string[]>>({})
   const [showUserForm, setShowUserForm] = useState(false)
   const [editTarget, setEditTarget] = useState<RecordModel | null>(null)
   const [pwTarget, setPwTarget] = useState<{
@@ -28,11 +30,29 @@ export function UsuariosTab() {
     userName?: string
   } | null>(null)
 
-  const load = async () => setRecords(await getUsers())
+  const load = async () => {
+    const [users, vinculos] = await Promise.all([getUsers(), getUsuariosEquipes()])
+    setRecords(users)
+    const profileMap: Record<string, string[]> = {}
+    for (const v of vinculos) {
+      if (v.ativo !== false && v.expand?.perfil_id) {
+        const userId = v.usuario_id
+        if (!profileMap[userId]) profileMap[userId] = []
+        const profileName = v.expand.perfil_id.nome
+        if (!profileMap[userId].includes(profileName)) {
+          profileMap[userId].push(profileName)
+        }
+      }
+    }
+    setUserProfiles(profileMap)
+  }
   useEffect(() => {
     load()
   }, [])
   useRealtime('users', () => {
+    load()
+  })
+  useRealtime('com_usuarios_equipes', () => {
     load()
   })
 
@@ -72,7 +92,7 @@ export function UsuariosTab() {
           <TableRow>
             <TableHead>Nome</TableHead>
             <TableHead>E-mail</TableHead>
-            <TableHead>Perfil</TableHead>
+            <TableHead>Perfis</TableHead>
             <TableHead>Equipe</TableHead>
             <TableHead>Ativo Comercial</TableHead>
             <TableHead className="text-right">Ações</TableHead>
@@ -84,7 +104,17 @@ export function UsuariosTab() {
               <TableCell className="font-medium">{r.name || '-'}</TableCell>
               <TableCell className="text-gray-500">{r.email}</TableCell>
               <TableCell>
-                <Badge variant="outline">{r.expand?.perfil_id?.nome || '-'}</Badge>
+                {userProfiles[r.id]?.length ? (
+                  <div className="flex flex-wrap gap-1">
+                    {userProfiles[r.id].map((p, i) => (
+                      <Badge key={i} variant="outline">
+                        {p}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-gray-400">-</span>
+                )}
               </TableCell>
               <TableCell className="text-gray-500">{r.expand?.equipe_id?.nome || '-'}</TableCell>
               <TableCell>

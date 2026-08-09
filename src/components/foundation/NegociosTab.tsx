@@ -5,13 +5,13 @@ import {
   getNegocios,
   createNegocio,
   updateNegocio,
-  deleteNegocio,
   changeNegocioResponsavel,
   getNegocioHistorico,
 } from '@/services/commercial'
-import { getEquipes } from '@/services/foundation'
+import { getEquipes, createAuditRecord } from '@/services/foundation'
 import { getActiveUsers } from '@/services/users'
 import { useAuth } from '@/hooks/use-auth'
+import { NEGOCIO_STATUS_OPTIONS, getStatusLabel, isStatusStage } from '@/lib/status-labels'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,10 +40,8 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Plus, Pencil, Trash2, History, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, History, AlertTriangle, Ban, CheckCircle } from 'lucide-react'
 import type { RecordModel } from 'pocketbase'
-
-const STATUS_OPTIONS = ['aberto', 'em_andamento', 'ganho', 'perdido'] as const
 
 export function NegociosTab() {
   const { user } = useAuth()
@@ -59,7 +57,7 @@ export function NegociosTab() {
     equipe_id: '',
     responsavel_id: '',
     valor: 0,
-    status: 'aberto',
+    status: 'prospects',
     descricao: '',
   })
   const [justificativa, setJustificativa] = useState('')
@@ -87,7 +85,7 @@ export function NegociosTab() {
     load()
   })
 
-  const orphans = records.filter((r) => r.status === 'aberto' && !r.responsavel_id)
+  const orphans = records.filter((r) => r.status === 'prospects' && !r.responsavel_id && !r.inativo)
 
   const openNew = () => {
     setEditing(null)
@@ -97,7 +95,7 @@ export function NegociosTab() {
       equipe_id: '',
       responsavel_id: user?.id || '',
       valor: 0,
-      status: 'aberto',
+      status: 'prospects',
       descricao: '',
     })
     setJustificativa('')
@@ -146,8 +144,34 @@ export function NegociosTab() {
     }
   }
 
-  const remove = async (id: string) => {
-    if (confirm('Excluir este negócio? [TESTE]')) await deleteNegocio(id)
+  const inactivate = async (r: RecordModel) => {
+    const j = prompt('Justificativa para inativação do negócio:')
+    if (!j) return
+    await updateNegocio(r.id, { inativo: true })
+    await createAuditRecord({
+      collection_name: 'com_negocios',
+      record_id: r.id,
+      acao: 'inactivate',
+      valor_anterior: 'ativo',
+      valor_novo: 'inativo',
+      justificativa: j,
+      origem_alteracao: 'manual',
+    })
+  }
+
+  const activate = async (r: RecordModel) => {
+    const j = prompt('Justificativa para ativação do negócio:')
+    if (!j) return
+    await updateNegocio(r.id, { inativo: false })
+    await createAuditRecord({
+      collection_name: 'com_negocios',
+      record_id: r.id,
+      acao: 'update',
+      valor_anterior: 'inativo',
+      valor_novo: 'ativo',
+      justificativa: j,
+      origem_alteracao: 'manual',
+    })
   }
 
   const showHistory = async (negocioId: string) => {
@@ -260,7 +284,7 @@ export function NegociosTab() {
                   />
                 </div>
                 <div>
-                  <Label>Status</Label>
+                  <Label>Etapas / Resultado</Label>
                   <Select
                     value={form.status}
                     onValueChange={(v) => setForm({ ...form, status: v })}
@@ -269,9 +293,9 @@ export function NegociosTab() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
+                      {NEGOCIO_STATUS_OPTIONS.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {s}
+                          {getStatusLabel(s)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -297,8 +321,8 @@ export function NegociosTab() {
         <Alert variant="destructive" className="mb-4">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            <strong>Ocorrência crítica [TESTE]:</strong> {orphans.length} negócio(s) com status
-            "aberto" sem responsável atribuído.
+            <strong>Ocorrência crítica [TESTE]:</strong> {orphans.length} negócio(s) na etapa
+            "Prospects" sem responsável atribuído.
           </AlertDescription>
         </Alert>
       )}
@@ -310,13 +334,13 @@ export function NegociosTab() {
             <TableHead>Empresa</TableHead>
             <TableHead>Responsável</TableHead>
             <TableHead>Valor</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Etapa / Resultado</TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {records.map((r) => (
-            <TableRow key={r.id}>
+            <TableRow key={r.id} className={r.inativo ? 'opacity-50' : ''}>
               <TableCell className="font-medium">{r.titulo}</TableCell>
               <TableCell className="text-gray-500">{r.expand?.empresa_id?.nome || '-'}</TableCell>
               <TableCell className="text-gray-500">
@@ -329,15 +353,20 @@ export function NegociosTab() {
               <TableCell>
                 <Badge
                   variant={
-                    r.status === 'ganho'
-                      ? 'default'
-                      : r.status === 'perdido'
-                        ? 'outline'
-                        : 'secondary'
+                    isStatusStage(r.status)
+                      ? 'secondary'
+                      : r.status === 'ganho'
+                        ? 'default'
+                        : 'outline'
                   }
                 >
-                  {r.status}
+                  {getStatusLabel(r.status)}
                 </Badge>
+                {r.inativo && (
+                  <Badge variant="outline" className="ml-1">
+                    Inativo
+                  </Badge>
+                )}
               </TableCell>
               <TableCell className="text-right">
                 <Button
@@ -351,9 +380,15 @@ export function NegociosTab() {
                 <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => remove(r.id)}>
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
+                {r.inativo ? (
+                  <Button variant="ghost" size="sm" onClick={() => activate(r)} title="Ativar">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" onClick={() => inactivate(r)} title="Inativar">
+                    <Ban className="h-4 w-4 text-amber-500" />
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}
