@@ -271,7 +271,7 @@ migrate(
       } catch (_) {}
     }
 
-    function linkPerm(perfilRec, permSlug, escopo) {
+    var linkPerm = function (perfilRec, permSlug, escopo) {
       try {
         var permRec = app.findFirstRecordByData('com_permissoes', 'slug', permSlug)
         try {
