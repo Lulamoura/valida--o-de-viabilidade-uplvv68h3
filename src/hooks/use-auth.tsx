@@ -44,10 +44,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUp = async (email: string, password: string, name?: string) => {
     try {
-      await pb
-        .collection('users')
-        .create({ email, password, passwordConfirm: password, name: name || '' })
-      await pb.collection('users').authWithPassword(email, password)
+      await pb.collection('users').create({
+        email,
+        password,
+        passwordConfirm: password,
+        name: name || '',
+        ativo_comercial: true,
+      })
+      pb.authStore.clear()
+      const res = await pb.send('/backend/v1/auth-with-password', {
+        method: 'POST',
+        body: JSON.stringify({ identity: email, password }),
+        headers: { 'Content-Type': 'application/json' },
+      })
+      pb.authStore.save(res.token, res.record)
       return { error: null }
     } catch (error) {
       return { error }
@@ -56,7 +66,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      await pb.collection('users').authWithPassword(email, password)
+      pb.authStore.clear()
+      const res = await pb.send('/backend/v1/auth-with-password', {
+        method: 'POST',
+        body: JSON.stringify({ identity: email, password }),
+        headers: { 'Content-Type': 'application/json' },
+      })
+      pb.authStore.save(res.token, res.record)
       return { error: null }
     } catch (error) {
       return { error }

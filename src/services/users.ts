@@ -28,15 +28,16 @@ export const updateUser = (
   },
 ) => pb.collection('users').update(id, data)
 
-export const changeOwnPassword = (userId: string, oldPassword: string, newPassword: string) =>
-  pb.collection('users').update(userId, {
-    password: newPassword,
-    passwordConfirm: newPassword,
-    oldPassword,
+export const changeOwnPassword = (_userId: string, oldPassword: string, newPassword: string) =>
+  pb.send('/backend/v1/change-own-password', {
+    method: 'POST',
+    body: JSON.stringify({ oldPassword, newPassword }),
+    headers: { 'Content-Type': 'application/json' },
   })
 
 export const changeUserPassword = (userId: string, newPassword: string) =>
-  pb.collection('users').update(userId, {
-    password: newPassword,
-    passwordConfirm: newPassword,
+  pb.send('/backend/v1/change-user-password', {
+    method: 'POST',
+    body: JSON.stringify({ userId, newPassword }),
+    headers: { 'Content-Type': 'application/json' },
   })
