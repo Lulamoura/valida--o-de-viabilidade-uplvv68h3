@@ -15,6 +15,8 @@ import {
   Layers,
   Menu,
   X,
+  UserCircle,
+  Link2,
 } from 'lucide-react'
 
 export function Layout() {
@@ -39,75 +41,43 @@ export function Layout() {
       ? user.email.slice(0, 2).toUpperCase()
       : 'PM'
 
+  const navLinkClass = (path: string) =>
+    `flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+      location.pathname === path
+        ? 'bg-slate-800 text-white'
+        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+    }`
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
-      {/* Top Header */}
       <header className="bg-slate-900 text-white sticky top-0 z-50 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo and App Title */}
-            <div className="flex items-center space-x-3">
-              <Link to="/" className="flex items-center space-x-2.5 group">
-                <div className="bg-blue-600 p-2 rounded-lg text-white group-hover:bg-blue-500 transition-colors">
-                  <Building2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <span className="font-bold text-lg tracking-tight block leading-none">
-                    PMais CRM
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
-                    Fase 1 - Fundação
-                  </span>
-                </div>
-              </Link>
-            </div>
+            <Link to="/" className="flex items-center space-x-2.5 group">
+              <div className="bg-blue-600 p-2 rounded-lg text-white group-hover:bg-blue-500 transition-colors">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="font-bold text-lg tracking-tight block leading-none">
+                  PMais CRM
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                  Administração · Fundação
+                </span>
+              </div>
+            </Link>
 
-            {/* Desktop Navigation Links */}
             <nav className="hidden md:flex items-center space-x-1">
-              <Link
-                to="/"
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  location.pathname === '/'
-                    ? 'bg-slate-800 text-white'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
+              <Link to="/" className={navLinkClass('/')}>
                 <LayoutDashboard className="h-4 w-4" />
                 <span>Dashboard</span>
               </Link>
-
-              <Link
-                to="/foundation"
-                className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  location.pathname.startsWith('/foundation')
-                    ? 'bg-slate-800 text-white'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
+              <Link to="/foundation" className={navLinkClass('/foundation')}>
                 <Layers className="h-4 w-4" />
-                <span>Módulo Fundação</span>
-              </Link>
-
-              <div className="h-4 w-px bg-slate-700 mx-2" />
-
-              {/* Direct Tab Shortcuts */}
-              <Link
-                to="/foundation?tab=empresas"
-                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-              >
-                <Building2 className="h-3.5 w-3.5 text-blue-400" />
-                <span>Empresas</span>
-              </Link>
-              <Link
-                to="/foundation?tab=negocios"
-                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-              >
-                <Briefcase className="h-3.5 w-3.5 text-emerald-400" />
-                <span>Negócios</span>
+                <span>Administração</span>
               </Link>
             </nav>
 
-            {/* User Identity & Logout */}
             <div className="hidden md:flex items-center space-x-3">
               {user && (
                 <div className="flex items-center space-x-3 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700/60">
@@ -131,14 +101,12 @@ export function Layout() {
                 size="sm"
                 onClick={handleLogout}
                 className="text-slate-300 hover:text-white hover:bg-slate-800 h-8 px-2.5"
-                title="Sair do sistema"
               >
                 <LogOut className="h-4 w-4 mr-1.5" />
                 <span className="text-xs">Sair</span>
               </Button>
             </div>
 
-            {/* Mobile menu button */}
             <div className="md:hidden flex items-center">
               <Button
                 variant="ghost"
@@ -152,7 +120,6 @@ export function Layout() {
           </div>
         </div>
 
-        {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-slate-800 bg-slate-900 px-4 pt-2 pb-4 space-y-2">
             <div className="pb-3 mb-2 border-b border-slate-800 flex items-center justify-between">
@@ -174,7 +141,6 @@ export function Layout() {
                 Sair
               </Button>
             </div>
-
             <Link
               to="/"
               onClick={() => setMobileMenuOpen(false)}
@@ -183,16 +149,14 @@ export function Layout() {
               <LayoutDashboard className="h-4 w-4 text-blue-400" />
               <span>Dashboard</span>
             </Link>
-
             <Link
               to="/foundation"
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium text-slate-200 hover:bg-slate-800"
             >
               <Layers className="h-4 w-4 text-purple-400" />
-              <span>Módulo Fundação</span>
+              <span>Administração / Fundação</span>
             </Link>
-
             <div className="pt-2 border-t border-slate-800">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-3 mb-1">
                 Módulos
@@ -223,6 +187,14 @@ export function Layout() {
                   <span>Equipes</span>
                 </Link>
                 <Link
+                  to="/foundation?tab=usuarios"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
+                >
+                  <UserCircle className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>Usuários</span>
+                </Link>
+                <Link
                   to="/foundation?tab=perfis"
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
@@ -239,6 +211,14 @@ export function Layout() {
                   <span>Permissões</span>
                 </Link>
                 <Link
+                  to="/foundation?tab=vinculos"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
+                >
+                  <Link2 className="h-3.5 w-3.5 text-teal-400" />
+                  <span>Vínculos</span>
+                </Link>
+                <Link
                   to="/foundation?tab=parametros"
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
@@ -252,16 +232,14 @@ export function Layout() {
         )}
       </header>
 
-      {/* Main Outlet */}
       <main className="flex-1">
         <Outlet />
       </main>
 
-      {/* Footer */}
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-4 px-4 text-xs text-center">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>PMais CRM &copy; {new Date().getFullYear()} - Sistema de Gestão Comercial</span>
-          <span className="text-slate-500">Validação de Viabilidade - Fase 1</span>
+          <span>PMais CRM &copy; {new Date().getFullYear()} – Sistema de Gestão Comercial</span>
+          <span className="text-slate-500">Validação de Viabilidade – Fase 1</span>
         </div>
       </footer>
     </div>

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
-import { getEmpresas, createEmpresa, updateEmpresa, deleteEmpresa } from '@/services/commercial'
-import { getEquipes } from '@/services/foundation'
+import { getEmpresas, createEmpresa, updateEmpresa } from '@/services/commercial'
+import { getEquipes, createAuditRecord } from '@/services/foundation'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,7 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Ban } from 'lucide-react'
 import type { RecordModel } from 'pocketbase'
 
 const STATUS_OPTIONS = ['ativo', 'inativo', 'prospecto'] as const
@@ -109,8 +109,20 @@ export function EmpresasTab() {
       setErrors(extractFieldErrors(err))
     }
   }
-  const remove = async (id: string) => {
-    if (confirm('Excluir esta empresa?')) await deleteEmpresa(id)
+
+  const inactivate = async (r: RecordModel) => {
+    const justificativa = prompt('Justificativa para inativação da empresa:')
+    if (!justificativa) return
+    await updateEmpresa(r.id, { status: 'inativo' })
+    await createAuditRecord({
+      collection_name: 'com_empresas',
+      record_id: r.id,
+      acao: 'inactivate',
+      valor_anterior: r.status,
+      valor_novo: 'inativo',
+      justificativa,
+      origem_alteracao: 'manual',
+    })
   }
 
   return (
@@ -200,7 +212,7 @@ export function EmpresasTab() {
                 </Select>
               </div>
               <div>
-                <Label>Endereco</Label>
+                <Label>Endereço</Label>
                 <Input
                   value={form.endereco}
                   onChange={(e) => setForm({ ...form, endereco: e.target.value })}
@@ -236,7 +248,7 @@ export function EmpresasTab() {
             <TableHead>Nome</TableHead>
             <TableHead>CNPJ</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
+            <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -261,9 +273,11 @@ export function EmpresasTab() {
                 <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => remove(r.id)}>
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
+                {r.status !== 'inativo' && (
+                  <Button variant="ghost" size="sm" onClick={() => inactivate(r)} title="Inativar">
+                    <Ban className="h-4 w-4 text-amber-500" />
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}

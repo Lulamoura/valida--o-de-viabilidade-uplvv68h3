@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-08-09T20:15:07.267Z",
+  "generatedAt": "2026-08-09T20:43:54.111Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "id = @request.auth.id",
-        "view": "id = @request.auth.id",
-        "create": "",
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
         "update": "id = @request.auth.id",
         "delete": "id = @request.auth.id"
       },
@@ -400,6 +400,55 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_validacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inicio_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fim_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "autor_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "data_hora",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "justificativa",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -581,6 +630,263 @@
         "CREATE INDEX idx_com_negocios_responsavel ON com_negocios (responsavel_id)",
         "CREATE INDEX idx_com_negocios_empresa ON com_negocios (empresa_id)",
         "CREATE INDEX idx_com_negocios_created ON com_negocios (created)"
+      ]
+    },
+    {
+      "name": "com_negocio_historico",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "negocio_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "usuario_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "responsavel_anterior_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "responsavel_novo_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "justificativa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem_alteracao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_negocio_historico_negocio ON com_negocio_historico (negocio_id)",
+        "CREATE INDEX idx_com_negocio_historico_created ON com_negocio_historico (created)"
+      ]
+    },
+    {
+      "name": "com_auditoria",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "collection_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "record_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "usuario_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "acao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["create", "update", "inactivate", "delete"]
+        },
+        {
+          "name": "valor_anterior",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_novo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "justificativa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem_alteracao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_auditoria_collection_record ON com_auditoria (collection_name, record_id)",
+        "CREATE INDEX idx_com_auditoria_created ON com_auditoria (created)"
+      ]
+    },
+    {
+      "name": "com_parametros_versoes",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "parametro_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_parametros"
+        },
+        {
+          "name": "chave",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_validacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "versao",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "inicio_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fim_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "autor_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "justificativa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_parametros_versoes_parametro ON com_parametros_versoes (parametro_id)",
+        "CREATE INDEX idx_com_parametros_versoes_versao ON com_parametros_versoes (parametro_id, versao)"
       ]
     }
   ]

@@ -28,6 +28,16 @@ export const getPerfilPermissoes = (): Promise<RecordModel[]> =>
     .collection('com_perfil_permissoes')
     .getFullList({ expand: 'perfil_id,permissao_id', sort: '-created' })
 
+export const getUsuariosEquipes = (): Promise<RecordModel[]> =>
+  pb
+    .collection('com_usuarios_equipes')
+    .getFullList({ expand: 'usuario_id,equipe_id,perfil_id', sort: '-created' })
+export const createUsuarioEquipe = (data: Record<string, any>) =>
+  pb.collection('com_usuarios_equipes').create(data)
+export const updateUsuarioEquipe = (id: string, data: Record<string, any>) =>
+  pb.collection('com_usuarios_equipes').update(id, data)
+export const deleteUsuarioEquipe = (id: string) => pb.collection('com_usuarios_equipes').delete(id)
+
 export const getParametros = (): Promise<RecordModel[]> =>
   pb.collection('com_parametros').getFullList({ sort: '-created' })
 export const createParametro = (data: Record<string, any>) =>
@@ -35,3 +45,24 @@ export const createParametro = (data: Record<string, any>) =>
 export const updateParametro = (id: string, data: Record<string, any>) =>
   pb.collection('com_parametros').update(id, data)
 export const deleteParametro = (id: string) => pb.collection('com_parametros').delete(id)
+
+export const getParametroVersoes = (parametroId: string): Promise<RecordModel[]> =>
+  pb.collection('com_parametros_versoes').getFullList({
+    filter: `parametro_id = "${parametroId}"`,
+    sort: '-versao',
+    expand: 'autor_id',
+  })
+
+export const createAuditRecord = (data: {
+  collection_name: string
+  record_id: string
+  acao: string
+  valor_anterior: string
+  valor_novo: string
+  justificativa: string
+  origem_alteracao: string
+}) =>
+  pb.collection('com_auditoria').create({
+    ...data,
+    usuario_id: pb.authStore.record?.id,
+  })
