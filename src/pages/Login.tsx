@@ -19,7 +19,7 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (isAuthenticated) navigate('/foundation', { replace: true })
+    if (isAuthenticated) navigate('/', { replace: true })
   }, [isAuthenticated, navigate])
 
   const handleSubmit = async () => {
@@ -39,7 +39,7 @@ export default function Login() {
         const { error } = await signUp(form.email, form.password, form.name)
         if (error) throw error
       }
-      navigate('/foundation')
+      navigate('/')
     } catch (err) {
       setFieldErrors(extractFieldErrors(err))
       setGeneralError(getErrorMessage(err))

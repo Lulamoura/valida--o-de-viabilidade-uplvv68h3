@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EquipesTab } from '@/components/foundation/EquipesTab'
 import { PerfisTab } from '@/components/foundation/PerfisTab'
@@ -7,11 +8,18 @@ import { EmpresasTab } from '@/components/foundation/EmpresasTab'
 import { NegociosTab } from '@/components/foundation/NegociosTab'
 
 export default function Foundation() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') || 'equipes'
+
+  const handleTabChange = (value: string) => {
+    setSearchParams({ tab: value })
+  }
+
   return (
     <div className="container mx-auto py-6 px-4">
       <h1 className="text-2xl font-bold mb-1">Administracao da Fundacao</h1>
       <p className="text-sm text-gray-500 mb-6">Fase 1 - Estrutura base do PMais CRM</p>
-      <Tabs defaultValue="equipes">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="equipes">Equipes</TabsTrigger>
           <TabsTrigger value="perfis">Perfis</TabsTrigger>
