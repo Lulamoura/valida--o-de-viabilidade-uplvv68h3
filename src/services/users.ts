@@ -17,6 +17,17 @@ export const createUser = (data: {
   ativo_comercial?: boolean
 }) => pb.collection('users').create(data)
 
+export const updateUser = (
+  id: string,
+  data: {
+    name?: string
+    email?: string
+    perfil_id?: string
+    equipe_id?: string
+    ativo_comercial?: boolean
+  },
+) => pb.collection('users').update(id, data)
+
 export const changeOwnPassword = (userId: string, oldPassword: string, newPassword: string) =>
   pb.collection('users').update(userId, {
     password: newPassword,

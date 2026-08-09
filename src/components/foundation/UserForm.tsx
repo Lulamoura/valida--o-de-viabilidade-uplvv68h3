@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
-import { createUser } from '@/services/users'
+import { createUser, updateUser } from '@/services/users'
 import { getPerfis, getEquipes } from '@/services/foundation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +19,7 @@ import type { RecordModel } from 'pocketbase'
 interface Props {
   open: boolean
   onOpenChange: (v: boolean) => void
+  editUser?: RecordModel | null
 }
 
 const EMPTY = {
@@ -30,11 +31,14 @@ const EMPTY = {
   ativo_comercial: true,
 }
 
-export function UserForm({ open, onOpenChange }: Props) {
+export function UserForm({ open, onOpenChange, editUser }: Props) {
   const [perfis, setPerfis] = useState<RecordModel[]>([])
   const [equipes, setEquipes] = useState<RecordModel[]>([])
   const [form, setForm] = useState(EMPTY)
   const [errors, setErrors] = useState<FieldErrors>({})
+  const [saving, setSaving] = useState(false)
+
+  const isEdit = !!editUser
 
   useEffect(() => {
     if (!open) return
@@ -42,20 +46,44 @@ export function UserForm({ open, onOpenChange }: Props) {
       setPerfis(p)
       setEquipes(e)
     })
-    setForm(EMPTY)
+    if (editUser) {
+      setForm({
+        name: editUser.name || '',
+        email: editUser.email || '',
+        password: '',
+        perfil_id: editUser.perfil_id || '',
+        equipe_id: editUser.equipe_id || '',
+        ativo_comercial: editUser.ativo_comercial ?? true,
+      })
+    } else {
+      setForm(EMPTY)
+    }
     setErrors({})
-  }, [open])
+  }, [open, editUser])
 
   const submit = async () => {
     setErrors({})
+    setSaving(true)
     try {
-      await createUser({
-        ...form,
-        passwordConfirm: form.password,
-      })
+      if (isEdit && editUser) {
+        await updateUser(editUser.id, {
+          name: form.name,
+          email: form.email,
+          perfil_id: form.perfil_id || undefined,
+          equipe_id: form.equipe_id || undefined,
+          ativo_comercial: form.ativo_comercial,
+        })
+      } else {
+        await createUser({
+          ...form,
+          passwordConfirm: form.password,
+        })
+      }
       onOpenChange(false)
     } catch (err) {
       setErrors(extractFieldErrors(err))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -63,7 +91,7 @@ export function UserForm({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Novo Usuário</DialogTitle>
+          <DialogTitle>{isEdit ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -80,16 +108,18 @@ export function UserForm({ open, onOpenChange }: Props) {
             />
             {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
           </div>
-          <div>
-            <Label>Senha</Label>
-            <Input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder="Mínimo 8 caracteres"
-            />
-            {errors.password && <p className="text-sm text-red-500">{errors.password}</p>}
-          </div>
+          {!isEdit && (
+            <div>
+              <Label>Senha</Label>
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder="Mínimo 8 caracteres"
+              />
+              {errors.password && <p className="text-sm text-red-500">{errors.password}</p>}
+            </div>
+          )}
           <div>
             <Label>Perfil</Label>
             <Select
@@ -135,8 +165,8 @@ export function UserForm({ open, onOpenChange }: Props) {
             />
             <Label>Ativo Comercial</Label>
           </div>
-          <Button onClick={submit} className="w-full">
-            Salvar
+          <Button onClick={submit} className="w-full" disabled={saving}>
+            {saving ? 'Salvando...' : 'Salvar'}
           </Button>
         </div>
       </DialogContent>

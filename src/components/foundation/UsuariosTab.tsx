@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus, KeyRound } from 'lucide-react'
+import { Plus, KeyRound, Pencil } from 'lucide-react'
 import { UserForm } from '@/components/foundation/UserForm'
 import { ChangePasswordDialog } from '@/components/foundation/ChangePasswordDialog'
 import type { RecordModel } from 'pocketbase'
@@ -21,6 +21,7 @@ export function UsuariosTab() {
   const { user } = useAuth()
   const [records, setRecords] = useState<RecordModel[]>([])
   const [showUserForm, setShowUserForm] = useState(false)
+  const [editTarget, setEditTarget] = useState<RecordModel | null>(null)
   const [pwTarget, setPwTarget] = useState<{
     userId: string
     requireOld: boolean
@@ -34,6 +35,16 @@ export function UsuariosTab() {
   useRealtime('users', () => {
     load()
   })
+
+  const handleEdit = (record: RecordModel) => {
+    setEditTarget(record)
+    setShowUserForm(true)
+  }
+
+  const handleNewUser = () => {
+    setEditTarget(null)
+    setShowUserForm(true)
+  }
 
   return (
     <div>
@@ -50,7 +61,7 @@ export function UsuariosTab() {
             <KeyRound className="h-4 w-4 mr-1" />
             Alterar Minha Senha
           </Button>
-          <Button size="sm" onClick={() => setShowUserForm(true)}>
+          <Button size="sm" onClick={handleNewUser}>
             <Plus className="h-4 w-4 mr-1" />
             Novo Usuário
           </Button>
@@ -82,27 +93,32 @@ export function UsuariosTab() {
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    setPwTarget({
-                      userId: r.id,
-                      requireOld: r.id === user?.id,
-                      userName: r.name || r.email,
-                    })
-                  }
-                  title="Alterar Senha"
-                >
-                  <KeyRound className="h-4 w-4" />
-                </Button>
+                <div className="flex justify-end gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(r)} title="Editar">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setPwTarget({
+                        userId: r.id,
+                        requireOld: r.id === user?.id,
+                        userName: r.name || r.email,
+                      })
+                    }
+                    title="Alterar Senha"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
 
-      <UserForm open={showUserForm} onOpenChange={setShowUserForm} />
+      <UserForm open={showUserForm} onOpenChange={setShowUserForm} editUser={editTarget} />
 
       {pwTarget && (
         <ChangePasswordDialog
