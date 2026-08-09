@@ -68,7 +68,7 @@ export default function Index() {
               Olá, {user?.name || 'Usuário'}! 👋
             </h1>
             <p className="text-sm text-slate-300 mt-1 max-w-2xl">
-              Indicadores comerciais em tempo real — PMais CRM Fase 1 (dados de teste).
+              Indicadores comerciais em tempo real — Gestão Comercial PMais Fase 1 (dados de teste).
             </p>
           </div>
           <div className="flex gap-2.5 w-full sm:w-auto">

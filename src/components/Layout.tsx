@@ -45,7 +45,7 @@ export function Layout() {
               </div>
               <div>
                 <span className="font-bold text-lg tracking-tight block leading-none">
-                  PMais CRM
+                  Gestão Comercial PMais
                 </span>
                 <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
                   Administração · Fundação
@@ -153,7 +153,9 @@ export function Layout() {
 
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-4 px-4 text-xs text-center">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>PMais CRM &copy; {new Date().getFullYear()} – Sistema de Gestão Comercial</span>
+          <span>
+            Gestão Comercial PMais &copy; {new Date().getFullYear()} – Sistema de Gestão Comercial
+          </span>
           <span className="text-slate-500">Validação de Viabilidade – Fase 1</span>
         </div>
       </footer>

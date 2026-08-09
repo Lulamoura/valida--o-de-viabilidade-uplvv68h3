@@ -46,7 +46,7 @@ export default function Login() {
               <Building2 className="h-6 w-6 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl">PMais CRM</CardTitle>
+          <CardTitle className="text-2xl">Gestão Comercial PMais</CardTitle>
           <CardDescription>Validação de Viabilidade – Fase 1</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
