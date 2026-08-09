@@ -3,21 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import {
-  Building2,
-  Briefcase,
-  Users,
-  ShieldCheck,
-  KeyRound,
-  Sliders,
-  LogOut,
-  LayoutDashboard,
-  Layers,
-  Menu,
-  X,
-  UserCircle,
-  Link2,
-} from 'lucide-react'
+import { Building2, LogOut, LayoutDashboard, Layers, Menu, X } from 'lucide-react'
 
 export function Layout() {
   const { user, signOut } = useAuth()
@@ -157,77 +143,6 @@ export function Layout() {
               <Layers className="h-4 w-4 text-purple-400" />
               <span>Administração / Fundação</span>
             </Link>
-            <div className="pt-2 border-t border-slate-800">
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-3 mb-1">
-                Módulos
-              </p>
-              <div className="grid grid-cols-2 gap-1">
-                <Link
-                  to="/foundation?tab=empresas"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <Building2 className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Empresas</span>
-                </Link>
-                <Link
-                  to="/foundation?tab=negocios"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <Briefcase className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Negócios</span>
-                </Link>
-                <Link
-                  to="/foundation?tab=equipes"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <Users className="h-3.5 w-3.5 text-amber-400" />
-                  <span>Equipes</span>
-                </Link>
-                <Link
-                  to="/foundation?tab=usuarios"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <UserCircle className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>Usuários</span>
-                </Link>
-                <Link
-                  to="/foundation?tab=perfis"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5 text-indigo-400" />
-                  <span>Perfis</span>
-                </Link>
-                <Link
-                  to="/foundation?tab=permissoes"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <KeyRound className="h-3.5 w-3.5 text-rose-400" />
-                  <span>Permissões</span>
-                </Link>
-                <Link
-                  to="/foundation?tab=vinculos"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <Link2 className="h-3.5 w-3.5 text-teal-400" />
-                  <span>Vínculos</span>
-                </Link>
-                <Link
-                  to="/foundation?tab=parametros"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <Sliders className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>Parâmetros</span>
-                </Link>
-              </div>
-            </div>
           </div>
         )}
       </header>

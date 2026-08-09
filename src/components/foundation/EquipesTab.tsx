@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
-import { getEquipes, createEquipe, updateEquipe, deleteEquipe } from '@/services/foundation'
+import { getEquipes, createEquipe, updateEquipe, createAuditRecord } from '@/services/foundation'
+import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,10 +23,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Ban, CheckCircle } from 'lucide-react'
 import type { RecordModel } from 'pocketbase'
 
 export function EquipesTab() {
+  const { user } = useAuth()
   const [records, setRecords] = useState<RecordModel[]>([])
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<RecordModel | null>(null)
@@ -64,8 +66,20 @@ export function EquipesTab() {
     }
   }
 
-  const remove = async (id: string) => {
-    if (confirm('Excluir esta equipe?')) await deleteEquipe(id)
+  const toggleAtivo = async (r: RecordModel) => {
+    const action = r.ativo ? 'inativar' : 'ativar'
+    const justificativa = prompt(`Justificativa para ${action} esta equipe:`)
+    if (!justificativa) return
+    await updateEquipe(r.id, { ativo: !r.ativo })
+    await createAuditRecord({
+      collection_name: 'com_equipes',
+      record_id: r.id,
+      acao: r.ativo ? 'inactivate' : 'update',
+      valor_anterior: r.ativo ? 'ativo' : 'inativo',
+      valor_novo: r.ativo ? 'inativo' : 'ativo',
+      justificativa,
+      origem_alteracao: 'manual',
+    })
   }
 
   return (
@@ -102,7 +116,7 @@ export function EquipesTab() {
                 {errors.slug && <p className="text-sm text-red-500">{errors.slug}</p>}
               </div>
               <div>
-                <Label>Descricao</Label>
+                <Label>Descrição</Label>
                 <Input
                   value={form.descricao}
                   onChange={(e) => setForm({ ...form, descricao: e.target.value })}
@@ -128,7 +142,7 @@ export function EquipesTab() {
             <TableHead>Nome</TableHead>
             <TableHead>Slug</TableHead>
             <TableHead>Ativo</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
+            <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -137,14 +151,23 @@ export function EquipesTab() {
               <TableCell className="font-medium">{r.nome}</TableCell>
               <TableCell className="text-gray-500">{r.slug}</TableCell>
               <TableCell>
-                <Badge variant={r.ativo ? 'default' : 'secondary'}>{r.ativo ? 'Sim' : 'Nao'}</Badge>
+                <Badge variant={r.ativo ? 'default' : 'secondary'}>{r.ativo ? 'Sim' : 'Não'}</Badge>
               </TableCell>
               <TableCell className="text-right">
                 <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => remove(r.id)}>
-                  <Trash2 className="h-4 w-4 text-red-500" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleAtivo(r)}
+                  title={r.ativo ? 'Inativar' : 'Ativar'}
+                >
+                  {r.ativo ? (
+                    <Ban className="h-4 w-4 text-amber-500" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  )}
                 </Button>
               </TableCell>
             </TableRow>

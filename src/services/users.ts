@@ -2,7 +2,7 @@ import pb from '@/lib/pocketbase/client'
 import type { RecordModel } from 'pocketbase'
 
 export const getUsers = (): Promise<RecordModel[]> =>
-  pb.collection('users').getFullList({ sort: 'name' })
+  pb.collection('users').getFullList({ sort: 'name', expand: 'perfil_id,equipe_id' })
 
 export const getActiveUsers = (): Promise<RecordModel[]> =>
   pb.collection('users').getFullList({ filter: 'ativo_comercial = true', sort: 'name' })

@@ -74,13 +74,18 @@ export function PermissoesTab() {
     }
   }
   const remove = async (id: string) => {
-    if (confirm('Excluir esta permissao?')) await deletePermissao(id)
+    if (
+      confirm(
+        'Excluir esta permissão? Esta ação só é permitida para permissões sem vínculos ativos [TESTE].',
+      )
+    )
+      await deletePermissao(id)
   }
 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold">Permissoes</h2>
+        <h2 className="text-lg font-semibold">Permissões</h2>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={openNew} size="sm">
@@ -90,7 +95,7 @@ export function PermissoesTab() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editing ? 'Editar Permissao' : 'Nova Permissao'}</DialogTitle>
+              <DialogTitle>{editing ? 'Editar Permissão' : 'Nova Permissão'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div>
@@ -120,7 +125,7 @@ export function PermissoesTab() {
                 {errors.recurso && <p className="text-sm text-red-500">{errors.recurso}</p>}
               </div>
               <div>
-                <Label>Acao</Label>
+                <Label>Ação</Label>
                 <Input
                   value={form.acao}
                   onChange={(e) => setForm({ ...form, acao: e.target.value })}
@@ -129,7 +134,7 @@ export function PermissoesTab() {
                 {errors.acao && <p className="text-sm text-red-500">{errors.acao}</p>}
               </div>
               <div>
-                <Label>Descricao</Label>
+                <Label>Descrição</Label>
                 <Input
                   value={form.descricao}
                   onChange={(e) => setForm({ ...form, descricao: e.target.value })}
@@ -147,8 +152,8 @@ export function PermissoesTab() {
           <TableRow>
             <TableHead>Nome</TableHead>
             <TableHead>Recurso</TableHead>
-            <TableHead>Acao</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
+            <TableHead>Ação</TableHead>
+            <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

@@ -1,23 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useRealtime } from '@/hooks/use-realtime'
-import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
-import {
-  getParametros,
-  createParametro,
-  updateParametro,
-  deleteParametro,
-} from '@/services/foundation'
+import { getParametros, updateParametro, createAuditRecord } from '@/services/foundation'
+import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 import {
   Table,
   TableBody,
@@ -26,16 +12,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, History, Ban, CheckCircle } from 'lucide-react'
+import { ParametroForm } from './ParametroForm'
+import { ParametroVersionHistory } from './ParametroVersionHistory'
 import type { RecordModel } from 'pocketbase'
 
 export function ParametrosTab() {
+  const { user } = useAuth()
   const [records, setRecords] = useState<RecordModel[]>([])
-  const [open, setOpen] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<RecordModel | null>(null)
-  const [form, setForm] = useState({ chave: '', valor: '', descricao: '', versao: 1, ativo: true })
-  const [errors, setErrors] = useState<FieldErrors>({})
+  const [histOpen, setHistOpen] = useState(false)
+  const [histId, setHistId] = useState<string | null>(null)
 
   const load = async () => setRecords(await getParametros())
   useEffect(() => {
@@ -47,108 +35,56 @@ export function ParametrosTab() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ chave: '', valor: '', descricao: '', versao: 1, ativo: true })
-    setErrors({})
-    setOpen(true)
+    setFormOpen(true)
   }
   const openEdit = (r: RecordModel) => {
     setEditing(r)
-    setForm({
-      chave: r.chave,
-      valor: r.valor,
-      descricao: r.descricao || '',
-      versao: r.versao,
-      ativo: r.ativo,
-    })
-    setErrors({})
-    setOpen(true)
+    setFormOpen(true)
+  }
+  const openHistory = (id: string) => {
+    setHistId(id)
+    setHistOpen(true)
   }
 
-  const submit = async () => {
-    setErrors({})
-    try {
-      if (editing) await updateParametro(editing.id, form)
-      else await createParametro(form)
-      setOpen(false)
-    } catch (err) {
-      setErrors(extractFieldErrors(err))
-    }
-  }
-  const remove = async (id: string) => {
-    if (confirm('Excluir este parametro?')) await deleteParametro(id)
+  const toggleAtivo = async (r: RecordModel) => {
+    const action = r.ativo ? 'inativar' : 'ativar'
+    const justificativa = prompt(`Justificativa para ${action} este parâmetro:`)
+    if (!justificativa) return
+    await updateParametro(r.id, {
+      ativo: !r.ativo,
+      autor_id: user?.id,
+      data_hora: new Date().toISOString(),
+      justificativa,
+    })
+    await createAuditRecord({
+      collection_name: 'com_parametros',
+      record_id: r.id,
+      acao: r.ativo ? 'inactivate' : 'update',
+      valor_anterior: r.ativo ? 'ativo' : 'inativo',
+      valor_novo: r.ativo ? 'inativo' : 'ativo',
+      justificativa,
+      origem_alteracao: 'manual',
+    })
   }
 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold">Parametros</h2>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openNew} size="sm">
-              <Plus className="h-4 w-4 mr-1" />
-              Adicionar
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editing ? 'Editar Parametro' : 'Novo Parametro'}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label>Chave</Label>
-                <Input
-                  value={form.chave}
-                  onChange={(e) => setForm({ ...form, chave: e.target.value })}
-                  placeholder="ex: sistema.nome"
-                />
-                {errors.chave && <p className="text-sm text-red-500">{errors.chave}</p>}
-              </div>
-              <div>
-                <Label>Valor</Label>
-                <Input
-                  value={form.valor}
-                  onChange={(e) => setForm({ ...form, valor: e.target.value })}
-                />
-                {errors.valor && <p className="text-sm text-red-500">{errors.valor}</p>}
-              </div>
-              <div>
-                <Label>Descricao</Label>
-                <Input
-                  value={form.descricao}
-                  onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Versao</Label>
-                <Input
-                  type="number"
-                  value={form.versao}
-                  onChange={(e) => setForm({ ...form, versao: parseInt(e.target.value) || 1 })}
-                />
-                {errors.versao && <p className="text-sm text-red-500">{errors.versao}</p>}
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={form.ativo}
-                  onCheckedChange={(v) => setForm({ ...form, ativo: v })}
-                />
-                <Label>Ativo</Label>
-              </div>
-              <Button onClick={submit} className="w-full">
-                Salvar
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <h2 className="text-lg font-semibold">Parâmetros</h2>
+        <Button onClick={openNew} size="sm">
+          <Plus className="h-4 w-4 mr-1" />
+          Adicionar
+        </Button>
       </div>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Chave</TableHead>
             <TableHead>Valor</TableHead>
-            <TableHead>Versao</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Versão</TableHead>
             <TableHead>Ativo</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
+            <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -156,24 +92,44 @@ export function ParametrosTab() {
             <TableRow key={r.id}>
               <TableCell className="font-medium">{r.chave}</TableCell>
               <TableCell className="text-gray-500">{r.valor}</TableCell>
+              <TableCell className="text-gray-500">{r.tipo || '-'}</TableCell>
               <TableCell>
                 <Badge variant="outline">v{r.versao}</Badge>
               </TableCell>
               <TableCell>
-                <Badge variant={r.ativo ? 'default' : 'secondary'}>{r.ativo ? 'Sim' : 'Nao'}</Badge>
+                <Badge variant={r.ativo ? 'default' : 'secondary'}>{r.ativo ? 'Sim' : 'Não'}</Badge>
               </TableCell>
               <TableCell className="text-right">
-                <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => openHistory(r.id)}
+                  title="Histórico"
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Editar">
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => remove(r.id)}>
-                  <Trash2 className="h-4 w-4 text-red-500" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleAtivo(r)}
+                  title={r.ativo ? 'Inativar' : 'Ativar'}
+                >
+                  {r.ativo ? (
+                    <Ban className="h-4 w-4 text-amber-500" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  )}
                 </Button>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      <ParametroForm open={formOpen} onOpenChange={setFormOpen} editing={editing} />
+      <ParametroVersionHistory parametroId={histId} open={histOpen} onOpenChange={setHistOpen} />
     </div>
   )
 }
