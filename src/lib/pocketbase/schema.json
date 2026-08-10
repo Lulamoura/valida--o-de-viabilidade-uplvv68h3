@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T02:05:10.590Z",
+  "generatedAt": "2026-08-10T02:14:48.112Z",
   "collections": [
     {
       "name": "users",
@@ -480,8 +480,8 @@
       "name": "com_empresas",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
-        "view": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
+        "list": "@request.auth.id != '' && (@request.auth.perfil_id.slug = 'superadministrador' || @request.auth.perfil_id.slug = 'aprovador' || @request.auth.perfil_id.slug = 'leitura-executiva' || (@request.auth.perfil_id.slug = 'gestor-comercial' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))) || ((@request.auth.perfil_id.slug = 'operador-comercial' || @request.auth.perfil_id.slug = 'prospeccao') && responsavel_id = @request.auth.id))",
+        "view": "@request.auth.id != '' && (@request.auth.perfil_id.slug = 'superadministrador' || responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
         "delete": null

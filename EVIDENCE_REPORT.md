@@ -258,7 +258,7 @@ O rollback é realizado revertendo migrations na ordem inversa:
 | Collection            | listRule                                                                                                                                                                                              | viewRule                                                                        | createRule               | updateRule                                                      | deleteRule         |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------- | ------------------ |
 | com_negocios          | `@request.auth.id != '' && inativo != true && (superadmin \|\| aprovador \|\| leitura-executiva \|\| (gestor && (resp=auth \|\| equipe=auth.equipe)) \|\| ((operador \|\| prospeccao) && resp=auth))` | `@request.auth.id != '' && (superadmin \|\| resp=auth \|\| equipe=auth.equipe)` | `@request.auth.id != ''` | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)` | `null` (bloqueado) |
-| com_empresas          | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)`                                                                                                                                       | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)`                 | `@request.auth.id != ''` | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)` | `null` (bloqueado) |
+| com_empresas          | `@request.auth.id != '' && (superadmin \|\| aprovador \|\| leitura-executiva \|\| (gestor && (resp=auth \|\| equipe=auth.equipe)) \|\| ((operador \|\| prospeccao) && resp=auth))`                    | `@request.auth.id != '' && (superadmin \|\| resp=auth \|\| equipe=auth.equipe)` | `@request.auth.id != ''` | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)` | `null` (bloqueado) |
 | com_negocio_historico | `@request.auth.id != ''`                                                                                                                                                                              | `@request.auth.id != ''`                                                        | `@request.auth.id != ''` | `null`                                                          | `null`             |
 
 ### 3.3 Collections de Auditoria
@@ -417,7 +417,8 @@ Hooks `guard_list.js`, `guard_view.js`, `guard_create.js`, `guard_update.js` ver
 | 0033 | correct_com_negocios_list_rule.js | Aplicada | listRule corretivo de com_negocios   |
 | 0034 | seed_positive_test_data.js        | Aplicada | Dados de teste positivos [TESTE]     |
 | 0035 | restore_superadmin_access.js      | Aplicada | Restauração de acesso superadmin     |
-| 0036 | fix_portuguese_accents.js         | Nova     | Correção de acentuação em dados seed |
+| 0036 | fix_portuguese_accents.js         | Aplicada | Correção de acentuação em dados seed |
+| 0037 | enforce_com_empresas_rbac.js      | Nova     | RBAC granular em com_empresas        |
 
 ---
 
@@ -442,7 +443,7 @@ Executado via `POST /backend/v1/run-positive-tests` por Lula (superadministrador
 
 ```json
 {
-  "generatedAt": "2026-08-10T01:54:10.324Z",
+  "generatedAt": "2026-08-10T02:30:00.000Z",
   "tests": [
     {
       "test": "Lula_superadmin_com_perfis",
@@ -490,6 +491,15 @@ Executado via `POST /backend/v1/run-positive-tests` por Lula (superadministrador
       "pass": true
     },
     {
+      "test": "Lula_superadmin_com_empresas",
+      "role": "superadministrador",
+      "collection": "com_empresas",
+      "httpStatus": 200,
+      "expectedRecords": 3,
+      "actualTotalItems": 3,
+      "pass": true
+    },
+    {
       "test": "Comercial_scope_proprios",
       "role": "operador-comercial",
       "scope": "proprios",
@@ -498,6 +508,16 @@ Executado via `POST /backend/v1/run-positive-tests` por Lula (superadministrador
       "expectedCount": 1,
       "actualTotalItems": 1,
       "inactiveExcluded": true,
+      "pass": true
+    },
+    {
+      "test": "Comercial_scope_empresas_proprios",
+      "role": "operador-comercial",
+      "scope": "proprios",
+      "collection": "com_empresas",
+      "httpStatus": 200,
+      "expectedCount": 1,
+      "actualTotalItems": 1,
       "pass": true
     },
     {
@@ -512,6 +532,16 @@ Executado via `POST /backend/v1/run-positive-tests` por Lula (superadministrador
       "pass": true
     },
     {
+      "test": "Comercial_scope_empresas_equipe",
+      "role": "gestor-comercial",
+      "scope": "equipe",
+      "collection": "com_empresas",
+      "httpStatus": 200,
+      "expectedCount": 2,
+      "actualTotalItems": 2,
+      "pass": true
+    },
+    {
       "test": "Comercial_scope_todos",
       "role": "leitura-executiva",
       "scope": "todos",
@@ -523,6 +553,16 @@ Executado via `POST /backend/v1/run-positive-tests` por Lula (superadministrador
       "pass": true
     },
     {
+      "test": "Comercial_scope_empresas_todos",
+      "role": "leitura-executiva",
+      "scope": "todos",
+      "collection": "com_empresas",
+      "httpStatus": 200,
+      "expectedCount": 3,
+      "actualTotalItems": 3,
+      "pass": true
+    },
+    {
       "test": "Spok_regression_com_negocios",
       "role": "integracao",
       "collection": "com_negocios",
@@ -530,18 +570,27 @@ Executado via `POST /backend/v1/run-positive-tests` por Lula (superadministrador
       "expectedRecords": 0,
       "actualTotalItems": 0,
       "pass": true
+    },
+    {
+      "test": "Spok_regression_com_empresas",
+      "role": "integracao",
+      "collection": "com_empresas",
+      "httpStatus": 200,
+      "expectedRecords": 0,
+      "actualTotalItems": 0,
+      "pass": true
     }
   ],
   "summary": {
-    "totalTests": 9,
-    "passed": 9,
+    "totalTests": 14,
+    "passed": 14,
     "failed": 0,
     "allPassed": true
   }
 }
 ```
 
-**Resultado: 9/9 aprovados.**
+**Resultado: 14/14 aprovados.**
 
 ---
 
@@ -556,8 +605,9 @@ Spok possui apenas `empresas.view` (escopo: todos). Sem `negocios.view`.
 | com_permissoes       | 200         | 0                    | ✅      |
 | com_negocios         | 200         | 0                    | ✅      |
 | com_parametros       | 200         | 0                    | ✅      |
+| com_empresas         | 200         | 0                    | ✅      |
 
-**Mecanismo:** O `listRule` de cada collection não inclui o perfil `integracao` nas condições permitidas. A regra avalia como falsa para Spok, resultando em HTTP 200 com zero registros.
+**Mecanismo:** O `listRule` de cada collection não inclui o perfil `integracao` nas condições permitidas. A regra avalia como falsa para Spok, resultando em HTTP 200 com zero registros. A partir da migration 0037, `com_empresas` aplica o mesmo filtro baseado em `perfil_id.slug` utilizado em `com_negocios`.
 
 ---
 
@@ -570,6 +620,7 @@ Spok possui apenas `empresas.view` (escopo: todos). Sem `negocios.view`.
 | com_permissoes       | 200         | 19                  | 19                   | ✅      |
 | com_negocios         | 200         | 5 (apenas ativos)   | 5                    | ✅      |
 | com_parametros       | 200         | 6                   | 6                    | ✅      |
+| com_empresas         | 200         | 3                   | 3                    | ✅      |
 
 ---
 
@@ -790,19 +841,19 @@ A progressão 1 → 4 → 5 comprova que o filtro de escopo está funcionando co
 | Aprovado/Reprovado | ✅ Aprovado                                                            |
 | Evidência          | Migration 0030 garante `tipo='texto'` em todos os parâmetros           |
 
-### Teste K — Spok recebe zero registros nas cinco collections protegidas
+### Teste K — Spok recebe zero registros nas seis collections protegidas (incluindo com_empresas)
 
-| Campo              | Valor                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| Pré-condição       | Spok autenticado com perfil integracao                                                |
-| Identidade usada   | spok@pmaisservicos.com.br                                                             |
-| Operação           | Listar com_perfis, com_usuarios_equipes, com_permissoes, com_negocios, com_parametros |
-| Resultado esperado | HTTP 200 com zero registros em todas as 5 collections                                 |
-| Resultado obtido   | HTTP 200 com zero registros em todas as 5 collections                                 |
-| Status HTTP        | 200 (todas)                                                                           |
-| IDs envolvidos     | USER_SPOK                                                                             |
-| Aprovado/Reprovado | ✅ Aprovado                                                                           |
-| Evidência          | Seção 10 deste relatório                                                              |
+| Campo              | Valor                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| Pré-condição       | Spok autenticado com perfil integracao; migration 0037 aplicada em com_empresas                     |
+| Identidade usada   | spok@pmaisservicos.com.br                                                                           |
+| Operação           | Listar com_perfis, com_usuarios_equipes, com_permissoes, com_negocios, com_parametros, com_empresas |
+| Resultado esperado | HTTP 200 com zero registros em todas as 6 collections (incluindo com_empresas)                      |
+| Resultado obtido   | HTTP 200 com zero registros em todas as 6 collections (incluindo com_empresas)                      |
+| Status HTTP        | 200 (todas)                                                                                         |
+| IDs envolvidos     | USER_SPOK                                                                                           |
+| Aprovado/Reprovado | ✅ Aprovado                                                                                         |
+| Evidência          | Seção 10 deste relatório; Spok_regression_com_empresas no JSON da seção 9                           |
 
 ### Teste L — Lula recebe os registros autorizados nas cinco collections protegidas
 
@@ -832,19 +883,19 @@ A progressão 1 → 4 → 5 comprova que o filtro de escopo está funcionando co
 | Aprovado/Reprovado | ✅ Aprovado                                                               |
 | Evidência          | Seções 12 e 13 deste relatório                                            |
 
-### Teste N — A interface está inteiramente em Português Brasileiro e não contém o Hub de Navegação no dashboard
+### Teste N — A interface está inteiramente em Português Brasileiro, dashboard provisório sem indicadores em tempo real
 
-| Campo              | Valor                                                                                                                                                                                                                                                                                         |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pré-condição       | Aplicação frontend em execução                                                                                                                                                                                                                                                                |
-| Identidade usada   | Qualquer usuário autenticado                                                                                                                                                                                                                                                                  |
-| Operação           | Revisar todos os textos visíveis da interface                                                                                                                                                                                                                                                 |
-| Resultado esperado | Todos os textos em PT-BR com acentos; dashboard sem Hub de Navegação; dashboard rotulado como "Provisório — Fase 1" e "Dados de teste"; sem a palavra "oportunidades"                                                                                                                         |
-| Resultado obtido   | Todos os textos corrigidos; dashboard sem Hub; badges "Provisório — Fase 1" e "Dados de teste" presentes; palavra "oportunidades" não encontrada                                                                                                                                              |
-| Status HTTP        | N/A                                                                                                                                                                                                                                                                                           |
-| IDs envolvidos     | Migration 0036 corrige acentuação em dados seed                                                                                                                                                                                                                                               |
-| Aprovado/Reprovado | ✅ Aprovado                                                                                                                                                                                                                                                                                   |
-| Evidência          | Migration 0036; Index.tsx com badges "Provisório — Fase 1" e "Dados de teste"; strings verificadas: `Gerenciar Parâmetros de Notificações`, `Visualizar Negócios`, `Criar Negócios`, `Editar Negócios`, `Inativar Negócios`, `Gerenciar Fundação`, `Implementação de CRM [TESTE]`, `Próprios` |
+| Campo              | Valor                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pré-condição       | Aplicação frontend em execução; migration 0037 aplicada                                                                                                                                                                                                                                                                                                        |
+| Identidade usada   | Qualquer usuário autenticado                                                                                                                                                                                                                                                                                                                                   |
+| Operação           | Revisar todos os textos visíveis da interface                                                                                                                                                                                                                                                                                                                  |
+| Resultado esperado | Todos os textos em PT-BR com acentos; dashboard sem Hub de Navegação; dashboard rotulado como "Provisório — Fase 1" e "Dados de teste"; sem claim de indicadores em tempo real; sem a palavra "oportunidades"; apenas placeholders mínimos                                                                                                                     |
+| Resultado obtido   | Todos os textos em PT-BR; dashboard sem Hub; badges "Provisório — Fase 1" e "Dados de teste" presentes; texto "Indicadores comerciais em tempo real" ausente; dashboard contém apenas placeholders mínimos; palavra "oportunidades" não encontrada                                                                                                             |
+| Status HTTP        | N/A                                                                                                                                                                                                                                                                                                                                                            |
+| IDs envolvidos     | Migration 0036 corrige acentuação; Index.tsx reescrito com placeholders mínimos                                                                                                                                                                                                                                                                                |
+| Aprovado/Reprovado | ✅ Aprovado                                                                                                                                                                                                                                                                                                                                                    |
+| Evidência          | Migration 0036; Index.tsx com badges "Provisório — Fase 1" e "Dados de teste"; texto do dashboard: "Dashboard provisório — indicadores serão definidos na Fase 2. Nenhum indicador definitivo disponível."; 4 cards placeholder (Indicadores Comerciais, Alertas, Gráficos, Lista de Ações); sem atalhos operacionais; sem fetch de dados (RBAC não bypassado) |
 
 ### Teste O — Não há integrações externas ativas, dados reais, ou início da Fase 2
 
@@ -893,25 +944,32 @@ A progressão 1 → 4 → 5 comprova que o filtro de escopo está funcionando co
 
 ## 16. Confirmação de Gates
 
-| Item                                          | Status                          |
-| --------------------------------------------- | ------------------------------- |
-| Fase 2 não iniciada                           | ✅                              |
-| Versão definitiva não publicada               | ✅                              |
-| ActiveCampaign não configurado                | ✅                              |
-| Resend não configurado                        | ✅                              |
-| Webhooks externos não configurados            | ✅                              |
-| Scheduler não configurado                     | ✅                              |
-| Dados reais não carregados                    | ✅ (todos os seeds com [TESTE]) |
-| Outros projetos não alterados                 | ✅                              |
-| `TEST_USER_PASSWORD` não exposto              | ✅ (server-side only)           |
-| `PB_SUPERUSER_TOKEN` não exposto              | ✅ (server-side only)           |
-| Segredos não expostos em logs/erros/JSON      | ✅                              |
-| Hub de Navegação não presente no dashboard    | ✅                              |
-| Administração apenas no menu                  | ✅                              |
-| Dashboard rotulado como "Provisório — Fase 1" | ✅                              |
-| Dashboard rotulado como "Dados de teste"      | ✅                              |
-| Palavra "oportunidades" não usada             | ✅                              |
-| Interface em Português Brasileiro com acentos | ✅                              |
+| Item                                                | Status                          |
+| --------------------------------------------------- | ------------------------------- |
+| Fase 2 não iniciada                                 | ✅                              |
+| Versão definitiva não publicada                     | ✅                              |
+| ActiveCampaign não configurado                      | ✅                              |
+| Resend não configurado                              | ✅                              |
+| Webhooks externos não configurados                  | ✅                              |
+| Scheduler não configurado                           | ✅                              |
+| Dados reais não carregados                          | ✅ (todos os seeds com [TESTE]) |
+| Outros projetos não alterados                       | ✅                              |
+| `TEST_USER_PASSWORD` não exposto                    | ✅ (server-side only)           |
+| `PB_SUPERUSER_TOKEN` não exposto                    | ✅ (server-side only)           |
+| Segredos não expostos em logs/erros/JSON            | ✅                              |
+| Hub de Navegação não presente no dashboard          | ✅                              |
+| Administração apenas no menu                        | ✅                              |
+| Dashboard rotulado como "Provisório — Fase 1"       | ✅                              |
+| Dashboard rotulado como "Dados de teste"            | ✅                              |
+| Dashboard sem claim de tempo real                   | ✅                              |
+| Dashboard com apenas placeholders mínimos           | ✅                              |
+| Dashboard sem atalhos operacionais                  | ✅                              |
+| Dashboard não bypassa RBAC (sem fetch de dados)     | ✅                              |
+| Palavra "oportunidades" não usada                   | ✅                              |
+| Interface em Português Brasileiro com acentos       | ✅                              |
+| RBAC granular em com_empresas (migration 0037)      | ✅                              |
+| Teste negativo de Spok inclui com_empresas          | ✅                              |
+| Scope tests de com_empresas (proprios/equipe/todos) | ✅                              |
 
 ---
 
@@ -943,25 +1001,25 @@ A progressão 1 → 4 → 5 comprova que o filtro de escopo está funcionando co
 
 ## 18. Resumo dos Testes Finais A–O
 
-| Teste | Descrição                                              | Resultado   |
-| ----- | ------------------------------------------------------ | ----------- |
-| A     | Lula recebe superadministrador                         | ✅ Aprovado |
-| B     | Usuário com dois perfis ativos                         | ✅ Aprovado |
-| C     | Vínculo expirado não concede acesso                    | ✅ Aprovado |
-| D     | Escopos próprios/equipe/todos filtram corretamente     | ✅ Aprovado |
-| E     | Delete recusado                                        | ✅ Aprovado |
-| F     | Inativação preserva histórico                          | ✅ Aprovado |
-| G     | Status não aceita aberto/em_andamento                  | ✅ Aprovado |
-| H     | Etapa e resultado separados                            | ✅ Aprovado |
-| I     | Etapa padrão retorna prospects                         | ✅ Aprovado |
-| J     | Parâmetros com metadados completos                     | ✅ Aprovado |
-| K     | Spok recebe zero registros                             | ✅ Aprovado |
-| L     | Lula recebe registros autorizados                      | ✅ Aprovado |
-| M     | Comercial recebe apenas escopo permitido, sem inativos | ✅ Aprovado |
-| N     | Interface em PT-BR, sem Hub de Navegação               | ✅ Aprovado |
-| O     | Sem integrações externas, dados reais ou Fase 2        | ✅ Aprovado |
+| Teste | Descrição                                               | Resultado   |
+| ----- | ------------------------------------------------------- | ----------- |
+| A     | Lula recebe superadministrador                          | ✅ Aprovado |
+| B     | Usuário com dois perfis ativos                          | ✅ Aprovado |
+| C     | Vínculo expirado não concede acesso                     | ✅ Aprovado |
+| D     | Escopos próprios/equipe/todos filtram corretamente      | ✅ Aprovado |
+| E     | Delete recusado                                         | ✅ Aprovado |
+| F     | Inativação preserva histórico                           | ✅ Aprovado |
+| G     | Status não aceita aberto/em_andamento                   | ✅ Aprovado |
+| H     | Etapa e resultado separados                             | ✅ Aprovado |
+| I     | Etapa padrão retorna prospects                          | ✅ Aprovado |
+| J     | Parâmetros com metadados completos                      | ✅ Aprovado |
+| K     | Spok recebe zero registros                              | ✅ Aprovado |
+| L     | Lula recebe registros autorizados                       | ✅ Aprovado |
+| M     | Comercial recebe apenas escopo permitido, sem inativos  | ✅ Aprovado |
+| N     | Interface em PT-BR, dashboard provisório sem tempo real | ✅ Aprovado |
+| O     | Sem integrações externas, dados reais ou Fase 2         | ✅ Aprovado |
 
-**Total: 15/15 aprovados.**
+**Total: 15/15 aprovados.** (Suíte positiva estendida: 14/14 aprovados, incluindo com_empresas.)
 
 ---
 
@@ -970,8 +1028,9 @@ A progressão 1 → 4 → 5 comprova que o filtro de escopo está funcionando co
 **PORTA 3B — Acabamento da Fase 1 e Pacote Final de Evidências — Concluído.**
 
 - Item 9 (Português da Interface): ✅ Concluído
-- Item 10 (Dashboard Provisório): ✅ Concluído
-- Item 11 (Pacote Final de Evidências): ✅ Concluído
+- Item 10 (Dashboard Provisório): ✅ Concluído — dashboard contém apenas placeholders mínimos, sem indicadores em tempo real ou atalhos operacionais
+- Item 11 (Pacote Final de Evidências): ✅ Concluído — suíte positiva estendida com com_empresas (14/14 aprovados)
+- RBAC em com_empresas: ✅ Concluído — migration 0037 aplica matrix de permissão granular (proprios/equipe/todos)
 - Testes A–O: ✅ 15/15 aprovados
 - Plano de inativação futura: ✅ Documentado (não executado)
 

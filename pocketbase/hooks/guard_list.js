@@ -89,6 +89,7 @@ onRecordListRequest((e) => {
       com_permissoes: true,
       com_negocios: true,
       com_parametros: true,
+      com_empresas: true,
     }
     if (listRuleSufficient[colName]) {
       e.next()

@@ -148,6 +148,17 @@ routerAdd(
       }
     }
 
+    function dbListEmpresas(filter) {
+      try {
+        var recs = $app.findRecordsByFilter('com_empresas', filter, '-created', 500, 0)
+        return recs.map(function (r) {
+          return { id: r.id, titulo: r.getString('nome'), inativo: false }
+        })
+      } catch (_) {
+        return []
+      }
+    }
+
     function dbCount(col, filter) {
       try {
         return $app.findRecordsByFilter(col, filter || '', '', 500, 0).length
@@ -166,6 +177,7 @@ routerAdd(
       'com_permissoes',
       'com_negocios',
       'com_parametros',
+      'com_empresas',
     ]
     for (var i = 0; i < lulaCols.length; i++) {
       var col = lulaCols[i]
@@ -194,6 +206,18 @@ routerAdd(
       actualTotalItems: spokResult.totalItems,
       actualItems: spokResult.items,
       pass: spokResult.totalItems === 0,
+    })
+
+    var spokEmpresas = listRecs(spokToken, 'com_empresas')
+    results.tests.push({
+      test: 'Spok_regression_com_empresas',
+      role: 'integracao',
+      collection: 'com_empresas',
+      httpStatus: spokEmpresas.status,
+      expectedRecords: 0,
+      actualTotalItems: spokEmpresas.totalItems,
+      actualItems: spokEmpresas.items,
+      pass: spokEmpresas.totalItems === 0,
     })
 
     var comercialUser = $app.findAuthRecordByEmail(
@@ -295,6 +319,29 @@ routerAdd(
           commResult.status === 200 &&
           commResult.totalItems === expectedRecs.length &&
           !hasInactive,
+      })
+
+      var empresaFilter =
+        cfg.scope === 'proprios'
+          ? "responsavel_id = '" + comercialUser.id + "'"
+          : cfg.scope === 'equipe'
+            ? "equipe_id = '" + equipeAlpha.id + "'"
+            : ''
+
+      var commEmpresas = listRecs(commToken, 'com_empresas')
+      var expectedEmpresas = dbListEmpresas(empresaFilter)
+
+      results.tests.push({
+        test: 'Comercial_scope_empresas_' + cfg.scope,
+        role: cfg.perfil.getString('slug'),
+        scope: cfg.scope,
+        collection: 'com_empresas',
+        httpStatus: commEmpresas.status,
+        expectedRecords: expectedEmpresas,
+        expectedCount: expectedEmpresas.length,
+        actualTotalItems: commEmpresas.totalItems,
+        actualItems: commEmpresas.items,
+        pass: commEmpresas.status === 200 && commEmpresas.totalItems === expectedEmpresas.length,
       })
     }
 
