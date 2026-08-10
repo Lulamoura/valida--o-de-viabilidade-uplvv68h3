@@ -1,42 +1,78 @@
 migrate(
   (app) => {
+    var negociosCol = app.findCollectionByNameOrId('com_negocios')
+
+    if (negociosCol.fields.getByName('status')) {
+      negociosCol.fields.removeByName('status')
+      negociosCol.fields.add(
+        new SelectField({
+          name: 'status',
+          required: false,
+          values: ['aberto', 'em_andamento', 'ganho', 'perdido'],
+          maxSelect: 1,
+        }),
+      )
+    }
+
+    if (!negociosCol.fields.getByName('etapa')) {
+      negociosCol.fields.add(
+        new SelectField({
+          name: 'etapa',
+          required: false,
+          values: ['prospects', 'producao_proposta', 'negociacao'],
+          maxSelect: 1,
+        }),
+      )
+    }
+
+    if (!negociosCol.fields.getByName('resultado')) {
+      negociosCol.fields.add(
+        new SelectField({
+          name: 'resultado',
+          required: false,
+          values: ['ganho', 'perdido', 'desqualificado'],
+          maxSelect: 1,
+        }),
+      )
+    }
+
+    if (!negociosCol.fields.getByName('inativo')) {
+      negociosCol.fields.add(new BoolField({ name: 'inativo' }))
+    }
+
+    negociosCol.deleteRule = null
+    app.save(negociosCol)
+
+    negociosCol.addIndex('idx_com_negocios_etapa', false, 'etapa', '')
+    negociosCol.addIndex('idx_com_negocios_resultado', false, 'resultado', '')
+    negociosCol.addIndex('idx_com_negocios_inativo', false, 'inativo', '')
+    app.save(negociosCol)
+
     app
       .db()
-      .newQuery("UPDATE com_negocios SET status = 'prospects' WHERE status = 'aberto'")
+      .newQuery(
+        "UPDATE com_negocios SET etapa = 'prospects' WHERE status = 'aberto' AND (etapa IS NULL OR etapa = '')",
+      )
       .execute()
     app
       .db()
-      .newQuery("UPDATE com_negocios SET status = 'negociacao' WHERE status = 'em_andamento'")
+      .newQuery(
+        "UPDATE com_negocios SET etapa = 'negociacao' WHERE status = 'em_andamento' AND (etapa IS NULL OR etapa = '')",
+      )
       .execute()
+    app
+      .db()
+      .newQuery(
+        "UPDATE com_negocios SET resultado = status WHERE status IN ('ganho', 'perdido') AND (resultado IS NULL OR resultado = '')",
+      )
+      .execute()
+
     app
       .db()
       .newQuery(
         "UPDATE com_negocios SET titulo = 'Implementação de CRM [TESTE]' WHERE titulo = 'Implementacao de CRM [TESTE]'",
       )
       .execute()
-
-    var negociosCol = app.findCollectionByNameOrId('com_negocios')
-    negociosCol.fields.removeByName('status')
-    negociosCol.fields.add(
-      new SelectField({
-        name: 'status',
-        required: true,
-        values: [
-          'prospects',
-          'producao_proposta',
-          'negociacao',
-          'ganho',
-          'perdido',
-          'desqualificado',
-        ],
-        maxSelect: 1,
-      }),
-    )
-    if (!negociosCol.fields.getByName('inativo')) {
-      negociosCol.fields.add(new BoolField({ name: 'inativo' }))
-    }
-    negociosCol.deleteRule = null
-    app.save(negociosCol)
 
     var empresasCol = app.findCollectionByNameOrId('com_empresas')
     empresasCol.deleteRule = null
@@ -91,37 +127,43 @@ migrate(
       .execute()
   },
   (app) => {
-    app
-      .db()
-      .newQuery("UPDATE com_negocios SET status = 'aberto' WHERE status = 'prospects'")
-      .execute()
-    app
-      .db()
-      .newQuery("UPDATE com_negocios SET status = 'em_andamento' WHERE status = 'negociacao'")
-      .execute()
+    var negociosCol = app.findCollectionByNameOrId('com_negocios')
+    try {
+      negociosCol.removeIndex('idx_com_negocios_etapa')
+    } catch (_) {}
+    try {
+      negociosCol.removeIndex('idx_com_negocios_resultado')
+    } catch (_) {}
+    try {
+      negociosCol.removeIndex('idx_com_negocios_inativo')
+    } catch (_) {}
+
+    if (negociosCol.fields.getByName('etapa')) negociosCol.fields.removeByName('etapa')
+    if (negociosCol.fields.getByName('resultado')) negociosCol.fields.removeByName('resultado')
+    if (negociosCol.fields.getByName('inativo')) negociosCol.fields.removeByName('inativo')
+
+    if (negociosCol.fields.getByName('status')) {
+      negociosCol.fields.removeByName('status')
+      negociosCol.fields.add(
+        new SelectField({
+          name: 'status',
+          required: true,
+          values: ['aberto', 'em_andamento', 'ganho', 'perdido'],
+          maxSelect: 1,
+        }),
+      )
+    }
+
+    negociosCol.deleteRule =
+      "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))"
+    app.save(negociosCol)
+
     app
       .db()
       .newQuery(
         "UPDATE com_negocios SET titulo = 'Implementacao de CRM [TESTE]' WHERE titulo = 'Implementação de CRM [TESTE]'",
       )
       .execute()
-
-    var negociosCol = app.findCollectionByNameOrId('com_negocios')
-    negociosCol.fields.removeByName('status')
-    negociosCol.fields.add(
-      new SelectField({
-        name: 'status',
-        required: true,
-        values: ['aberto', 'em_andamento', 'ganho', 'perdido'],
-        maxSelect: 1,
-      }),
-    )
-    if (negociosCol.fields.getByName('inativo')) {
-      negociosCol.fields.removeByName('inativo')
-    }
-    negociosCol.deleteRule =
-      "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))"
-    app.save(negociosCol)
 
     var empresasCol = app.findCollectionByNameOrId('com_empresas')
     empresasCol.deleteRule =

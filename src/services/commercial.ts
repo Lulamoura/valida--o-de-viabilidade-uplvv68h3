@@ -38,3 +38,14 @@ export const getNegocioHistorico = (negocioId: string): Promise<RecordModel[]> =
     sort: '-created',
     expand: 'usuario_id,responsavel_anterior_id,responsavel_novo_id',
   })
+
+export const getDefaultEtapa = async (): Promise<string> => {
+  try {
+    const param = await pb
+      .collection('com_parametros')
+      .getFirstListItem('chave = "comercial.etapa_padrao" && ativo = true')
+    return param.valor || 'prospects'
+  } catch {
+    return 'prospects'
+  }
+}

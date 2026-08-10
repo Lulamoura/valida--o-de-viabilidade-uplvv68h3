@@ -3,15 +3,22 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
 import {
   getNegocios,
+  getEmpresas,
   createNegocio,
   updateNegocio,
   changeNegocioResponsavel,
   getNegocioHistorico,
+  getDefaultEtapa,
 } from '@/services/commercial'
 import { getEquipes, createAuditRecord } from '@/services/foundation'
 import { getActiveUsers } from '@/services/users'
 import { useAuth } from '@/hooks/use-auth'
-import { NEGOCIO_STATUS_OPTIONS, getStatusLabel, isStatusStage } from '@/lib/status-labels'
+import {
+  ETAPA_OPTIONS,
+  RESULTADO_OPTIONS,
+  getEtapaLabel,
+  getResultadoLabel,
+} from '@/lib/status-labels'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -49,6 +56,7 @@ export function NegociosTab() {
   const [empresas, setEmpresas] = useState<RecordModel[]>([])
   const [equipes, setEquipes] = useState<RecordModel[]>([])
   const [activeUsers, setActiveUsers] = useState<RecordModel[]>([])
+  const [defaultEtapa, setDefaultEtapa] = useState('prospects')
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<RecordModel | null>(null)
   const [form, setForm] = useState<any>({
@@ -57,7 +65,8 @@ export function NegociosTab() {
     equipe_id: '',
     responsavel_id: '',
     valor: 0,
-    status: 'prospects',
+    etapa: 'prospects',
+    resultado: '',
     descricao: '',
   })
   const [justificativa, setJustificativa] = useState('')
@@ -66,7 +75,6 @@ export function NegociosTab() {
   const [histRecords, setHistRecords] = useState<RecordModel[]>([])
 
   const load = async () => {
-    const { getEmpresas } = await import('@/services/commercial')
     const [neg, eq, au, em] = await Promise.all([
       getNegocios(),
       getEquipes(),
@@ -80,12 +88,13 @@ export function NegociosTab() {
   }
   useEffect(() => {
     load()
+    getDefaultEtapa().then(setDefaultEtapa)
   }, [])
   useRealtime('com_negocios', () => {
     load()
   })
 
-  const orphans = records.filter((r) => r.status === 'prospects' && !r.responsavel_id && !r.inativo)
+  const orphans = records.filter((r) => r.etapa === 'prospects' && !r.responsavel_id && !r.inativo)
 
   const openNew = () => {
     setEditing(null)
@@ -95,7 +104,8 @@ export function NegociosTab() {
       equipe_id: '',
       responsavel_id: user?.id || '',
       valor: 0,
-      status: 'prospects',
+      etapa: defaultEtapa,
+      resultado: '',
       descricao: '',
     })
     setJustificativa('')
@@ -110,7 +120,8 @@ export function NegociosTab() {
       equipe_id: r.equipe_id || '',
       responsavel_id: r.responsavel_id || '',
       valor: r.valor || 0,
-      status: r.status,
+      etapa: r.etapa || '',
+      resultado: r.resultado || '',
       descricao: r.descricao || '',
     })
     setJustificativa('')
@@ -121,7 +132,10 @@ export function NegociosTab() {
   const submit = async () => {
     setErrors({})
     try {
-      const data = { ...form, valor: Number(form.valor) || 0 }
+      const data: any = { ...form, valor: Number(form.valor) || 0 }
+      if (!data.etapa && !data.resultado) {
+        data.etapa = defaultEtapa
+      }
       if (editing) {
         const respChanged = editing.responsavel_id !== form.responsavel_id
         if (respChanged && form.responsavel_id) {
@@ -284,23 +298,41 @@ export function NegociosTab() {
                   />
                 </div>
                 <div>
-                  <Label>Etapas / Resultado</Label>
+                  <Label>Etapa</Label>
                   <Select
-                    value={form.status}
-                    onValueChange={(v) => setForm({ ...form, status: v })}
+                    value={form.etapa || ''}
+                    onValueChange={(v) => setForm({ ...form, etapa: v, resultado: '' })}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="—" />
                     </SelectTrigger>
                     <SelectContent>
-                      {NEGOCIO_STATUS_OPTIONS.map((s) => (
+                      {ETAPA_OPTIONS.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {getStatusLabel(s)}
+                          {getEtapaLabel(s)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div>
+                <Label>Resultado</Label>
+                <Select
+                  value={form.resultado || ''}
+                  onValueChange={(v) => setForm({ ...form, resultado: v, etapa: '' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="—" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RESULTADO_OPTIONS.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {getResultadoLabel(s)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Descrição</Label>
@@ -351,22 +383,19 @@ export function NegociosTab() {
                 R$ {(r.valor || 0).toLocaleString('pt-BR')}
               </TableCell>
               <TableCell>
-                <Badge
-                  variant={
-                    isStatusStage(r.status)
-                      ? 'secondary'
-                      : r.status === 'ganho'
-                        ? 'default'
-                        : 'outline'
-                  }
-                >
-                  {getStatusLabel(r.status)}
-                </Badge>
-                {r.inativo && (
-                  <Badge variant="outline" className="ml-1">
-                    Inativo
-                  </Badge>
-                )}
+                <div className="flex flex-wrap gap-1">
+                  {r.etapa && <Badge variant="secondary">{getEtapaLabel(r.etapa)}</Badge>}
+                  {r.resultado && (
+                    <Badge variant={r.resultado === 'ganho' ? 'default' : 'outline'}>
+                      {getResultadoLabel(r.resultado)}
+                    </Badge>
+                  )}
+                  {r.inativo && (
+                    <Badge variant="outline" className="ml-1">
+                      Inativo
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="text-right">
                 <Button
