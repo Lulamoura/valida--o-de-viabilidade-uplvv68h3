@@ -9,7 +9,7 @@ migrate(
     var operadorPerfil = app.findFirstRecordByData('com_perfis', 'slug', 'operador-comercial')
     var lulaUser = app.findAuthRecordByEmail('_pb_users_auth_', 'luiz.moura@pmaisservicos.com.br')
     var techSolutions = app.findFirstRecordByData('com_empresas', 'cnpj', '12345678000190')
-    var consultoriaXYZ = app.findFirstRecordByData('com_empresas', 'cnpj', '98765432000190')
+    var consultoriaXYZ = app.findFirstRecordByData('com_empresas', 'cnpj', '98765432000110')
 
     var equipeBeta
     try {
