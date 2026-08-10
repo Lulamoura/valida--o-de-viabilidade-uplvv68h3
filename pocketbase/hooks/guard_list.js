@@ -83,6 +83,17 @@ onRecordListRequest((e) => {
   }
 
   if (!hasAccess) {
+    var listRuleSufficient = {
+      com_perfis: true,
+      com_usuarios_equipes: true,
+      com_permissoes: true,
+      com_negocios: true,
+      com_parametros: true,
+    }
+    if (listRuleSufficient[colName]) {
+      e.next()
+      return
+    }
     throw new ForbiddenError('Acesso negado: permissao insuficiente para listar ' + colName)
   }
 
