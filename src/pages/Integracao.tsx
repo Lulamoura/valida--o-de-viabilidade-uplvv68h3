@@ -85,7 +85,8 @@ export default function Integracao() {
     setLoading(`boot-${n}`)
     try {
       const r = await integracaoBootstrap()
-      n === 1 ? setBoot1(r) : setBoot2(r)
+      if (n === 1) setBoot1(r)
+      else setBoot2(r)
       toast.success(`Bootstrap ${n} concluído`)
     } catch {
       toast.error(`Erro no bootstrap ${n}`)
