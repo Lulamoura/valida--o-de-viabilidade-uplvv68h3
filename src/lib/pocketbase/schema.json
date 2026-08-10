@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T00:22:31.316Z",
+  "generatedAt": "2026-08-10T00:39:53.211Z",
   "collections": [
     {
       "name": "users",
@@ -72,7 +72,7 @@
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "delete": null
       },
       "fields": [
         {
@@ -127,7 +127,7 @@
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "delete": null
       },
       "fields": [
         {
@@ -182,7 +182,7 @@
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "delete": null
       },
       "fields": [
         {
@@ -243,7 +243,7 @@
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "delete": null
       },
       "fields": [
         {
@@ -295,7 +295,7 @@
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "delete": null
       },
       "fields": [
         {
@@ -345,13 +345,25 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "inicio_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fim_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
-        "CREATE UNIQUE INDEX idx_com_usuarios_equipes_usuario_equipe ON com_usuarios_equipes (usuario_id, equipe_id)",
         "CREATE INDEX idx_com_usuarios_equipes_equipe ON com_usuarios_equipes (equipe_id)",
         "CREATE INDEX `idx_com_usuarios_equipes_ativo` ON `com_usuarios_equipes` (ativo)",
-        "CREATE INDEX `idx_com_usuarios_equipes_usuario_ativo` ON `com_usuarios_equipes` (usuario_id, ativo)"
+        "CREATE INDEX `idx_com_usuarios_equipes_usuario_ativo` ON `com_usuarios_equipes` (usuario_id, ativo)",
+        "CREATE UNIQUE INDEX `idx_com_usuarios_equipes_usuario_equipe_perfil` ON `com_usuarios_equipes` (usuario_id, equipe_id, perfil_id)"
       ]
     },
     {
@@ -362,7 +374,7 @@
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "delete": null
       },
       "fields": [
         {
@@ -625,13 +637,6 @@
           "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
-          "name": "status",
-          "type": "select",
-          "required": false,
-          "system": false,
-          "selectValues": ["aberto", "em_andamento", "ganho", "perdido"]
-        },
-        {
           "name": "etapa",
           "type": "select",
           "required": false,
@@ -650,6 +655,13 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["ganho", "perdido"]
         }
       ],
       "indexes": [
