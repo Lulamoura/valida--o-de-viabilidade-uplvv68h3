@@ -9,6 +9,7 @@ import { NegociosTab } from '@/components/foundation/NegociosTab'
 import { UsuariosTab } from '@/components/foundation/UsuariosTab'
 import { VinculosTab } from '@/components/foundation/VinculosTab'
 import { usePermissions } from '@/hooks/use-permissions'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const TABS_CONFIG = [
   { value: 'equipes', label: 'Equipes', perm: 'equipes.admin' },
@@ -23,10 +24,12 @@ const TABS_CONFIG = [
 
 export default function Foundation() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { hasPermission } = usePermissions()
+  const { hasPermission, loading } = usePermissions()
 
   const visibleTabs = TABS_CONFIG.filter((t) => hasPermission(t.perm))
-  const activeTab = searchParams.get('tab') || visibleTabs[0]?.value || ''
+  const currentTabParam = searchParams.get('tab')
+  const isValidTab = visibleTabs.some((t) => t.value === currentTabParam)
+  const activeTab = isValidTab ? currentTabParam! : visibleTabs[0]?.value || ''
 
   const handleTabChange = (value: string) => {
     setSearchParams({ tab: value })
@@ -36,7 +39,12 @@ export default function Foundation() {
     <div className="container mx-auto py-6 px-4">
       <h1 className="text-2xl font-bold mb-1">Administração da Fundação</h1>
       <p className="text-sm text-gray-500 mb-6">Fase 1 – Estrutura base do PMais CRM</p>
-      {visibleTabs.length === 0 ? (
+      {loading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-full max-w-2xl" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : visibleTabs.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-8">
           Você não tem permissões para acessar nenhum módulo da administração.
         </p>
