@@ -12,6 +12,14 @@ onRecordViewRequest((e) => {
     com_auditoria: ['auditoria.consultar'],
     com_parametros_versoes: ['auditoria.consultar', 'parametros.gerenciar'],
     com_negocio_historico: ['negocios.view'],
+    com_contatos: ['contatos.view'],
+    com_etapas: ['etapas.view'],
+    com_alias_dimensoes: ['alias_dimensoes.view'],
+    com_vinculos_externos: ['vinculos_externos.view'],
+    com_execucoes_sincronizacao: ['execucoes_sincronizacao.view'],
+    com_eventos_integracao: ['eventos_integracao.view'],
+    com_snapshots_negocio: ['snapshots_negocio.view'],
+    com_ocorrencias_qualidade: ['ocorrencias_qualidade.view'],
   }
 
   var required = permMap[colName]

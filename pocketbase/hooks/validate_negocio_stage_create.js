@@ -3,9 +3,9 @@ onRecordCreate((e) => {
   var resultado = e.record.getString('resultado')
   var status = e.record.getString('status')
 
-  if (status === 'aberto' || status === 'em_andamento') {
+  if (status) {
     throw new BadRequestError(
-      'Status "aberto" e "em_andamento" sao depreciados. Use etapa ou resultado.',
+      'O campo "status" foi descontinuado e nao aceita novos valores. Use "etapa" ou "resultado".',
     )
   }
 

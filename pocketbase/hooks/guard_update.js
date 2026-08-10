@@ -11,6 +11,13 @@ onRecordUpdateRequest((e) => {
     com_parametros: ['parametros.gerenciar'],
     com_equipes: ['equipes.admin'],
     users: ['usuarios.admin'],
+    com_contatos: ['contatos.update'],
+    com_etapas: ['etapas.update'],
+    com_alias_dimensoes: ['alias_dimensoes.update'],
+    com_vinculos_externos: ['vinculos_externos.update'],
+    com_execucoes_sincronizacao: ['execucoes_sincronizacao.update'],
+    com_eventos_integracao: ['eventos_integracao.update'],
+    com_ocorrencias_qualidade: ['ocorrencias_qualidade.update'],
   }
 
   var required = permMap[colName]

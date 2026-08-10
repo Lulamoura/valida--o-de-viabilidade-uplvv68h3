@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T02:14:48.112Z",
+  "generatedAt": "2026-08-10T17:44:45.678Z",
   "collections": [
     {
       "name": "users",
@@ -662,6 +662,13 @@
           "required": false,
           "system": false,
           "selectValues": ["ganho", "perdido"]
+        },
+        {
+          "name": "contato_principal_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_contatos"
         }
       ],
       "indexes": [
@@ -739,6 +746,20 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "etapa_anterior",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["prospects", "producao_proposta", "negociacao"]
+        },
+        {
+          "name": "etapa_novo",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["prospects", "producao_proposta", "negociacao"]
         }
       ],
       "indexes": [
@@ -930,6 +951,529 @@
       "indexes": [
         "CREATE INDEX idx_com_parametros_versoes_parametro ON com_parametros_versoes (parametro_id)",
         "CREATE INDEX idx_com_parametros_versoes_versao ON com_parametros_versoes (parametro_id, versao)"
+      ]
+    },
+    {
+      "name": "com_contatos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "telefone",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "empresa_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_empresas"
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_contatos_empresa ON com_contatos (empresa_id)",
+        "CREATE INDEX idx_com_contatos_ativo ON com_contatos (ativo)"
+      ]
+    },
+    {
+      "name": "com_etapas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "external_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ordem",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativa",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inicio_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fim_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_etapas_external_id ON com_etapas (external_id)",
+        "CREATE INDEX idx_com_etapas_codigo ON com_etapas (codigo)"
+      ]
+    },
+    {
+      "name": "com_alias_dimensoes",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "dimensao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_original",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_comparacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "canonico_ref",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_etapas"
+        },
+        {
+          "name": "validacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inicio_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fim_vigencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_alias_dimensoes_dimensao ON com_alias_dimensoes (dimensao)",
+        "CREATE INDEX idx_com_alias_dimensoes_valor_original ON com_alias_dimensoes (valor_original)"
+      ]
+    },
+    {
+      "name": "com_vinculos_externos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "sistema_origem",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "external_type",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "external_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "collection_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "record_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_vinculos_externos_origem_type_id ON com_vinculos_externos (sistema_origem, external_type, external_id)",
+        "CREATE INDEX idx_com_vinculos_externos_collection_record ON com_vinculos_externos (collection_name, record_id)"
+      ]
+    },
+    {
+      "name": "com_execucoes_sincronizacao",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "sistema_origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "payload",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "erro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inicio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fim",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_execucoes_sincronizacao_status ON com_execucoes_sincronizacao (status)",
+        "CREATE INDEX idx_com_execucoes_sincronizacao_origem ON com_execucoes_sincronizacao (sistema_origem)"
+      ]
+    },
+    {
+      "name": "com_eventos_integracao",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "sistema_origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "evento_tipo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "external_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "payload",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_eventos_integracao_idempotency ON com_eventos_integracao (idempotency_key)",
+        "CREATE INDEX idx_com_eventos_integracao_origem ON com_eventos_integracao (sistema_origem)",
+        "CREATE INDEX idx_com_eventos_integracao_status ON com_eventos_integracao (status)"
+      ]
+    },
+    {
+      "name": "com_snapshots_negocio",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "negocio_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "snapshot",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_snapshots_negocio_negocio ON com_snapshots_negocio (negocio_id)",
+        "CREATE INDEX idx_com_snapshots_negocio_origem ON com_snapshots_negocio (origem)"
+      ]
+    },
+    {
+      "name": "com_ocorrencias_qualidade",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "execucao_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_execucoes_sincronizacao"
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "severidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resolvida",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_ocorrencias_qualidade_execucao ON com_ocorrencias_qualidade (execucao_id)",
+        "CREATE INDEX idx_com_ocorrencias_qualidade_severidade ON com_ocorrencias_qualidade (severidade)"
       ]
     }
   ]

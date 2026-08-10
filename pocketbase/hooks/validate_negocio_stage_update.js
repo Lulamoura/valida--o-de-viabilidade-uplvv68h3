@@ -2,10 +2,11 @@ onRecordUpdate((e) => {
   var etapa = e.record.getString('etapa')
   var resultado = e.record.getString('resultado')
   var status = e.record.getString('status')
+  var originalStatus = e.record.original().getString('status')
 
-  if (status === 'aberto' || status === 'em_andamento') {
+  if (status && status !== originalStatus) {
     throw new BadRequestError(
-      'Status "aberto" e "em_andamento" sao depreciados. Use etapa ou resultado.',
+      'O campo "status" foi descontinuado e nao aceita novos valores. Use "etapa" ou "resultado".',
     )
   }
 

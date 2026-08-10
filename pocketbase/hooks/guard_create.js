@@ -12,6 +12,14 @@ onRecordCreateRequest((e) => {
     com_parametros_versoes: ['parametros.gerenciar'],
     com_equipes: ['equipes.admin'],
     users: ['usuarios.admin'],
+    com_contatos: ['contatos.create'],
+    com_etapas: ['etapas.create'],
+    com_alias_dimensoes: ['alias_dimensoes.create'],
+    com_vinculos_externos: ['vinculos_externos.create'],
+    com_execucoes_sincronizacao: ['execucoes_sincronizacao.create'],
+    com_eventos_integracao: ['eventos_integracao.create'],
+    com_snapshots_negocio: ['snapshots_negocio.create'],
+    com_ocorrencias_qualidade: ['ocorrencias_qualidade.create'],
   }
 
   var required = permMap[colName]
