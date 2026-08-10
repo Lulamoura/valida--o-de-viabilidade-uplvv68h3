@@ -166,3 +166,96 @@ As regras de autorização para list e view das cinco collections são enforced 
 - Publish: NÃO realizado ✅
 - Sem integrações externas ✅
 - Sem dados reais ✅
+
+---
+
+## Porta 3A — Correção do `listRule` de `com_negocios` (Migration 0033)
+
+**Migration:** `0033_correct_com_negocios_list_rule.js`
+**Data:** 10/08/2026
+**Status:** Aplicada — `listRule` corretiva persistida em `com_negocios`.
+
+### Root Cause
+
+O `listRule` anterior de `com_negocios` permitia que qualquer usuário autenticado cujo `equipe_id` correspondesse ao `equipe_id` de um negócio visualizasse esse registro na rota nativa de listagem (`GET /api/collections/com_negocios/records`). O usuário técnico Spok (perfil `integracao`, sem permissão `negocios.view`) recebia HTTP 200 com registros, mesmo que a visualização individual retornasse 403 via `guard_view`. Isso constituía exposição de dados pela rota de listagem.
+
+### Literal `listRule` Persistido (string exata)
+
+```
+@request.auth.id != '' && inativo != true && (@request.auth.perfil_id.slug = 'superadministrador' || @request.auth.perfil_id.slug = 'aprovador' || @request.auth.perfil_id.slug = 'leitura-executiva' || (@request.auth.perfil_id.slug = 'gestor-comercial' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))) || ((@request.auth.perfil_id.slug = 'operador-comercial' || @request.auth.perfil_id.slug = 'prospeccao') && responsavel_id = @request.auth.id))
+```
+
+### `viewRule` Preservado (não alterado)
+
+```
+@request.auth.id != '' && (@request.auth.perfil_id.slug = 'superadministrador' || responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))
+```
+
+### Outras Collections Preservadas (intocadas)
+
+| Collection             | listRule (preservado)                                                           |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `com_perfis`           | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` |
+| `com_usuarios_equipes` | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` |
+| `com_permissoes`       | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` |
+| `com_parametros`       | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` |
+
+### Mecanismo de Enforcement Duas Camadas
+
+1. **`guard_list.js` (hook `onRecordListRequest`):** Fires na rota nativa `GET /api/collections/com_negocios/records` **antes** da avaliação do `listRule`. Verifica a matriz N:N (`com_usuarios_equipes` → `com_perfil_permissoes` → `com_permissoes`) e lança `ForbiddenError (HTTP 403)` se o usuário não possuir `negocios.view`. Usuários sem a permissão (ex: Spok) recebem 403 — o `listRule` nunca é avaliado.
+
+2. **`listRule` (collection rule):** Quando o hook chama `e.next()` (usuário autorizado), o `listRule` filtra os registros por escopo e exclui negócios inativos (`inativo != true`).
+
+### Resolução de Escopo no `listRule`
+
+O `listRule` resolve o escopo via `@request.auth.perfil_id.slug` (proxy para o escopo definido em `com_usuarios_equipes`):
+
+| Perfil (`perfil_id.slug`) | Escopo       | Filtro aplicado no `listRule`                                                    |
+| ------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| `superadministrador`      | `todos`      | Todos os negócios ativos (sem filtro adicional)                                  |
+| `aprovador`               | `todos`      | Todos os negócios ativos                                                         |
+| `leitura-executiva`       | `todos`      | Todos os negócios ativos                                                         |
+| `gestor-comercial`        | `equipe`     | `responsavel_id = @request.auth.id` OU `equipe_id = @request.auth.equipe_id`     |
+| `operador-comercial`      | `proprios`   | Apenas `responsavel_id = @request.auth.id`                                       |
+| `prospeccao`              | `proprios`   | Apenas `responsavel_id = @request.auth.id`                                       |
+| `integracao`              | (sem acesso) | `listRule` avalia como falso → 200 vazio (mas `guard_list` hook lança 403 antes) |
+
+### Exclusão de Negócios Inativos
+
+O `listRule` inclui `inativo != true`, garantindo que negócios marcados como inativos não apareçam na listagem nativa, independentemente do escopo do usuário.
+
+### Permissão Requerida para Listar
+
+| Permissão       | Recurso    | Ação | Concedida a perfis                                                                                 |
+| --------------- | ---------- | ---- | -------------------------------------------------------------------------------------------------- |
+| `negocios.view` | `negocios` | view | superadministrador, gestor-comercial, operador-comercial, prospeccao, aprovador, leitura-executiva |
+
+**Spok (perfil `integracao`):** NÃO possui `negocios.view` → `guard_list` hook lança `ForbiddenError (403)`.
+
+### Testes na Rota Nativa
+
+**Rota testada:** `GET /api/collections/com_negocios/records?page=1&perPage=1`
+
+| Usuário | Perfil               | Permissão `negocios.view` | Resultado Esperado | Resultado Obtido |
+| ------- | -------------------- | ------------------------- | ------------------ | ---------------- |
+| Spok    | `integracao`         | ❌                        | **HTTP 403**       | ✅ 403           |
+| Lula    | `superadministrador` | ✅ (todas)                | **HTTP 200**       | ✅ 200           |
+
+### Escopo de Negócios Inativos
+
+| Cenário                                       | Resultado Esperado                                   |
+| --------------------------------------------- | ---------------------------------------------------- |
+| Negócio com `inativo = true`                  | **Não aparece** na listagem (excluído pelo listRule) |
+| Negócio com `inativo = false` ou não definido | **Aparece** se o escopo do usuário permitir          |
+
+### Confirmação de Limites
+
+- Migration 0033 toca **apenas** `com_negocios.listRule` — nenhuma outra collection ou rule é alterada.
+- As quatro `listRule`s funcionais (`com_perfis`, `com_usuarios_equipes`, `com_permissoes`, `com_parametros`) são preservadas exatamente.
+- Todos os `viewRule`s existentes são preservados sem alteração.
+- O `guard_list.js` hook já está deployado e fires na rota nativa — não requer modificação.
+- Porta 3B: NÃO iniciada ✅
+- Fase 2: NÃO iniciada ✅
+- Publish: NÃO realizado ✅
+- Sem integrações externas ✅
+- Sem dados reais ✅
