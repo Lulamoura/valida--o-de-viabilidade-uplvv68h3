@@ -1,3 +1,19 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Route authentication:
+//   POST /backend/v1/run-positive-tests is protected by $apis.requireSuperuserAuth().
+//   The caller must present a valid superuser auth token. The PB_SUPERUSER_TOKEN
+//   secret lives exclusively in the Skip Cloud vault — it is read at runtime by
+//   the platform's auth middleware and is NEVER embedded, logged, echoed, or
+//   copied into code, JSON output, or chat. Do not reproduce it anywhere.
+//
+// Test-user password:
+//   The password for temporary test accounts (comercial.teste@pmaisservicos.com.br
+//   and outro.usuario@pmaisservicos.com.br) is obtained at runtime via
+//   $secrets.get('TEST_USER_PASSWORD'). If the secret is missing, empty, or the
+//   lookup throws, the hook aborts immediately with HTTP 503 and returns no
+//   test results. The secret value is never written to logs, JSON, or error
+//   messages — only its presence/absence is reported.
+// ─────────────────────────────────────────────────────────────────────────────
 routerAdd(
   'POST',
   '/backend/v1/run-positive-tests',
@@ -5,7 +21,26 @@ routerAdd(
     if (!e.hasSuperuserAuth()) return e.forbiddenError('Only superuser can run tests')
 
     var baseUrl = ($secrets.get('PB_INSTANCE_URL') || '').replace(/\/$/, '')
-    var PWD = 'Skip@Pass'
+
+    var testPassword = ''
+    try {
+      testPassword = $secrets.get('TEST_USER_PASSWORD') || ''
+    } catch (_) {
+      testPassword = ''
+    }
+
+    if (!testPassword) {
+      // Secret is missing or empty — abort without disclosing any value.
+      // Only the presence/absence state is reported, never the secret itself.
+      $app.logger().warn('positive tests aborted: TEST_USER_PASSWORD secret not configured')
+      return e.json(503, {
+        error: 'TEST_USER_PASSWORD secret not configured; aborting positive tests',
+        secretConfigured: false,
+      })
+    }
+
+    $app.logger().info('positive tests starting: TEST_USER_PASSWORD secret configured')
+
     var results = { generatedAt: new Date().toISOString(), tests: [] }
 
     function authToken(email) {
@@ -13,7 +48,7 @@ routerAdd(
         url: baseUrl + '/api/collections/users/auth-with-password',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identity: email, password: PWD }),
+        body: JSON.stringify({ identity: email, password: testPassword }),
         timeout: 15,
       })
       return res.statusCode === 200 && res.json ? res.json.token : null
