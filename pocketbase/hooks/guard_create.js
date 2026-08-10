@@ -7,6 +7,7 @@ onRecordCreateRequest((e) => {
     com_perfil_permissoes: ['permissoes.admin'],
     com_usuarios_equipes: ['vinculos.admin'],
     com_negocios: ['negocios.create'],
+    com_negocio_historico: ['negocios.update'],
     com_empresas: ['empresas.create'],
     com_parametros: ['parametros.gerenciar'],
     com_parametros_versoes: ['parametros.gerenciar'],
