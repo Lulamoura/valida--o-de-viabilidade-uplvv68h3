@@ -29,3 +29,31 @@ export interface PositiveTestResults {
 
 export const runPositiveTests = (): Promise<PositiveTestResults> =>
   pb.send('/backend/v1/run-positive-tests', { method: 'POST' })
+
+export interface AuditTestStep {
+  step: string
+  [key: string]: unknown
+}
+
+export interface AuditTestSummary {
+  totalSteps: number
+  passed: number
+  failed: number
+  allPassed: boolean
+  profileId: string
+  profileName: string
+  profileSlug: string
+  profileAtivo: boolean
+  porta2BApproved: boolean
+  porta2CStarted: boolean
+  recordKeptAsEvidence: boolean
+}
+
+export interface AuditTestResults {
+  generatedAt: string
+  steps: AuditTestStep[]
+  summary: AuditTestSummary
+}
+
+export const runAuditPerfisTest = (): Promise<AuditTestResults> =>
+  pb.send('/backend/v1/run-audit-perfis-test', { method: 'POST' })
