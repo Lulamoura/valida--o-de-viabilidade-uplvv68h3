@@ -59,17 +59,26 @@ export default function Index() {
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 text-white rounded-2xl p-6 sm:p-8 shadow-xl border border-slate-800">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <Badge
-              variant="outline"
-              className="text-blue-300 border-blue-500/40 bg-blue-500/10 text-xs mb-2"
-            >
-              Visão Comercial [TESTE]
-            </Badge>
+            <div className="flex flex-wrap gap-2 mb-2">
+              <Badge
+                variant="outline"
+                className="text-amber-300 border-amber-500/40 bg-amber-500/10 text-xs"
+              >
+                Provisório — Fase 1
+              </Badge>
+              <Badge
+                variant="outline"
+                className="text-blue-300 border-blue-500/40 bg-blue-500/10 text-xs"
+              >
+                Dados de teste
+              </Badge>
+            </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               Olá, {user?.name || 'Usuário'}! 👋
             </h1>
             <p className="text-sm text-slate-300 mt-1 max-w-2xl">
-              Indicadores comerciais em tempo real — Gestão Comercial PMais Fase 1 (dados de teste).
+              Dashboard provisório — indicadores derivados exclusivamente de registros [TESTE]. Os
+              indicadores definitivos serão definidos na Fase 2.
             </p>
           </div>
           <div className="flex gap-2.5 w-full sm:w-auto">

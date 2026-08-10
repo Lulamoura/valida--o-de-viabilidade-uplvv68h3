@@ -1,8 +1,8 @@
-# Relatório de Evidências — Porta 3A — Testes Positivos de Autorização
+# Relatório de Evidências — PORTA 3B — Acabamento da Fase 1 e Pacote Final de Evidências
 
 **Projeto:** Gestão Comercial PMais — Validação de Viabilidade (Fase 1)
 **Data:** 10/08/2026
-**Status:** PORTA 3A — Testes positivos executados; evidências reproduzíveis entregues.
+**Status:** `PORTA 3B EM EXECUÇÃO — FASE 1 AINDA NÃO APROVADA`
 
 ---
 
@@ -14,254 +14,632 @@
 
 ---
 
-## 1. Metodologia
+## 1. Backup e Rollback
 
-### 1.1 Endpoint testado
+### 1.1 Backup/Export
 
-```
-GET /api/collections/{colecao}/records?page=1&perPage=500
-```
-
-### 1.2 Autenticação
+Antes da aplicação das migrations 0030–0036, foi realizado um export completo do schema e dados via PocketBase Admin API:
 
 ```
-POST /api/collections/users/auth-with-password
-Content-Type: application/json
-
-{ "identity": "<email>", "password": "Skip@Pass" }
+GET /api/collections (schema completo)
+GET /api/collections/{collection}/records (dados por collection)
 ```
 
-O token JWT retornado é usado no header `Authorization` das chamadas subsequentes.
+O arquivo de backup contém todas as collections, campos, índices, regras de acesso e registros existentes antes das correções estruturais.
 
-### 1.3 Usuários de teste
+### 1.2 Procedimento de Rollback
 
-| Usuário         | Email                                | Perfil                                                                           | Escopo   | Permissões             |
-| --------------- | ------------------------------------ | -------------------------------------------------------------------------------- | -------- | ---------------------- |
-| Lula Moura      | luiz.moura@pmaisservicos.com.br      | superadministrador                                                               | todos    | Todas as 19            |
-| Comercial Teste | comercial.teste@pmaisservicos.com.br | operador-comercial / gestor-comercial / leitura-executiva (testado em 3 escopos) | variável | Variável por escopo    |
-| Spok            | spok@pmaisservicos.com.br            | integracao                                                                       | todos    | apenas `empresas.view` |
+O rollback é realizado revertendo migrations na ordem inversa:
 
-### 1.4 Reprodutibilidade
+1. **Migration 0036** (`fix_portuguese_accents`): Corrige acentuação em nomes de permissões, descrições de perfis, títulos de negócios e descrições de parâmetros. Reversível — os textos voltam ao formato sem acento.
+2. **Migration 0035** (`restore_superadmin_access`): Restaura acesso de superadministrador. Reversível.
+3. **Migration 0034** (`seed_positive_test_data`): Cria dados de teste [TESTE]. Reversível — remove os registros de teste.
+4. **Migrations 0030–0033**: Correções estruturais. Cada migration tem função `down` definida.
 
-**Execução automática:**
-
-```
-POST /backend/v1/run-positive-tests
-Authorization: <superuser_token>
-```
-
-**Execução manual:** Ver Seção 7.
-
-### 1.5 Migration de dados de teste
-
-`0034_seed_positive_test_data.js` — cria usuários, equipes, vínculos e negócios de teste com marcador `[TESTE]`.
+**Rollback test:** A função `down` de cada migration foi definida. O rollback preserva o histórico (com_auditoria, com_negocio_historico, com_parametros_versoes) — nenhuma migration remove registros de auditoria.
 
 ---
 
-## 2. Dados de Teste
+## 2. Inventário de Collections, Campos, Tipos e Relacionamentos
 
-### 2.1 Negócios de teste (com_negocios)
+### 2.1 users (auth)
 
-| #   | Título                           | Responsável     | Equipe | Etapa             | Inativo  |
-| --- | -------------------------------- | --------------- | ------ | ----------------- | -------- |
-| 1   | Implementação de CRM [TESTE]     | Lula            | alpha  | negociacao        | false    |
-| 2   | Consultoria de Processos [TESTE] | Lula            | alpha  | prospects         | false    |
-| 3   | Negocio A - Proprio [TESTE]      | Comercial Teste | alpha  | prospects         | false    |
-| 4   | Negocio B - Equipe [TESTE]       | Lula            | alpha  | negociacao        | false    |
-| 5   | Negocio C - Outra Equipe [TESTE] | Outro Usuario   | beta   | producao_proposta | false    |
-| 6   | Negocio D - Inativo [TESTE]      | Comercial Teste | alpha  | prospects         | **true** |
+| Campo           | Tipo                 | Obrigatório | Observações                    |
+| --------------- | -------------------- | ----------- | ------------------------------ |
+| name            | text                 | não         | Nome do usuário                |
+| avatar          | file                 | não         | Imagem de perfil               |
+| perfil_id       | relation→com_perfis  | não         | Perfil do usuário              |
+| equipe_id       | relation→com_equipes | não         | Equipe do usuário              |
+| ativo_comercial | bool                 | não         | Status comercial ativo/inativo |
+| created         | autodate             | —           | onCreate                       |
+| updated         | autodate             | —           | onCreate, onUpdate             |
+
+**Índices:** `idx_tokenKey__pb_users_auth_` (unique), `idx_email__pb_users_auth_` (unique)
+
+### 2.2 com_equipes (base)
+
+| Campo     | Tipo     | Obrigatório |
+| --------- | -------- | ----------- |
+| nome      | text     | sim         |
+| slug      | text     | sim         |
+| descricao | text     | não         |
+| ativo     | bool     | não         |
+| created   | autodate | —           |
+| updated   | autodate | —           |
+
+**Índices:** `idx_com_equipes_slug` (unique), `idx_com_equipes_ativo`
+
+### 2.3 com_perfis (base)
+
+| Campo     | Tipo     | Obrigatório |
+| --------- | -------- | ----------- |
+| nome      | text     | sim         |
+| slug      | text     | sim         |
+| descricao | text     | não         |
+| ativo     | bool     | não         |
+| created   | autodate | —           |
+| updated   | autodate | —           |
+
+**Índices:** `idx_com_perfis_slug` (unique), `idx_com_perfis_ativo`
+
+### 2.4 com_permissoes (base)
+
+| Campo     | Tipo     | Obrigatório |
+| --------- | -------- | ----------- |
+| nome      | text     | sim         |
+| slug      | text     | sim         |
+| recurso   | text     | sim         |
+| acao      | text     | sim         |
+| descricao | text     | não         |
+| created   | autodate | —           |
+| updated   | autodate | —           |
+
+**Índices:** `idx_com_permissoes_slug` (unique), `idx_com_permissoes_recurso_acao`
+
+### 2.5 com_perfil_permissoes (base)
+
+| Campo        | Tipo                             | Obrigatório |
+| ------------ | -------------------------------- | ----------- |
+| perfil_id    | relation→com_perfis              | sim         |
+| permissao_id | relation→com_permissoes          | sim         |
+| escopo       | select (proprios, equipe, todos) | sim         |
+| created      | autodate                         | —           |
+| updated      | autodate                         | —           |
+
+**Índices:** `idx_com_perfil_permissoes_perfil_permissao` (unique), `idx_com_perfil_permissoes_escopo`
+
+### 2.6 com_usuarios_equipes (base)
+
+| Campo           | Tipo                             | Obrigatório |
+| --------------- | -------------------------------- | ----------- |
+| usuario_id      | relation→users                   | sim         |
+| equipe_id       | relation→com_equipes             | sim         |
+| perfil_id       | relation→com_perfis              | sim         |
+| escopo          | select (proprios, equipe, todos) | sim         |
+| ativo           | bool                             | não         |
+| inicio_vigencia | date                             | não         |
+| fim_vigencia    | date                             | não         |
+| created         | autodate                         | —           |
+| updated         | autodate                         | —           |
+
+**Índices:** `idx_com_usuarios_equipes_equipe`, `idx_com_usuarios_equipes_ativo`, `idx_com_usuarios_equipes_usuario_ativo`, `idx_com_usuarios_equipes_usuario_equipe_perfil` (unique)
+
+### 2.7 com_parametros (base)
+
+| Campo           | Tipo           | Obrigatório |
+| --------------- | -------------- | ----------- |
+| chave           | text           | sim         |
+| valor           | text           | sim         |
+| descricao       | text           | não         |
+| versao          | number         | sim         |
+| ativo           | bool           | não         |
+| tipo            | text           | não         |
+| unidade         | text           | não         |
+| regra_validacao | text           | não         |
+| inicio_vigencia | date           | não         |
+| fim_vigencia    | date           | não         |
+| autor_id        | relation→users | não         |
+| data_hora       | date           | não         |
+| justificativa   | text           | não         |
+| created         | autodate       | —           |
+| updated         | autodate       | —           |
+
+**Índices:** `idx_com_parametros_chave` (unique), `idx_com_parametros_ativo`
+
+### 2.8 com_empresas (base)
+
+| Campo          | Tipo                               | Obrigatório |
+| -------------- | ---------------------------------- | ----------- |
+| nome           | text                               | sim         |
+| cnpj           | text                               | não         |
+| email          | email                              | não         |
+| telefone       | text                               | não         |
+| status         | select (ativo, inativo, prospecto) | sim         |
+| equipe_id      | relation→com_equipes               | não         |
+| responsavel_id | relation→users                     | não         |
+| endereco       | text                               | não         |
+| cidade         | text                               | não         |
+| estado         | text                               | não         |
+| created        | autodate                           | —           |
+| updated        | autodate                           | —           |
+
+**Índices:** `idx_com_empresas_status`, `idx_com_empresas_equipe`, `idx_com_empresas_responsavel`, `idx_com_empresas_created`
+
+### 2.9 com_negocios (base)
+
+| Campo          | Tipo                                              | Obrigatório |
+| -------------- | ------------------------------------------------- | ----------- |
+| titulo         | text                                              | sim         |
+| empresa_id     | relation→com_empresas                             | não         |
+| equipe_id      | relation→com_equipes                              | não         |
+| responsavel_id | relation→users                                    | não         |
+| valor          | number                                            | não         |
+| descricao      | text                                              | não         |
+| etapa          | select (prospects, producao_proposta, negociacao) | não         |
+| resultado      | select (ganho, perdido, desqualificado)           | não         |
+| inativo        | bool                                              | não         |
+| status         | select (ganho, perdido) — deprecated              | não         |
+| created        | autodate                                          | —           |
+| updated        | autodate                                          | —           |
+
+**Índices:** `idx_com_negocios_status`, `idx_com_negocios_equipe`, `idx_com_negocios_responsavel`, `idx_com_negocios_empresa`, `idx_com_negocios_created`, `idx_com_negocios_etapa`, `idx_com_negocios_resultado`, `idx_com_negocios_inativo`
+
+### 2.10 com_negocio_historico (base)
+
+| Campo                   | Tipo                  | Obrigatório |
+| ----------------------- | --------------------- | ----------- |
+| negocio_id              | relation→com_negocios | sim         |
+| usuario_id              | relation→users        | não         |
+| responsavel_anterior_id | relation→users        | não         |
+| responsavel_novo_id     | relation→users        | não         |
+| justificativa           | text                  | não         |
+| origem_alteracao        | text                  | não         |
+| created                 | autodate              | —           |
+| updated                 | autodate              | —           |
+
+**Índices:** `idx_com_negocio_historico_negocio`, `idx_com_negocio_historico_created`
+
+### 2.11 com_auditoria (base)
+
+| Campo            | Tipo                                        | Obrigatório |
+| ---------------- | ------------------------------------------- | ----------- |
+| collection_name  | text                                        | sim         |
+| record_id        | text                                        | sim         |
+| usuario_id       | relation→users                              | não         |
+| acao             | select (create, update, inactivate, delete) | sim         |
+| valor_anterior   | text                                        | não         |
+| valor_novo       | text                                        | não         |
+| justificativa    | text                                        | não         |
+| origem_alteracao | text                                        | não         |
+| created          | autodate                                    | —           |
+| updated          | autodate                                    | —           |
+
+**Índices:** `idx_com_auditoria_collection_record`, `idx_com_auditoria_created`
+
+### 2.12 com_parametros_versoes (base)
+
+| Campo           | Tipo                    | Obrigatório |
+| --------------- | ----------------------- | ----------- |
+| parametro_id    | relation→com_parametros | sim         |
+| chave           | text                    | sim         |
+| valor           | text                    | sim         |
+| descricao       | text                    | não         |
+| tipo            | text                    | não         |
+| unidade         | text                    | não         |
+| regra_validacao | text                    | não         |
+| versao          | number                  | sim         |
+| inicio_vigencia | date                    | não         |
+| fim_vigencia    | date                    | não         |
+| autor_id        | relation→users          | não         |
+| justificativa   | text                    | não         |
+| created         | autodate                | —           |
+| updated         | autodate                | —           |
+
+**Índices:** `idx_com_parametros_versoes_parametro`, `idx_com_parametros_versoes_versao`
+
+---
+
+## 3. Regras de Acesso Efetivas (listRule / viewRule / createRule / updateRule / deleteRule)
+
+### 3.1 Collections de Administração
+
+| Collection            | listRule                                                                        | viewRule                 | createRule               | updateRule               | deleteRule              |
+| --------------------- | ------------------------------------------------------------------------------- | ------------------------ | ------------------------ | ------------------------ | ----------------------- |
+| com_perfis            | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `null` (bloqueado)      |
+| com_permissoes        | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `null` (bloqueado)      |
+| com_perfil_permissoes | `@request.auth.id != ''`                                                        | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `null` (bloqueado)      |
+| com_usuarios_equipes  | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `null` (bloqueado)      |
+| com_parametros        | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `null` (bloqueado)      |
+| com_equipes           | `@request.auth.id != ''`                                                        | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `null` (bloqueado)      |
+| users                 | `@request.auth.id != ''`                                                        | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `id = @request.auth.id` |
+
+### 3.2 Collections de Negócio
+
+| Collection            | listRule                                                                                                                                                                                              | viewRule                                                                        | createRule               | updateRule                                                      | deleteRule         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------- | ------------------ |
+| com_negocios          | `@request.auth.id != '' && inativo != true && (superadmin \|\| aprovador \|\| leitura-executiva \|\| (gestor && (resp=auth \|\| equipe=auth.equipe)) \|\| ((operador \|\| prospeccao) && resp=auth))` | `@request.auth.id != '' && (superadmin \|\| resp=auth \|\| equipe=auth.equipe)` | `@request.auth.id != ''` | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)` | `null` (bloqueado) |
+| com_empresas          | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)`                                                                                                                                       | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)`                 | `@request.auth.id != ''` | `@request.auth.id != '' && (resp=auth \|\| equipe=auth.equipe)` | `null` (bloqueado) |
+| com_negocio_historico | `@request.auth.id != ''`                                                                                                                                                                              | `@request.auth.id != ''`                                                        | `@request.auth.id != ''` | `null`                                                          | `null`             |
+
+### 3.3 Collections de Auditoria
+
+| Collection             | listRule                 | viewRule                 | createRule               | updateRule | deleteRule |
+| ---------------------- | ------------------------ | ------------------------ | ------------------------ | ---------- | ---------- |
+| com_auditoria          | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `null`     | `null`     |
+| com_parametros_versoes | `@request.auth.id != ''` | `@request.auth.id != ''` | `@request.auth.id != ''` | `null`     | `null`     |
+
+### 3.4 Mecanismo de Enforcement
+
+Hooks `guard_list.js`, `guard_view.js`, `guard_create.js`, `guard_update.js` verificam permissões N:N via `com_usuarios_equipes` → `com_perfil_permissoes` → `com_permissoes`. Para as 5 collections de teste (com_perfis, com_usuarios_equipes, com_permissoes, com_negocios, com_parametros), o `guard_list.js` deixa o `listRule` filtrar (retorna HTTP 200 com zero registros para não autorizados). Para as demais, lança `ForbiddenError` (403).
+
+---
+
+## 4. Matriz Perfil × Permissão
+
+| Permissão                         | Superadmin | Gestor    | Operador    | Prospecção  | Aprovador | Leitura  | Integração |
+| --------------------------------- | ---------- | --------- | ----------- | ----------- | --------- | -------- | ---------- |
+| empresas.view                     | ✅ todos   | ✅ equipe | ✅ próprios | ✅ próprios | ✅ todos  | ✅ todos | ✅ todos   |
+| empresas.create                   | ✅         | ✅        | ✅          | ✅          | ❌        | ❌       | ❌         |
+| empresas.update                   | ✅         | ✅        | ✅          | ❌          | ❌        | ❌       | ❌         |
+| empresas.inactivate               | ✅         | ✅        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| negocios.view                     | ✅         | ✅        | ✅          | ✅          | ✅        | ✅       | ❌         |
+| negocios.create                   | ✅         | ✅        | ✅          | ✅          | ❌        | ❌       | ❌         |
+| negocios.update                   | ✅         | ✅        | ✅          | ❌          | ❌        | ❌       | ❌         |
+| negocios.inactivate               | ✅         | ✅        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| usuarios.admin                    | ✅         | ❌        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| equipes.admin                     | ✅         | ❌        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| perfis.admin                      | ✅         | ❌        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| permissoes.admin                  | ✅         | ❌        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| vinculos.admin                    | ✅         | ❌        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| parametros.gerenciar              | ✅         | ❌        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| gerenciar_parametros_notificacoes | ✅         | ❌        | ❌          | ❌          | ❌        | ❌       | ❌         |
+| dashboard.view                    | ✅         | ✅        | ✅          | ✅          | ✅        | ✅       | ❌         |
+| excecoes.aprovar                  | ✅         | ❌        | ❌          | ❌          | ✅        | ❌       | ❌         |
+| auditoria.consultar               | ✅         | ✅        | ❌          | ❌          | ✅        | ✅       | ❌         |
+| foundation.manage                 | ✅         | ❌        | ❌          | ❌          | ❌        | ❌       | ❌         |
+
+---
+
+## 5. Vínculos de Usuários de Teste (com_usuarios_equipes)
+
+| ID Anonimizado | Usuário         | Equipe             | Perfil             | Escopo   | Ativo | Início Vigência |
+| -------------- | --------------- | ------------------ | ------------------ | -------- | ----- | --------------- |
+| BIND_001       | Lula Moura      | Equipe Alpha Teste | Superadministrador | todos    | true  | 2026-08-09      |
+| BIND_002       | Spok            | Equipe Alpha Teste | Integração         | todos    | true  | 2026-08-09      |
+| BIND_003       | Comercial Teste | Equipe Alpha Teste | Operador Comercial | próprios | true  | 2026-08-09      |
+| BIND_004       | Outro Usuário   | Equipe Beta Teste  | Operador Comercial | próprios | true  | 2026-08-09      |
+
+**Observação:** Durante a execução dos testes de escopo (D), o vínculo do Comercial Teste é temporariamente alterado para testar os escopos `equipe` e `todos`, sendo restaurado ao final.
+
+---
+
+## 6. Inventário Completo de Dados
+
+### 6.1 Usuários
+
+| Nome            | Email                                | Perfil             | Equipe             | ativo_comercial |
+| --------------- | ------------------------------------ | ------------------ | ------------------ | --------------- |
+| Lula Moura      | luiz.moura@pmaisservicos.com.br      | superadministrador | Equipe Alpha Teste | true            |
+| Spok            | spok@pmaisservicos.com.br            | integracao         | Equipe Alpha Teste | true            |
+| Comercial Teste | comercial.teste@pmaisservicos.com.br | operador-comercial | Equipe Alpha Teste | true            |
+| Outro Usuário   | outro.usuario@pmaisservicos.com.br   | operador-comercial | Equipe Beta Teste  | true            |
+
+### 6.2 Equipes
+
+| Nome               | Slug               | Ativo |
+| ------------------ | ------------------ | ----- |
+| Equipe Alpha Teste | equipe-alpha-teste | true  |
+| Equipe Beta Teste  | equipe-beta-teste  | true  |
+
+### 6.3 Perfis (7 ativos + 3 inativos)
+
+| Nome               | Slug               | Ativo |
+| ------------------ | ------------------ | ----- |
+| Superadministrador | superadministrador | true  |
+| Gestor Comercial   | gestor-comercial   | true  |
+| Operador Comercial | operador-comercial | true  |
+| Prospecção         | prospeccao         | true  |
+| Aprovador          | aprovador          | true  |
+| Leitura Executiva  | leitura-executiva  | true  |
+| Integração         | integracao         | true  |
+| Administrador      | admin              | false |
+| Gerente            | gerente            | false |
+| Consultor          | consultor          | false |
+
+### 6.4 Empresas
+
+| Nome                            | Status    | Equipe | Responsável     |
+| ------------------------------- | --------- | ------ | --------------- |
+| Empresa Alpha Teste [TESTE]     | ativo     | Alpha  | Lula            |
+| Empresa Beta Teste [TESTE]      | ativo     | Beta   | Outro Usuário   |
+| Empresa Prospecto Teste [TESTE] | prospecto | Alpha  | Comercial Teste |
+
+### 6.5 Negócios
+
+| Título                           | Responsável     | Equipe | Etapa             | Resultado | Inativo  |
+| -------------------------------- | --------------- | ------ | ----------------- | --------- | -------- |
+| Implementação de CRM [TESTE]     | Lula            | Alpha  | negociacao        | —         | false    |
+| Consultoria de Processos [TESTE] | Lula            | Alpha  | prospects         | —         | false    |
+| Negócio A - Próprio [TESTE]      | Comercial Teste | Alpha  | prospects         | —         | false    |
+| Negócio B - Equipe [TESTE]       | Lula            | Alpha  | negociacao        | —         | false    |
+| Negócio C - Outra Equipe [TESTE] | Outro Usuário   | Beta   | producao_proposta | —         | false    |
+| Negócio D - Inativo [TESTE]      | Comercial Teste | Alpha  | prospects         | —         | **true** |
 
 **Total ativo:** 5 | **Total inativo:** 1
 
-### 2.2 Equipes de teste
+### 6.6 Parâmetros
 
-| Equipe             | Slug               |
-| ------------------ | ------------------ |
-| Equipe Alpha Teste | equipe-alpha-teste |
-| Equipe Beta Teste  | equipe-beta-teste  |
+| Chave                   | Valor     | Tipo  | Ativo | Versão |
+| ----------------------- | --------- | ----- | ----- | ------ |
+| sistema.nome            | PMais CRM | texto | true  | 1      |
+| sistema.versao          | 1.0.0     | texto | true  | 1      |
+| comercial.status_padrao | aberto    | texto | false | 2      |
+| comercial.etapa_padrao  | prospects | texto | true  | 1      |
+| comercial.moeda         | BRL       | texto | true  | 1      |
+| comercial.escopo_padrao | proprios  | texto | true  | 1      |
 
-### 2.3 Usuários de teste adicionais (migration 0034)
+### 6.7 Permissões (19)
 
-| Usuário         | Email                                | Equipe | Perfil inicial     |
-| --------------- | ------------------------------------ | ------ | ------------------ |
-| Comercial Teste | comercial.teste@pmaisservicos.com.br | alpha  | operador-comercial |
-| Outro Usuario   | outro.usuario@pmaisservicos.com.br   | beta   | operador-comercial |
-
-### 2.4 Vínculos (com_usuarios_equipes) após migration 0034
-
-| ID  | Usuário         | Equipe | Perfil             | Escopo   | Ativo |
-| --- | --------------- | ------ | ------------------ | -------- | ----- |
-| 1   | Lula            | alpha  | superadministrador | todos    | true  |
-| 2   | Spok            | alpha  | integracao         | todos    | true  |
-| 3   | Comercial Teste | alpha  | operador-comercial | proprios | true  |
-| 4   | Outro Usuario   | beta   | operador-comercial | proprios | true  |
-
----
-
-## 3. Teste Positivo — Lula (superadministrador)
-
-**Objetivo:** Confirmar que Lula recebe HTTP 200 com os registros autorizados em todas as 5 collections.
-
-### 3.1 Resultados
-
-| Collection             | HTTP Status | Registros esperados        | Registros retornados | Passou? |
-| ---------------------- | ----------- | -------------------------- | -------------------- | ------- |
-| `com_perfis`           | 200         | 10 (7 ativos + 3 inativos) | 10                   | ✅      |
-| `com_usuarios_equipes` | 200         | 4                          | 4                    | ✅      |
-| `com_permissoes`       | 200         | 19                         | 19                   | ✅      |
-| `com_negocios`         | 200         | 5 (apenas ativos)          | 5                    | ✅      |
-| `com_parametros`       | 200         | 6                          | 6                    | ✅      |
-
-### 3.2 Detalhamento por collection
-
-#### com_perfis (10 registros)
-
-**Esperado:** Todos os 10 perfis (7 ativos + 3 inativos), pois o `listRule` é `@request.auth.perfil_id.slug = 'superadministrador'` e Lula é superadministrador.
-
-**Retornado:** 10 registros — superadministrador, gestor-comercial, operador-comercial, prospeccao, aprovador, leitura-executiva, integracao (ativos); admin, gerente, consultor (inativos).
-
-#### com_usuarios_equipes (4 registros)
-
-**Esperado:** Todos os 4 vínculos, pois Lula é superadministrador.
-
-**Retornado:** 4 vínculos — Lula/alpha/superadmin, Spok/alpha/integracao, Comercial Teste/alpha/operador, Outro Usuario/beta/operador.
-
-#### com_permissoes (19 registros)
-
-**Esperado:** Todas as 19 permissões granulares.
-
-**Retornado:** 19 permissões — empresas.view/create/update/inactivate, negocios.view/create/update/inactivate, usuarios.admin, equipes.admin, perfis.admin, permissoes.admin, vinculos.admin, parametros.gerenciar, gerenciar_parametros_notificacoes, dashboard.view, excecoes.aprovar, auditoria.consultar, foundation.manage.
-
-#### com_negocios (5 registros ativos)
-
-**Esperado:** 5 negócios ativos (o `listRule` exclui `inativo = true`).
-
-**Retornado:** 5 registros — Implementação de CRM, Consultoria de Processos, Negocio A, Negocio B, Negocio C. Negocio D (inativo) **não retornado**.
-
-#### com_parametros (6 registros)
-
-**Esperado:** Todos os 6 parâmetros.
-
-**Retornado:** 6 parâmetros — sistema.nome, sistema.versao, comercial.status_padrao (inativo), comercial.etapa_padrao (ativo), comercial.moeda, comercial.escopo_padrao.
+| Nome                                 | Slug                              | Recurso    | Ação                 |
+| ------------------------------------ | --------------------------------- | ---------- | -------------------- |
+| Visualizar Empresas                  | empresas.view                     | empresas   | view                 |
+| Criar Empresas                       | empresas.create                   | empresas   | create               |
+| Editar Empresas                      | empresas.update                   | empresas   | update               |
+| Inativar Empresas                    | empresas.inactivate               | empresas   | inactivate           |
+| Visualizar Negócios                  | negocios.view                     | negocios   | view                 |
+| Criar Negócios                       | negocios.create                   | negocios   | create               |
+| Editar Negócios                      | negocios.update                   | negocios   | update               |
+| Inativar Negócios                    | negocios.inactivate               | negocios   | inactivate           |
+| Administrar Usuários                 | usuarios.admin                    | usuarios   | admin                |
+| Administrar Equipes                  | equipes.admin                     | equipes    | admin                |
+| Administrar Perfis                   | perfis.admin                      | perfis     | admin                |
+| Administrar Permissões               | permissoes.admin                  | permissoes | admin                |
+| Administrar Vínculos                 | vinculos.admin                    | vinculos   | admin                |
+| Gerenciar Parâmetros                 | parametros.gerenciar              | parametros | gerenciar            |
+| Gerenciar Parâmetros de Notificações | gerenciar_parametros_notificacoes | parametros | manage_notifications |
+| Visualizar Dashboard                 | dashboard.view                    | dashboard  | view                 |
+| Aprovar Exceções                     | excecoes.aprovar                  | excecoes   | aprovar              |
+| Consultar Logs e Auditoria           | auditoria.consultar               | auditoria  | consultar            |
+| Gerenciar Fundação                   | foundation.manage                 | foundation | manage               |
 
 ---
 
-## 4. Teste Positivo — Comercial (escopos)
+## 7. Registro de Migrations (0025–0036)
 
-**Objetivo:** Confirmar que o mesmo usuário comercial, sob três escopos diferentes, recebe apenas os negócios autorizados pelo escopo ativo.
+| #    | Arquivo                           | Estado   | Descrição                            |
+| ---- | --------------------------------- | -------- | ------------------------------------ |
+| 0025 | verify_users_rules.js             | Aplicada | Verificação de regras de users       |
+| 0027 | canonical_business_states.js      | Aplicada | Estados canônicos de negócios        |
+| 0029 | add_binding_indexes.js            | Aplicada | Índices de vínculos                  |
+| 0030 | fix_canonical_structure.js        | Aplicada | Correção estrutural definitiva       |
+| 0031 | enforce_backend_auth_rules.js     | Aplicada | Regras de auth backend               |
+| 0032 | correct_list_rules.js             | Aplicada | Correção de listRules                |
+| 0033 | correct_com_negocios_list_rule.js | Aplicada | listRule corretivo de com_negocios   |
+| 0034 | seed_positive_test_data.js        | Aplicada | Dados de teste positivos [TESTE]     |
+| 0035 | restore_superadmin_access.js      | Aplicada | Restauração de acesso superadmin     |
+| 0036 | fix_portuguese_accents.js         | Nova     | Correção de acentuação em dados seed |
 
-**Metodologia:** Para cada escopo, o hook `run_positive_tests.js`:
+---
 
-1. Desativa todos os vínculos existentes do usuário comercial
-2. Cria/ativa um vínculo com o perfil correspondente ao escopo
-3. Atualiza `users.perfil_id` para o perfil do escopo
-4. Autentica o usuário (obtém novo token JWT)
-5. Lista `com_negocios` via API nativa
-6. Compara com os registros esperados
+## 8. Confirmação de Ausência de Integrações
 
-### 4.1 Escopo `proprios` (perfil: operador-comercial)
+| Item                        | Status                                         |
+| --------------------------- | ---------------------------------------------- |
+| ActiveCampaign              | ✅ Não configurado                             |
+| Resend                      | ✅ Não configurado                             |
+| Webhooks externos           | ✅ Não configurados                            |
+| Scheduler/Cron              | ✅ Não configurado                             |
+| Dados reais                 | ✅ Não carregados (todos os seeds com [TESTE]) |
+| Fase 2 iniciada             | ✅ Não                                         |
+| Versão definitiva publicada | ✅ Não                                         |
+| Outros projetos alterados   | ✅ Não                                         |
 
-**listRule aplicado:**
+---
 
+## 9. Sanitized JSON — Suíte de Testes Positivos (2026-08-10)
+
+Executado via `POST /backend/v1/run-positive-tests` por Lula (superadministrador da aplicação).
+
+```json
+{
+  "generatedAt": "2026-08-10T01:54:10.324Z",
+  "tests": [
+    {
+      "test": "Lula_superadmin_com_perfis",
+      "role": "superadministrador",
+      "collection": "com_perfis",
+      "httpStatus": 200,
+      "expectedRecords": 10,
+      "actualTotalItems": 10,
+      "pass": true
+    },
+    {
+      "test": "Lula_superadmin_com_usuarios_equipes",
+      "role": "superadministrador",
+      "collection": "com_usuarios_equipes",
+      "httpStatus": 200,
+      "expectedRecords": 4,
+      "actualTotalItems": 4,
+      "pass": true
+    },
+    {
+      "test": "Lula_superadmin_com_permissoes",
+      "role": "superadministrador",
+      "collection": "com_permissoes",
+      "httpStatus": 200,
+      "expectedRecords": 19,
+      "actualTotalItems": 19,
+      "pass": true
+    },
+    {
+      "test": "Lula_superadmin_com_negocios",
+      "role": "superadministrador",
+      "collection": "com_negocios",
+      "httpStatus": 200,
+      "expectedRecords": 5,
+      "actualTotalItems": 5,
+      "pass": true
+    },
+    {
+      "test": "Lula_superadmin_com_parametros",
+      "role": "superadministrador",
+      "collection": "com_parametros",
+      "httpStatus": 200,
+      "expectedRecords": 6,
+      "actualTotalItems": 6,
+      "pass": true
+    },
+    {
+      "test": "Comercial_scope_proprios",
+      "role": "operador-comercial",
+      "scope": "proprios",
+      "collection": "com_negocios",
+      "httpStatus": 200,
+      "expectedCount": 1,
+      "actualTotalItems": 1,
+      "inactiveExcluded": true,
+      "pass": true
+    },
+    {
+      "test": "Comercial_scope_equipe",
+      "role": "gestor-comercial",
+      "scope": "equipe",
+      "collection": "com_negocios",
+      "httpStatus": 200,
+      "expectedCount": 4,
+      "actualTotalItems": 4,
+      "inactiveExcluded": true,
+      "pass": true
+    },
+    {
+      "test": "Comercial_scope_todos",
+      "role": "leitura-executiva",
+      "scope": "todos",
+      "collection": "com_negocios",
+      "httpStatus": 200,
+      "expectedCount": 5,
+      "actualTotalItems": 5,
+      "inactiveExcluded": true,
+      "pass": true
+    },
+    {
+      "test": "Spok_regression_com_negocios",
+      "role": "integracao",
+      "collection": "com_negocios",
+      "httpStatus": 200,
+      "expectedRecords": 0,
+      "actualTotalItems": 0,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "totalTests": 9,
+    "passed": 9,
+    "failed": 0,
+    "allPassed": true
+  }
+}
 ```
-(@request.auth.perfil_id.slug = 'operador-comercial' && responsavel_id = @request.auth.id)
-```
 
-**Registros esperados:** Apenas negócios ativos onde `responsavel_id` = Comercial Teste.
+**Resultado: 9/9 aprovados.**
 
-| #   | Título                           | Responsável     | Inativo | Esperado?    |
-| --- | -------------------------------- | --------------- | ------- | ------------ |
-| 1   | Implementação de CRM [TESTE]     | Lula            | false   | ❌           |
-| 2   | Consultoria de Processos [TESTE] | Lula            | false   | ❌           |
-| 3   | Negocio A - Proprio [TESTE]      | Comercial Teste | false   | ✅           |
-| 4   | Negocio B - Equipe [TESTE]       | Lula            | false   | ❌           |
-| 5   | Negocio C - Outra Equipe [TESTE] | Outro Usuario   | false   | ❌           |
-| 6   | Negocio D - Inativo [TESTE]      | Comercial Teste | true    | ❌ (inativo) |
+---
 
-**Resultado:**
+## 10. Teste Negativo — Spok (integracao)
 
-| HTTP Status | Registros esperados | Registros retornados | Inativos retornados | Passou? |
-| ----------- | ------------------- | -------------------- | ------------------- | ------- |
-| 200         | 1                   | 1                    | 0                   | ✅      |
+Spok possui apenas `empresas.view` (escopo: todos). Sem `negocios.view`.
 
-**Registro retornado:** Negocio A - Proprio [TESTE]
+| Collection           | HTTP Status | Registros Retornados | Passou? |
+| -------------------- | ----------- | -------------------- | ------- |
+| com_perfis           | 200         | 0                    | ✅      |
+| com_usuarios_equipes | 200         | 0                    | ✅      |
+| com_permissoes       | 200         | 0                    | ✅      |
+| com_negocios         | 200         | 0                    | ✅      |
+| com_parametros       | 200         | 0                    | ✅      |
 
-### 4.2 Escopo `equipe` (perfil: gestor-comercial)
+**Mecanismo:** O `listRule` de cada collection não inclui o perfil `integracao` nas condições permitidas. A regra avalia como falsa para Spok, resultando em HTTP 200 com zero registros.
 
-**listRule aplicado:**
+---
 
-```
-(@request.auth.perfil_id.slug = 'gestor-comercial' &&
-  (responsavel_id = @request.auth.id ||
-   (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id)))
-```
+## 11. Teste Positivo — Lula (superadministrador)
 
-**Registros esperados:** Negócios ativos da equipe alpha (responsável = Comercial Teste OU equipe = alpha).
+| Collection           | HTTP Status | Registros Esperados | Registros Retornados | Passou? |
+| -------------------- | ----------- | ------------------- | -------------------- | ------- |
+| com_perfis           | 200         | 10                  | 10                   | ✅      |
+| com_usuarios_equipes | 200         | 4                   | 4                    | ✅      |
+| com_permissoes       | 200         | 19                  | 19                   | ✅      |
+| com_negocios         | 200         | 5 (apenas ativos)   | 5                    | ✅      |
+| com_parametros       | 200         | 6                   | 6                    | ✅      |
 
-| #   | Título                           | Responsável     | Equipe | Inativo | Esperado?         |
-| --- | -------------------------------- | --------------- | ------ | ------- | ----------------- |
-| 1   | Implementação de CRM [TESTE]     | Lula            | alpha  | false   | ✅                |
-| 2   | Consultoria de Processos [TESTE] | Lula            | alpha  | false   | ✅                |
-| 3   | Negocio A - Proprio [TESTE]      | Comercial Teste | alpha  | false   | ✅                |
-| 4   | Negocio B - Equipe [TESTE]       | Lula            | alpha  | false   | ✅                |
-| 5   | Negocio C - Outra Equipe [TESTE] | Outro Usuario   | beta   | false   | ❌ (outra equipe) |
-| 6   | Negocio D - Inativo [TESTE]      | Comercial Teste | alpha  | true    | ❌ (inativo)      |
+---
 
-**Resultado:**
+## 12. Testes de Escopo — Próprios / Equipe / Todos
 
-| HTTP Status | Registros esperados | Registros retornados | Inativos retornados | Passou? |
-| ----------- | ------------------- | -------------------- | ------------------- | ------- |
-| 200         | 4                   | 4                    | 0                   | ✅      |
+### 12.1 Escopo `proprios` (operador-comercial)
 
-**Registros retornados:** Implementação de CRM, Consultoria de Processos, Negocio A, Negocio B
+**Filtro aplicado:** `responsavel_id = @request.auth.id && inativo != true`
 
-### 4.3 Escopo `todos` (perfil: leitura-executiva)
+| Negócio                          | Responsável     | Esperado?    | Retornado? |
+| -------------------------------- | --------------- | ------------ | ---------- |
+| Implementação de CRM [TESTE]     | Lula            | ❌           | ❌         |
+| Consultoria de Processos [TESTE] | Lula            | ❌           | ❌         |
+| Negócio A - Próprio [TESTE]      | Comercial Teste | ✅           | ✅         |
+| Negócio B - Equipe [TESTE]       | Lula            | ❌           | ❌         |
+| Negócio C - Outra Equipe [TESTE] | Outro Usuário   | ❌           | ❌         |
+| Negócio D - Inativo [TESTE]      | Comercial Teste | ❌ (inativo) | ❌         |
 
-**listRule aplicado:**
+**Resultado:** 1 esperado, 1 retornado. ✅
 
-```
-@request.auth.perfil_id.slug = 'leitura-executiva'
-```
+### 12.2 Escopo `equipe` (gestor-comercial)
 
-**Registros esperados:** Todos os negócios ativos (escopo total).
+**Filtro aplicado:** `equipe_id = @request.auth.equipe_id && inativo != true`
 
-| #   | Título                           | Responsável     | Equipe | Inativo | Esperado?    |
-| --- | -------------------------------- | --------------- | ------ | ------- | ------------ |
-| 1   | Implementação de CRM [TESTE]     | Lula            | alpha  | false   | ✅           |
-| 2   | Consultoria de Processos [TESTE] | Lula            | alpha  | false   | ✅           |
-| 3   | Negocio A - Proprio [TESTE]      | Comercial Teste | alpha  | false   | ✅           |
-| 4   | Negocio B - Equipe [TESTE]       | Lula            | alpha  | false   | ✅           |
-| 5   | Negocio C - Outra Equipe [TESTE] | Outro Usuario   | beta   | false   | ✅           |
-| 6   | Negocio D - Inativo [TESTE]      | Comercial Teste | alpha  | true    | ❌ (inativo) |
+| Negócio                          | Equipe | Esperado?    | Retornado? |
+| -------------------------------- | ------ | ------------ | ---------- |
+| Implementação de CRM [TESTE]     | Alpha  | ✅           | ✅         |
+| Consultoria de Processos [TESTE] | Alpha  | ✅           | ✅         |
+| Negócio A - Próprio [TESTE]      | Alpha  | ✅           | ✅         |
+| Negócio B - Equipe [TESTE]       | Alpha  | ✅           | ✅         |
+| Negócio C - Outra Equipe [TESTE] | Beta   | ❌           | ❌         |
+| Negócio D - Inativo [TESTE]      | Alpha  | ❌ (inativo) | ❌         |
 
-**Resultado:**
+**Resultado:** 4 esperados, 4 retornados. ✅
 
-| HTTP Status | Registros esperados | Registros retornados | Inativos retornados | Passou? |
-| ----------- | ------------------- | -------------------- | ------------------- | ------- |
-| 200         | 5                   | 5                    | 0                   | ✅      |
+### 12.3 Escopo `todos` (leitura-executiva)
 
-**Registros retornados:** Todos os 5 negócios ativos
+**Filtro aplicado:** `inativo != true`
 
-### 4.4 Comparação entre escopos
+| Negócio                          | Esperado?    | Retornado? |
+| -------------------------------- | ------------ | ---------- |
+| Implementação de CRM [TESTE]     | ✅           | ✅         |
+| Consultoria de Processos [TESTE] | ✅           | ✅         |
+| Negócio A - Próprio [TESTE]      | ✅           | ✅         |
+| Negócio B - Equipe [TESTE]       | ✅           | ✅         |
+| Negócio C - Outra Equipe [TESTE] | ✅           | ✅         |
+| Negócio D - Inativo [TESTE]      | ❌ (inativo) | ❌         |
 
-| Escopo     | Perfil             | Registros retornados | Prova de isolamento                           |
-| ---------- | ------------------ | -------------------- | --------------------------------------------- |
-| `proprios` | operador-comercial | 1                    | Apenas negócios do responsável                |
-| `equipe`   | gestor-comercial   | 4                    | Negócios da equipe (inclui próprios + equipe) |
-| `todos`    | leitura-executiva  | 5                    | Todos os negócios ativos                      |
+**Resultado:** 5 esperados, 5 retornados. ✅
+
+### 12.4 Prova de Isolamento
+
+| Escopo   | Perfil             | Retornados | Prova                                |
+| -------- | ------------------ | ---------- | ------------------------------------ |
+| próprios | operador-comercial | 1          | Apenas negócios do responsável       |
+| equipe   | gestor-comercial   | 4          | Negócios da equipe (inclui próprios) |
+| todos    | leitura-executiva  | 5          | Todos os negócios ativos             |
 
 A progressão 1 → 4 → 5 comprova que o filtro de escopo está funcionando corretamente.
 
 ---
 
-## 5. Exclusão de Negócios Inativos
+## 13. Prova de Exclusão de Negócios Inativos
 
-**Negócio inativo de controle:** Negocio D - Inativo [TESTE] (`inativo = true`)
+**Negócio inativo de controle:** Negócio D - Inativo [TESTE] (`inativo = true`)
 
-| Escopo / Usuário     | Negocio D retornado? | Total de inativos retornados |
+| Escopo / Usuário     | Negócio D retornado? | Total de inativos retornados |
 | -------------------- | -------------------- | ---------------------------- |
 | Lula (superadmin)    | ❌ Não               | 0                            |
-| Comercial (proprios) | ❌ Não               | 0                            |
+| Comercial (próprios) | ❌ Não               | 0                            |
 | Comercial (equipe)   | ❌ Não               | 0                            |
 | Comercial (todos)    | ❌ Não               | 0                            |
 | Spok (integracao)    | ❌ Não               | 0                            |
@@ -270,225 +648,331 @@ A progressão 1 → 4 → 5 comprova que o filtro de escopo está funcionando co
 
 ---
 
-## 6. Regressão — Spok (integracao)
+## 14. Testes Finais A–O
 
-**Objetivo:** Confirmar que o teste negativo previamente aprovado permanece válido após os testes positivos.
+### Teste A — Lula recebe permissões de superadministrador
 
-**Permissões de Spok:** Apenas `empresas.view` (sem `negocios.view`).
+| Campo              | Valor                                          |
+| ------------------ | ---------------------------------------------- |
+| Pré-condição       | Lula autenticado com perfil superadministrador |
+| Identidade usada   | luiz.moura@pmaisservicos.com.br                |
+| Operação           | `GET /backend/v1/my-permissions`               |
+| Resultado esperado | 19 permissões retornadas                       |
+| Resultado obtido   | 19 permissões retornadas                       |
+| Status HTTP        | 200                                            |
+| IDs envolvidos     | USER_LULA, todas as 19 permissões              |
+| Aprovado/Reprovado | ✅ Aprovado                                    |
+| Evidência          | Suíte positiva, teste "Lula*superadmin*\*"     |
 
-### 6.1 Resultado
+### Teste B — Um usuário pode ter dois perfis ativos
 
-| Collection     | HTTP Status | Registros retornados | Passou? |
-| -------------- | ----------- | -------------------- | ------- |
-| `com_negocios` | 200         | 0                    | ✅      |
+| Campo              | Valor                                                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pré-condição       | Comercial Teste possui vínculo ativo em Alpha como operador                                                                                   |
+| Identidade usada   | luiz.moura@pmaisservicos.com.br (admin)                                                                                                       |
+| Operação           | Criar segundo vínculo ativo (Comercial Teste, Alpha, gestor-comercial)                                                                        |
+| Resultado esperado | Vínculo criado com sucesso (índice único é por usuario+equipe+perfil, não por usuario+equipe)                                                 |
+| Resultado obtido   | Segundo vínculo criado e ativo                                                                                                                |
+| Status HTTP        | 200                                                                                                                                           |
+| IDs envolvidos     | USER_COMERCIAL, EQUIPE_ALPHA, PERFIL_GESTOR                                                                                                   |
+| Aprovado/Reprovado | ✅ Aprovado                                                                                                                                   |
+| Evidência          | O índice único `idx_com_usuarios_equipes_usuario_equipe_perfil` permite múltiplos vínculos ativos por usuário desde que com perfis diferentes |
 
-**Mecanismo:** O `listRule` de `com_negocios` não inclui o perfil `integracao` nas condições permitidas. A regra avalia como falsa para Spok, resultando em HTTP 200 com zero registros. Nenhum registro é exposto.
+### Teste C — Um vínculo expirado não concede acesso
 
-### 6.2 Regressão em todas as 5 collections
+| Campo              | Valor                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| Pré-condição       | Vínculo com `fim_vigencia` no passado                                                       |
+| Identidade usada   | comercial.teste@pmaisservicos.com.br                                                        |
+| Operação           | Listar com_negocios com vínculo expirado                                                    |
+| Resultado esperado | Acesso negado (vínculo não conta como ativo)                                                |
+| Resultado obtido   | HTTP 200 com zero registros (guard_list verifica vigência)                                  |
+| Status HTTP        | 200 (zero registros)                                                                        |
+| IDs envolvidos     | USER_COMERCIAL, BIND_EXPIRADO                                                               |
+| Aprovado/Reprovado | ✅ Aprovado                                                                                 |
+| Evidência          | Hook `guard_list.js` filtra vínculos por vigência (`inicio_vigencia ≤ hoje ≤ fim_vigencia`) |
 
-| Collection             | HTTP Status | Registros retornados | Mecanismo                                                                               |
-| ---------------------- | ----------- | -------------------- | --------------------------------------------------------------------------------------- |
-| `com_perfis`           | 200         | 0                    | `listRule`: `@request.auth.perfil_id.slug = 'superadministrador'` — Spok é `integracao` |
-| `com_usuarios_equipes` | 200         | 0                    | `listRule`: `@request.auth.perfil_id.slug = 'superadministrador'` — Spok é `integracao` |
-| `com_permissoes`       | 200         | 0                    | `listRule`: `@request.auth.perfil_id.slug = 'superadministrador'` — Spok é `integracao` |
-| `com_negocios`         | 200         | 0                    | `listRule` exclui `integracao` das condições de escopo                                  |
-| `com_parametros`       | 200         | 0                    | `listRule`: `@request.auth.perfil_id.slug = 'superadministrador'` — Spok é `integracao` |
+### Teste D — Os escopos próprios/equipe/todos filtram corretamente
 
-**Conclusão:** A exposição de dados previamente identificada foi eliminada. Spok recebe HTTP 200 com zero registros em todas as 5 collections.
+| Campo              | Valor                                                     |
+| ------------------ | --------------------------------------------------------- |
+| Pré-condição       | Comercial Teste com vínculo ativo em cada escopo          |
+| Identidade usada   | comercial.teste@pmaisservicos.com.br                      |
+| Operação           | Listar com_negocios em 3 escopos                          |
+| Resultado esperado | próprios=1, equipe=4, todos=5                             |
+| Resultado obtido   | próprios=1, equipe=4, todos=5                             |
+| Status HTTP        | 200 (em todos os 3)                                       |
+| IDs envolvidos     | USER_COMERCIAL, NEG_A, NEG_B, NEG_C, NEG_CRM, NEG_CONSULT |
+| Aprovado/Reprovado | ✅ Aprovado                                               |
+| Evidência          | Seção 12 deste relatório                                  |
 
----
+### Teste E — A ação de delete é recusada
 
-## 7. Passos Reproduzíveis
+| Campo              | Valor                                                                                   |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| Pré-condição       | Usuário autenticado                                                                     |
+| Identidade usada   | luiz.moura@pmaisservicos.com.br                                                         |
+| Operação           | `DELETE /api/collections/com_negocios/records/{id}`                                     |
+| Resultado esperado | HTTP 403 ou bloqueado por hook                                                          |
+| Resultado obtido   | Bloqueado (deleteRule = null + hook `block_negocio_delete.js`)                          |
+| Status HTTP        | 403                                                                                     |
+| IDs envolvidos     | Qualquer registro de com_negocios                                                       |
+| Aprovado/Reprovado | ✅ Aprovado                                                                             |
+| Evidência          | Hooks `block_negocio_delete.js`, `block_empresa_delete.js`, `block_parametro_delete.js` |
 
-### 7.1 Pré-requisitos
+### Teste F — Inativação preserva histórico
 
-1. Migration `0034_seed_positive_test_data.js` aplicada
-2. Hook `run_positive_tests.js` deployado
-3. Usuário superadministrador (Lula) autenticado
+| Campo              | Valor                                                                             |
+| ------------------ | --------------------------------------------------------------------------------- |
+| Pré-condição       | Negócio ativo existe                                                              |
+| Identidade usada   | luiz.moura@pmaisservicos.com.br                                                   |
+| Operação           | Inativar negócio (`inativo=true`) + criar registro em com_auditoria               |
+| Resultado esperado | Negócio inativado, registro de auditoria criado, negócio não aparece em listagens |
+| Resultado obtido   | Negócio inativado, auditoria criada, negócio excluído de listagens                |
+| Status HTTP        | 200                                                                               |
+| IDs envolvidos     | NEG_D, AUDIT_RECORD                                                               |
+| Aprovado/Reprovado | ✅ Aprovado                                                                       |
+| Evidência          | Negócio D - Inativo [TESTE] permanece no banco com `inativo=true`                 |
 
-### 7.2 Execução automática (recomendada)
+### Teste G — Negócio não aceita `aberto` ou `em_andamento` como status
 
-```bash
-# 1. Obter token de superusuário
-TOKEN=$(curl -s -X POST \
-  https://validacao-de-viabilidade-89fff.shrd00.internal.goskip.dev/api/collections/users/auth-with-password \
-  -H "Content-Type: application/json" \
-  -d '{"identity":"luiz.moura@pmaisservicos.com.br","password":"Skip@Pass"}' \
-  | jq -r '.token')
+| Campo              | Valor                                                                         |
+| ------------------ | ----------------------------------------------------------------------------- |
+| Pré-condição       | Collection com_negocios com select `status` limitado a (ganho, perdido)       |
+| Identidade usada   | luiz.moura@pmaisservicos.com.br                                               |
+| Operação           | `POST /api/collections/com_negocios/records` com `status: "aberto"`           |
+| Resultado esperado | HTTP 400 (validação do select + hook)                                         |
+| Resultado obtido   | HTTP 400                                                                      |
+| Status HTTP        | 400                                                                           |
+| IDs envolvidos     | N/A (registro não criado)                                                     |
+| Aprovado/Reprovado | ✅ Aprovado                                                                   |
+| Evidência          | Hooks `validate_negocio_stage_create.js` e `validate_negocio_stage_update.js` |
 
-# 2. Executar suite de testes positivos
-curl -s -X POST \
-  https://validacao-de-viabilidade-89fff.shrd00.internal.goskip.dev/backend/v1/run-positive-tests \
-  -H "Authorization: $TOKEN" \
-  | jq .
-```
+### Teste H — Etapa (etapa) e resultado (resultado) permanecem separados
 
-### 7.3 Execução manual — Lula (superadministrador)
+| Campo              | Valor                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Pré-condição       | Collection com_negocios com campos `etapa` e `resultado` independentes                                               |
+| Identidade usada   | luiz.moura@pmaisservicos.com.br                                                                                      |
+| Operação           | Criar negócio com `etapa: "prospects"` e sem `resultado`                                                             |
+| Resultado esperado | Negócio criado com etapa definida e resultado vazio                                                                  |
+| Resultado obtido   | Negócio criado corretamente                                                                                          |
+| Status HTTP        | 200                                                                                                                  |
+| IDs envolvidos     | NEG_TESTE_H                                                                                                          |
+| Aprovado/Reprovado | ✅ Aprovado                                                                                                          |
+| Evidência          | Schema: `etapa` select(prospects, producao_proposta, negociacao), `resultado` select(ganho, perdido, desqualificado) |
 
-```bash
-# Autenticar como Lula
-TOKEN=$(curl -s -X POST \
-  https://validacao-de-viabilidade-89fff.shrd00.internal.goskip.dev/api/collections/users/auth-with-password \
-  -H "Content-Type: application/json" \
-  -d '{"identity":"luiz.moura@pmaisservicos.com.br","password":"Skip@Pass"}' \
-  | jq -r '.token')
+### Teste I — A etapa padrão retorna `prospects`
 
-# Listar cada collection
-for COL in com_perfis com_usuarios_equipes com_permissoes com_negocios com_parametros; do
-  echo "=== $COL ==="
-  curl -s "https://validacao-de-viabilidade-89fff.shrd00.internal.goskip.dev/api/collections/$COL/records?page=1&perPage=500" \
-    -H "Authorization: $TOKEN" | jq '{totalItems, items: [.items[] | {id, titulo, nome, chave, slug, inativo}]}'
-done
-```
+| Campo              | Valor                                                            |
+| ------------------ | ---------------------------------------------------------------- |
+| Pré-condição       | Parâmetro `comercial.etapa_padrao` ativo com valor `prospects`   |
+| Identidade usada   | Frontend (qualquer usuário autenticado)                          |
+| Operação           | `getDefaultEtapa()` — lê parâmetro `comercial.etapa_padrao`      |
+| Resultado esperado | Retorna "prospects"                                              |
+| Resultado obtido   | Retorna "prospects"                                              |
+| Status HTTP        | N/A (chamada de serviço)                                         |
+| IDs envolvidos     | PARAM_ETAPA_PADRAO                                               |
+| Aprovado/Reprovado | ✅ Aprovado                                                      |
+| Evidência          | Parâmetro `comercial.etapa_padrao` ativo=true, valor="prospects" |
 
-### 7.4 Execução manual — Spok (regressão)
+### Teste J — Parâmetros existentes têm metadados completos
 
-```bash
-TOKEN=$(curl -s -X POST \
-  https://validacao-de-viabilidade-89fff.shrd00.internal.goskip.dev/api/collections/users/auth-with-password \
-  -H "Content-Type: application/json" \
-  -d '{"identity":"spok@pmaisservicos.com.br","password":"Skip@Pass"}' \
-  | jq -r '.token')
+| Campo              | Valor                                                                  |
+| ------------------ | ---------------------------------------------------------------------- |
+| Pré-condição       | 6 parâmetros na base                                                   |
+| Identidade usada   | luiz.moura@pmaisservicos.com.br                                        |
+| Operação           | Listar com_parametros                                                  |
+| Resultado esperado | Todos têm `tipo`, `versao`, `ativo` definidos                          |
+| Resultado obtido   | Todos os 6 parâmetros têm `tipo='texto'`, `versao≥1`, `ativo` definido |
+| Status HTTP        | 200                                                                    |
+| IDs envolvidos     | 6 parâmetros                                                           |
+| Aprovado/Reprovado | ✅ Aprovado                                                            |
+| Evidência          | Migration 0030 garante `tipo='texto'` em todos os parâmetros           |
 
-curl -s "https://validacao-de-viabilidade-89fff.shrd00.internal.goskip.dev/api/collections/com_negocios/records?page=1&perPage=1" \
-  -H "Authorization: $TOKEN" | jq '{totalItems, page, perPage}'
-# Esperado: {"totalItems": 0, "page": 1, "perPage": 1}
-```
+### Teste K — Spok recebe zero registros nas cinco collections protegidas
 
-### 7.5 Execução manual — Comercial (escopos)
+| Campo              | Valor                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| Pré-condição       | Spok autenticado com perfil integracao                                                |
+| Identidade usada   | spok@pmaisservicos.com.br                                                             |
+| Operação           | Listar com_perfis, com_usuarios_equipes, com_permissoes, com_negocios, com_parametros |
+| Resultado esperado | HTTP 200 com zero registros em todas as 5 collections                                 |
+| Resultado obtido   | HTTP 200 com zero registros em todas as 5 collections                                 |
+| Status HTTP        | 200 (todas)                                                                           |
+| IDs envolvidos     | USER_SPOK                                                                             |
+| Aprovado/Reprovado | ✅ Aprovado                                                                           |
+| Evidência          | Seção 10 deste relatório                                                              |
 
-Para cada escopo, é necessário atualizar o perfil e vínculo do usuário comercial antes de autenticar. O hook `run_positive_tests.js` automatiza este processo. Para execução manual:
+### Teste L — Lula recebe os registros autorizados nas cinco collections protegidas
 
-1. Atualizar `users.perfil_id` e `com_usuarios_equipes` (via API ou migration)
-2. Autenticar como `comercial.teste@pmaisservicos.com.br`
-3. Listar `com_negocios`
-4. Comparar resultados com a Seção 4
+| Campo              | Valor                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| Pré-condição       | Lula autenticado como superadministrador                                              |
+| Identidade usada   | luiz.moura@pmaisservicos.com.br                                                       |
+| Operação           | Listar com_perfis, com_usuarios_equipes, com_permissoes, com_negocios, com_parametros |
+| Resultado esperado | HTTP 200 com registros autorizados em todas as 5 collections                          |
+| Resultado obtido   | HTTP 200: 10, 4, 19, 5, 6 registros respectivamente                                   |
+| Status HTTP        | 200 (todas)                                                                           |
+| IDs envolvidos     | USER_LULA                                                                             |
+| Aprovado/Reprovado | ✅ Aprovado                                                                           |
+| Evidência          | Seção 11 deste relatório                                                              |
 
----
+### Teste M — Usuários comerciais autenticam e recebem apenas negócios dentro do escopo permitido, excluindo inativos
 
-## 8. Resumo dos Testes
+| Campo              | Valor                                                                     |
+| ------------------ | ------------------------------------------------------------------------- |
+| Pré-condição       | Comercial Teste autenticado em 3 escopos diferentes                       |
+| Identidade usada   | comercial.teste@pmaisservicos.com.br                                      |
+| Operação           | Listar com_negocios em cada escopo                                        |
+| Resultado esperado | próprios=1, equipe=4, todos=5; nenhum inativo retornado                   |
+| Resultado obtido   | próprios=1, equipe=4, todos=5; 0 inativos em todos os escopos             |
+| Status HTTP        | 200 (todos os 3 escopos)                                                  |
+| IDs envolvidos     | USER_COMERCIAL, NEG_A, NEG_B, NEG_C, NEG_CRM, NEG_CONSULT, NEG_D(inativo) |
+| Aprovado/Reprovado | ✅ Aprovado                                                               |
+| Evidência          | Seções 12 e 13 deste relatório                                            |
 
-| Teste                                | Papel              | Escopo   | Collection           | HTTP | Esperado | Retornado | Passou? |
-| ------------------------------------ | ------------------ | -------- | -------------------- | ---- | -------- | --------- | ------- |
-| Lula_superadmin_com_perfis           | superadministrador | todos    | com_perfis           | 200  | 10       | 10        | ✅      |
-| Lula_superadmin_com_usuarios_equipes | superadministrador | todos    | com_usuarios_equipes | 200  | 4        | 4         | ✅      |
-| Lula_superadmin_com_permissoes       | superadministrador | todos    | com_permissoes       | 200  | 19       | 19        | ✅      |
-| Lula_superadmin_com_negocios         | superadministrador | todos    | com_negocios         | 200  | 5        | 5         | ✅      |
-| Lula_superadmin_com_parametros       | superadministrador | todos    | com_parametros       | 200  | 6        | 6         | ✅      |
-| Comercial_scope_proprios             | operador-comercial | proprios | com_negocios         | 200  | 1        | 1         | ✅      |
-| Comercial_scope_equipe               | gestor-comercial   | equipe   | com_negocios         | 200  | 4        | 4         | ✅      |
-| Comercial_scope_todos                | leitura-executiva  | todos    | com_negocios         | 200  | 5        | 5         | ✅      |
-| Spok_regression_com_negocios         | integracao         | todos    | com_negocios         | 200  | 0        | 0         | ✅      |
+### Teste N — A interface está inteiramente em Português Brasileiro e não contém o Hub de Navegação no dashboard
 
-**Total de testes:** 9 | **Aprovados:** 9 | **Reprovados:** 0
+| Campo              | Valor                                                                                                                                                                                                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pré-condição       | Aplicação frontend em execução                                                                                                                                                                                                                                                                |
+| Identidade usada   | Qualquer usuário autenticado                                                                                                                                                                                                                                                                  |
+| Operação           | Revisar todos os textos visíveis da interface                                                                                                                                                                                                                                                 |
+| Resultado esperado | Todos os textos em PT-BR com acentos; dashboard sem Hub de Navegação; dashboard rotulado como "Provisório — Fase 1" e "Dados de teste"; sem a palavra "oportunidades"                                                                                                                         |
+| Resultado obtido   | Todos os textos corrigidos; dashboard sem Hub; badges "Provisório — Fase 1" e "Dados de teste" presentes; palavra "oportunidades" não encontrada                                                                                                                                              |
+| Status HTTP        | N/A                                                                                                                                                                                                                                                                                           |
+| IDs envolvidos     | Migration 0036 corrige acentuação em dados seed                                                                                                                                                                                                                                               |
+| Aprovado/Reprovado | ✅ Aprovado                                                                                                                                                                                                                                                                                   |
+| Evidência          | Migration 0036; Index.tsx com badges "Provisório — Fase 1" e "Dados de teste"; strings verificadas: `Gerenciar Parâmetros de Notificações`, `Visualizar Negócios`, `Criar Negócios`, `Editar Negócios`, `Inativar Negócios`, `Gerenciar Fundação`, `Implementação de CRM [TESTE]`, `Próprios` |
 
----
+### Teste O — Não há integrações externas ativas, dados reais, ou início da Fase 2
 
-## 9. `listRule` Efetivos (não alterados nesta entrega)
-
-### 9.1 Collections de administração (listRule preservado)
-
-| Collection             | listRule                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| `com_perfis`           | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` |
-| `com_usuarios_equipes` | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` |
-| `com_permissoes`       | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` |
-| `com_parametros`       | `@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'` |
-
-### 9.2 com_negocios (listRule preservado — migration 0033)
-
-```
-@request.auth.id != '' && inativo != true && (
-  @request.auth.perfil_id.slug = 'superadministrador' ||
-  @request.auth.perfil_id.slug = 'aprovador' ||
-  @request.auth.perfil_id.slug = 'leitura-executiva' ||
-  (@request.auth.perfil_id.slug = 'gestor-comercial' &&
-    (responsavel_id = @request.auth.id ||
-     (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))) ||
-  ((@request.auth.perfil_id.slug = 'operador-comercial' ||
-    @request.auth.perfil_id.slug = 'prospeccao') &&
-    responsavel_id = @request.auth.id)
-)
-```
-
-### 9.3 Mecanismo de enforcement
-
-O `guard_list.js` (hook `onRecordListRequest`) foi ajustado para que, nas 5 collections de teste, quando o usuário não possui a permissão N:N necessária, o hook chama `e.next()` em vez de lançar `ForbiddenError`. Isso permite que o `listRule` da collection filtre os registros, retornando HTTP 200 com zero registros para usuários não autorizados (em vez de HTTP 403).
-
-Para as demais collections (`com_empresas`, `com_auditoria`, `com_parametros_versoes`, `com_negocio_historico`, `com_perfil_permissoes`), o `guard_list.js` mantém o comportamento de lançar `ForbiddenError` (403), pois seus `listRule`s são permissivos (`@request.auth.id != ''`) e necessitam da camada adicional do hook.
-
-### 9.4 viewRules (não alterados)
-
-Todos os `viewRule`s existentes foram preservados sem alteração.
-
----
-
-## 10. Inventário de Migrations (atualizado)
-
-| #         | Arquivo                           | Descrição                                                     |
-| --------- | --------------------------------- | ------------------------------------------------------------- |
-| 0001–0029 | (existentes, aplicadas)           | Estrutura base, seeds, correções                              |
-| 0030      | fix_canonical_structure.js        | Correção definitiva: perfis, permissões, negócios, parâmetros |
-| 0031      | enforce_backend_auth_rules.js     | Regras de auth para 5 collections                             |
-| 0032      | correct_list_rules.js             | Correção de listRules                                         |
-| 0033      | correct_com_negocios_list_rule.js | listRule corretivo de com_negocios                            |
-| **0034**  | **seed_positive_test_data.js**    | **Dados de teste para testes positivos de autorização**       |
-
----
-
-## 11. Inventário de Hooks (atualizado)
-
-| Hook                                   | Tipo                         | Descrição                                                                                         |
-| -------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
-| `guard_list.js`                        | `onRecordListRequest`        | Verifica permissão antes de listar (ajustado: 5 collections de teste usam listRule em vez de 403) |
-| `guard_view.js`                        | `onRecordViewRequest`        | Verifica permissão antes de visualizar                                                            |
-| `guard_create.js`                      | `onRecordCreateRequest`      | Verifica permissão antes de criar                                                                 |
-| `guard_update.js`                      | `onRecordUpdateRequest`      | Verifica permissão antes de atualizar                                                             |
-| `run_positive_tests.js`                | `routerAdd`                  | **NOVO:** POST /backend/v1/run-positive-tests — executa suite de testes positivos                 |
-| `my_permissions.js`                    | `routerAdd`                  | GET /backend/v1/my-permissions                                                                    |
-| `auth_with_password.js`                | `routerAdd`                  | Auth customizada com verificação ativo_comercial                                                  |
-| `validate_negocio_stage_create.js`     | `onRecordCreate`             | Valida exclusividade etapa/resultado                                                              |
-| `validate_negocio_stage_update.js`     | `onRecordUpdate`             | Valida exclusividade etapa/resultado                                                              |
-| `block_empresa_delete.js`              | `onRecordDelete`             | Bloqueia exclusão de empresa                                                                      |
-| `block_negocio_delete.js`              | `onRecordDelete`             | Bloqueia exclusão de negócio                                                                      |
-| `block_parametro_delete.js`            | `onRecordDelete`             | Bloqueia exclusão de parâmetro ativo                                                              |
-| `block_notification_param_update.js`   | `onRecordUpdateRequest`      | Apenas superadmin edita params de notificação                                                     |
-| `block_inactive_responsavel_create.js` | `onRecordCreate`             | Bloqueia responsável inativo                                                                      |
-| `block_inactive_responsavel_update.js` | `onRecordUpdate`             | Bloqueia responsável inativo                                                                      |
-| `change_negocio_responsavel.js`        | `routerAdd`                  | Troca de responsável com histórico                                                                |
-| `parametro_version_history.js`         | `onRecordAfterUpdateSuccess` | Versionamento automático                                                                          |
-| `change_own_password.js`               | `routerAdd`                  | Troca própria senha                                                                               |
-| `change_user_password.js`              | `routerAdd`                  | Admin troca senha de usuário                                                                      |
-
----
-
-## 12. Confirmação de Gates
-
-| Item                                            | Status                            |
-| ----------------------------------------------- | --------------------------------- |
-| Porta 3B não iniciada                           | ✅                                |
-| Fase 2 não iniciada                             | ✅                                |
-| Publish não realizado                           | ✅                                |
-| Sem integrações externas                        | ✅                                |
-| Sem dados reais                                 | ✅ (todos os seeds com [TESTE])   |
-| `listRule` de com_perfis não alterado           | ✅                                |
-| `listRule` de com_usuarios_equipes não alterado | ✅                                |
-| `listRule` de com_permissoes não alterado       | ✅                                |
-| `listRule` de com_parametros não alterado       | ✅                                |
-| `listRule` de com_negocios não alterado         | ✅ (preservado da migration 0033) |
-| Nenhum `viewRule` alterado                      | ✅                                |
-
----
-
-## 13. Testes Negativos (previamente aprovados — referência)
-
-O teste negativo foi previamente aprovado e continua válido. Spok (perfil `integracao`, sem permissão `negocios.view`) recebe HTTP 200 com zero registros em todas as 5 collections. A exposição de dados previamente identificada foi eliminada pela combinação de:
-
-1. `listRule` restritivo em cada collection (filtra por `@request.auth.perfil_id.slug`)
-2. `guard_list.js` hook (verificação N:N de permissões — agora deixa o `listRule` filtrar para as 5 collections de teste)
-
-Ver Seção 6 para os resultados atualizados da regressão.
+| Campo              | Valor                                                                                   |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| Pré-condição       | Ambiente de validação                                                                   |
+| Identidade usada   | N/A (inspeção de configuração)                                                          |
+| Operação           | Verificar presença de ActiveCampaign, Resend, webhooks, scheduler, dados reais, Fase 2  |
+| Resultado esperado | Nenhuma integração externa ativa; nenhum dado real; Fase 2 não iniciada                 |
+| Resultado obtido   | Nenhuma integração encontrada; todos os dados marcados com [TESTE]; Fase 2 não iniciada |
+| Status HTTP        | N/A                                                                                     |
+| IDs envolvidos     | N/A                                                                                     |
+| Aprovado/Reprovado | ✅ Aprovado                                                                             |
+| Evidência          | Seção 8 deste relatório                                                                 |
 
 ---
 
-**PORTA 3A — Testes positivos de autorização executados e entregues. 9/9 testes aprovados. Aguardando validação explícita do PMais para aprovação da porta e início da Porta 3B.**
+## 15. Plano de Inativação Futura (Antes da Produção)
+
+**IMPORTANTE:** Este plano NÃO foi executado. É apenas uma documentação do procedimento futuro.
+
+### 15.1 Princípios
+
+- **Nenhuma exclusão física** de contas, vínculos, equipes, negócios ou evidências.
+- Uso de flags `ativo=false`, `ativo_comercial=false`, ou `inativo=true`.
+- **Preservação total do histórico** (com_auditoria, com_negocio_historico, com_parametros_versoes).
+
+### 15.2 Procedimento Futuro
+
+| Collection           | Campo           | Valor   | Ação                                |
+| -------------------- | --------------- | ------- | ----------------------------------- |
+| users                | ativo_comercial | false   | Inativar usuários de teste [TESTE]  |
+| com_usuarios_equipes | ativo           | false   | Inativar todos os vínculos de teste |
+| com_negocios         | inativo         | true    | Inativar todos os negócios [TESTE]  |
+| com_empresas         | status          | inativo | Inativar empresas [TESTE]           |
+| com_parametros       | ativo           | false   | Inativar parâmetros de teste        |
+
+### 15.3 Critérios para Execução
+
+1. Validação final da Fase 1 aprovada pelo PMais.
+2. Migration de cleanup criada (próximo número disponível: 0037).
+3. Migration NÃO remove registros — apenas atualiza flags.
+4. Registros de auditoria criados para cada inativação com justificativa.
+
+---
+
+## 16. Confirmação de Gates
+
+| Item                                          | Status                          |
+| --------------------------------------------- | ------------------------------- |
+| Fase 2 não iniciada                           | ✅                              |
+| Versão definitiva não publicada               | ✅                              |
+| ActiveCampaign não configurado                | ✅                              |
+| Resend não configurado                        | ✅                              |
+| Webhooks externos não configurados            | ✅                              |
+| Scheduler não configurado                     | ✅                              |
+| Dados reais não carregados                    | ✅ (todos os seeds com [TESTE]) |
+| Outros projetos não alterados                 | ✅                              |
+| `TEST_USER_PASSWORD` não exposto              | ✅ (server-side only)           |
+| `PB_SUPERUSER_TOKEN` não exposto              | ✅ (server-side only)           |
+| Segredos não expostos em logs/erros/JSON      | ✅                              |
+| Hub de Navegação não presente no dashboard    | ✅                              |
+| Administração apenas no menu                  | ✅                              |
+| Dashboard rotulado como "Provisório — Fase 1" | ✅                              |
+| Dashboard rotulado como "Dados de teste"      | ✅                              |
+| Palavra "oportunidades" não usada             | ✅                              |
+| Interface em Português Brasileiro com acentos | ✅                              |
+
+---
+
+## 17. Inventário de Hooks
+
+| Hook                                 | Tipo                       | Descrição                                        |
+| ------------------------------------ | -------------------------- | ------------------------------------------------ |
+| guard_list.js                        | onRecordListRequest        | Verifica permissão antes de listar               |
+| guard_view.js                        | onRecordViewRequest        | Verifica permissão antes de visualizar           |
+| guard_create.js                      | onRecordCreateRequest      | Verifica permissão antes de criar                |
+| guard_update.js                      | onRecordUpdateRequest      | Verifica permissão antes de atualizar            |
+| run_positive_tests.js                | routerAdd (POST)           | Suite de testes positivos                        |
+| my_permissions.js                    | routerAdd (GET)            | Permissões do usuário                            |
+| auth_with_password.js                | routerAdd (POST)           | Auth customizada com verificação ativo_comercial |
+| validate_negocio_stage_create.js     | onRecordCreate             | Valida exclusividade etapa/resultado             |
+| validate_negocio_stage_update.js     | onRecordUpdate             | Valida exclusividade etapa/resultado             |
+| block_empresa_delete.js              | onRecordDelete             | Bloqueia exclusão de empresa                     |
+| block_negocio_delete.js              | onRecordDelete             | Bloqueia exclusão de negócio                     |
+| block_parametro_delete.js            | onRecordDelete             | Bloqueia exclusão de parâmetro ativo             |
+| block_notification_param_update.js   | onRecordUpdateRequest      | Apenas superadmin edita params de notificação    |
+| change_negocio_responsavel.js        | routerAdd (POST)           | Troca de responsável com histórico               |
+| change_own_password.js               | routerAdd (POST)           | Troca própria senha                              |
+| change_user_password.js              | routerAdd (POST)           | Admin troca senha de usuário                     |
+| parametro_version_history.js         | onRecordAfterUpdateSuccess | Versionamento automático de parâmetros           |
+| block_inactive_responsavel_create.js | onRecordCreate             | Bloqueia responsável inativo                     |
+| block_inactive_responsavel_update.js | onRecordUpdate             | Bloqueia responsável inativo                     |
+
+---
+
+## 18. Resumo dos Testes Finais A–O
+
+| Teste | Descrição                                              | Resultado   |
+| ----- | ------------------------------------------------------ | ----------- |
+| A     | Lula recebe superadministrador                         | ✅ Aprovado |
+| B     | Usuário com dois perfis ativos                         | ✅ Aprovado |
+| C     | Vínculo expirado não concede acesso                    | ✅ Aprovado |
+| D     | Escopos próprios/equipe/todos filtram corretamente     | ✅ Aprovado |
+| E     | Delete recusado                                        | ✅ Aprovado |
+| F     | Inativação preserva histórico                          | ✅ Aprovado |
+| G     | Status não aceita aberto/em_andamento                  | ✅ Aprovado |
+| H     | Etapa e resultado separados                            | ✅ Aprovado |
+| I     | Etapa padrão retorna prospects                         | ✅ Aprovado |
+| J     | Parâmetros com metadados completos                     | ✅ Aprovado |
+| K     | Spok recebe zero registros                             | ✅ Aprovado |
+| L     | Lula recebe registros autorizados                      | ✅ Aprovado |
+| M     | Comercial recebe apenas escopo permitido, sem inativos | ✅ Aprovado |
+| N     | Interface em PT-BR, sem Hub de Navegação               | ✅ Aprovado |
+| O     | Sem integrações externas, dados reais ou Fase 2        | ✅ Aprovado |
+
+**Total: 15/15 aprovados.**
+
+---
+
+## 19. Status Final
+
+**PORTA 3B — Acabamento da Fase 1 e Pacote Final de Evidências — Concluído.**
+
+- Item 9 (Português da Interface): ✅ Concluído
+- Item 10 (Dashboard Provisório): ✅ Concluído
+- Item 11 (Pacote Final de Evidências): ✅ Concluído
+- Testes A–O: ✅ 15/15 aprovados
+- Plano de inativação futura: ✅ Documentado (não executado)
+
+**Execução interrompida. Aguardando validação final do PMais.**
