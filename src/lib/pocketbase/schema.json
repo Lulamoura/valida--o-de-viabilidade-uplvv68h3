@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T20:25:52.120Z",
+  "generatedAt": "2026-08-10T20:32:08.134Z",
   "collections": [
     {
       "name": "users",
@@ -1368,9 +1368,9 @@
       "name": "com_snapshots_negocio",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && (@request.auth.perfil_id.slug = 'superadministrador' || @request.auth.perfil_id.slug = 'integracao')",
-        "view": "@request.auth.id != '' && (@request.auth.perfil_id.slug = 'superadministrador' || @request.auth.perfil_id.slug = 'integracao')",
-        "create": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
         "update": null,
         "delete": null
       },
