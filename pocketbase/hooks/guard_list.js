@@ -8,7 +8,7 @@ onRecordListRequest((e) => {
     com_usuarios_equipes: ['vinculos.admin'],
     com_negocios: ['negocios.view'],
     com_empresas: ['empresas.view'],
-    com_parametros: ['parametros.gerenciar', 'dashboard.view'],
+    com_parametros: ['parametros.gerenciar'],
     com_auditoria: ['auditoria.consultar'],
     com_parametros_versoes: ['auditoria.consultar', 'parametros.gerenciar'],
     com_negocio_historico: ['negocios.view'],

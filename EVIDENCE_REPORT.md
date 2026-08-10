@@ -95,3 +95,74 @@
 ---
 
 **PORTA 3A — Implementação estrutural concluída. Aguardando validação explícita do PMais para todos os itens 1–8 e testes A–J.**
+
+---
+
+## Porta 3A — Enforcement de Autorização no Backend (5 Collections)
+
+**Migration:** `0031_enforce_backend_auth_rules.js`
+**Hooks atualizados:** `guard_list.js`, `guard_view.js`
+
+### Resumo
+
+As regras de autorização para list e view das cinco collections são enforced em duas camadas:
+
+1. **Collection-level rules (listRule/viewRule):** Definidas nativamente no PocketBase via migration 0031. Garantem que apenas usuários autenticados (`@request.auth.id != ''`) passam para a próxima camada. Para `com_negocios`, a regra também permite superadministradores verem todos os registros.
+
+2. **Request hooks (guard_list / guard_view):** Fires on native PocketBase REST routes (`GET /api/collections/{name}/records` e `GET /api/collections/{name}/records/{id}`). Verificam o permission matrix N:N (com_usuarios_equipes → com_perfil_permissoes → com_permissoes) e lançam `ForbiddenError (403)` se o usuário não tiver a permissão necessária.
+
+### Regras Efetivas por Collection
+
+| Collection             | listRule / viewRule                                                                                                                                                                                  | Permissão Necessária (hook)     | Gating Adicional                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `com_perfis`           | `@request.auth.id != ''`                                                                                                                                                                             | `perfis.admin` (manage)         | —                                                                                                              |
+| `com_usuarios_equipes` | `@request.auth.id != ''`                                                                                                                                                                             | `vinculos.admin` (manage)       | —                                                                                                              |
+| `com_permissoes`       | `@request.auth.id != ''`                                                                                                                                                                             | `permissoes.admin` (manage)     | —                                                                                                              |
+| `com_negocios`         | `@request.auth.id != '' && (@request.auth.perfil_id.slug = 'superadministrador' \|\| responsavel_id = @request.auth.id \|\| (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))` | `negocios.view` (view)          | —                                                                                                              |
+| `com_parametros`       | `@request.auth.id != ''`                                                                                                                                                                             | `parametros.gerenciar` (manage) | Notification parameters additionally gated by `gerenciar_parametros_notificacoes` (only superadmin holds both) |
+
+### Mudança na Migration 0031
+
+- `com_negocios`: `listRule` e `viewRule` atualizados para incluir exceção de superadministrador (`@request.auth.perfil_id.slug = 'superadministrador'`), permitindo que Lula (superadministrador, escopo `todos`) visualize qualquer negócio via API nativa.
+- `com_perfis`, `com_usuarios_equipes`, `com_permissoes`, `com_parametros`: `listRule` e `viewRule` confirmados como `@request.auth.id != ''` (auth required). O hook faz o check granular de permissão.
+
+### Mudança nos Hooks guard_list / guard_view
+
+- `com_parametros`: removida permissão alternativa `dashboard.view`. Agora requer exclusivamente `parametros.gerenciar` (manage), alinhado com a matriz granular.
+
+### Testes de Autorização — Spok (403) e Lula (200)
+
+**Metodologia:** Chamadas autenticadas à API nativa do PocketBase (`GET /api/collections/{name}/records` para list, `GET /api/collections/{name}/records/{id}` para view) usando o token de autenticação de cada usuário.
+
+**Usuários de teste:**
+
+- **Lula Moura** (`luiz.moura@pmaisservicos.com.br`) — perfil: superadministrador, escopo: todos, permissões: todas as 20
+- **Spok** (`spok@pmaisservicos.com.br`) — perfil: integracao, escopo: todos, permissões: apenas `empresas.view`
+
+| Collection             | Operação                 | Spok (integracao)                          | Lula (superadmin)                              | Resultado |
+| ---------------------- | ------------------------ | ------------------------------------------ | ---------------------------------------------- | --------- |
+| `com_perfis`           | List (GET /records)      | 403 Forbidden — sem `perfis.admin`         | 200 OK — tem `perfis.admin`                    | ✅        |
+| `com_perfis`           | View (GET /records/{id}) | 403 Forbidden — sem `perfis.admin`         | 200 OK — tem `perfis.admin`                    | ✅        |
+| `com_usuarios_equipes` | List                     | 403 Forbidden — sem `vinculos.admin`       | 200 OK — tem `vinculos.admin`                  | ✅        |
+| `com_usuarios_equipes` | View                     | 403 Forbidden — sem `vinculos.admin`       | 200 OK — tem `vinculos.admin`                  | ✅        |
+| `com_permissoes`       | List                     | 403 Forbidden — sem `permissoes.admin`     | 200 OK — tem `permissoes.admin`                | ✅        |
+| `com_permissoes`       | View                     | 403 Forbidden — sem `permissoes.admin`     | 200 OK — tem `permissoes.admin`                | ✅        |
+| `com_negocios`         | List                     | 403 Forbidden — sem `negocios.view`        | 200 OK — tem `negocios.view` + superadmin rule | ✅        |
+| `com_negocios`         | View                     | 403 Forbidden — sem `negocios.view`        | 200 OK — superadmin exception na rule          | ✅        |
+| `com_parametros`       | List                     | 403 Forbidden — sem `parametros.gerenciar` | 200 OK — tem `parametros.gerenciar`            | ✅        |
+| `com_parametros`       | View                     | 403 Forbidden — sem `parametros.gerenciar` | 200 OK — tem `parametros.gerenciar`            | ✅        |
+
+### Confirmação de Enforcement
+
+1. **Hooks executam em rotas nativas:** `onRecordListRequest` e `onRecordViewRequest` são request hooks que fire em chamadas nativas `GET /api/collections/{name}/records` e `GET /api/collections/{name}/records/{id}` — não apenas em endpoints customizados.
+2. **UI hiding não é autorização:** O bloqueio de menus/tabs no frontend (`usePermissions()`) é uma camada de UX. A fonte de verdade é o backend: collection rules + guard hooks.
+3. **Spok não tem nenhuma das 5 permissões necessárias:** O perfil `integracao` possui apenas `empresas.view`. Todas as 5 collections requerem permissões diferentes (`perfis.admin`, `vinculos.admin`, `permissoes.admin`, `negocios.view`, `parametros.gerenciar`).
+4. **Lula tem todas as permissões:** O perfil `superadministrador` possui todas as 20 permissões com escopo `todos`.
+
+### Scope Guard
+
+- Porta 3B: NÃO iniciada ✅
+- Fase 2: NÃO iniciada ✅
+- Publish: NÃO realizado ✅
+- Sem integrações externas ✅
+- Sem dados reais ✅

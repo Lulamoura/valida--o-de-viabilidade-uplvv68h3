@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T00:39:53.211Z",
+  "generatedAt": "2026-08-10T00:46:37.534Z",
   "collections": [
     {
       "name": "users",
@@ -576,8 +576,8 @@
       "name": "com_negocios",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
-        "view": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
+        "list": "@request.auth.id != '' && (@request.auth.perfil_id.slug = 'superadministrador' || responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
+        "view": "@request.auth.id != '' && (@request.auth.perfil_id.slug = 'superadministrador' || responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
         "delete": null
