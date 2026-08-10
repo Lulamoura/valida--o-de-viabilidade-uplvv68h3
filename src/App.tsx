@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import Index from './pages/Index'
 import Login from './pages/Login'
 import Foundation from './pages/Foundation'
+import Integracao from './pages/Integracao'
 
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
@@ -35,6 +36,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Foundation />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/integracao"
+                element={
+                  <ProtectedRoute>
+                    <Integracao />
                   </ProtectedRoute>
                 }
               />
