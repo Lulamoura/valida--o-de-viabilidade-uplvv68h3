@@ -84,22 +84,24 @@ migrate(
     try {
       var oldParam = app.findFirstRecordByData('com_parametros', 'chave', 'comercial.status_padrao')
 
-      var versaoRec = new Record(versoesCol)
-      versaoRec.set('parametro_id', oldParam.id)
-      versaoRec.set('chave', oldParam.getString('chave'))
-      versaoRec.set('valor', oldParam.getString('valor'))
-      versaoRec.set('descricao', oldParam.getString('descricao'))
-      versaoRec.set('tipo', oldParam.getString('tipo') || 'texto')
-      versaoRec.set('versao', oldParam.getInt('versao'))
-      versaoRec.set('justificativa', 'Substituído por comercial.etapa_padrao [TESTE]')
-      app.save(versaoRec)
+      if (oldParam.getBool('ativo')) {
+        var versaoRec = new Record(versoesCol)
+        versaoRec.set('parametro_id', oldParam.id)
+        versaoRec.set('chave', oldParam.getString('chave'))
+        versaoRec.set('valor', oldParam.getString('valor'))
+        versaoRec.set('descricao', oldParam.getString('descricao'))
+        versaoRec.set('tipo', oldParam.getString('tipo') || 'texto')
+        versaoRec.set('versao', oldParam.getInt('versao'))
+        versaoRec.set('justificativa', 'Substituído por comercial.etapa_padrao [TESTE]')
+        app.save(versaoRec)
 
-      app
-        .db()
-        .newQuery(
-          "UPDATE com_parametros SET ativo = 0, versao = versao + 1, justificativa = 'Substituído por comercial.etapa_padrao [TESTE]' WHERE chave = 'comercial.status_padrao'",
-        )
-        .execute()
+        app
+          .db()
+          .newQuery(
+            "UPDATE com_parametros SET ativo = 0, versao = versao + 1, justificativa = 'Substituído por comercial.etapa_padrao [TESTE]' WHERE chave = 'comercial.status_padrao'",
+          )
+          .execute()
+      }
     } catch (_) {}
 
     try {

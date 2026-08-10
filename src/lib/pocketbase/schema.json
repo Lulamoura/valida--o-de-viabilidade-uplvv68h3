@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T00:13:49.807Z",
+  "generatedAt": "2026-08-10T00:22:31.316Z",
   "collections": [
     {
       "name": "users",
@@ -339,11 +339,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE UNIQUE INDEX idx_com_usuarios_equipes_usuario_equipe ON com_usuarios_equipes (usuario_id, equipe_id)",
-        "CREATE INDEX idx_com_usuarios_equipes_equipe ON com_usuarios_equipes (equipe_id)"
+        "CREATE INDEX idx_com_usuarios_equipes_equipe ON com_usuarios_equipes (equipe_id)",
+        "CREATE INDEX `idx_com_usuarios_equipes_ativo` ON `com_usuarios_equipes` (ativo)",
+        "CREATE INDEX `idx_com_usuarios_equipes_usuario_ativo` ON `com_usuarios_equipes` (usuario_id, ativo)"
       ]
     },
     {
@@ -464,7 +472,7 @@
         "view": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
-        "delete": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))"
+        "delete": null
       },
       "fields": [
         {
@@ -560,7 +568,7 @@
         "view": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))",
-        "delete": "@request.auth.id != '' && (responsavel_id = @request.auth.id || (@request.auth.equipe_id != '' && equipe_id = @request.auth.equipe_id))"
+        "delete": null
       },
       "fields": [
         {
@@ -597,13 +605,6 @@
           "system": false
         },
         {
-          "name": "status",
-          "type": "select",
-          "required": true,
-          "system": false,
-          "selectValues": ["aberto", "em_andamento", "ganho", "perdido"]
-        },
-        {
           "name": "descricao",
           "type": "text",
           "required": false,
@@ -622,6 +623,33 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["aberto", "em_andamento", "ganho", "perdido"]
+        },
+        {
+          "name": "etapa",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["prospects", "producao_proposta", "negociacao"]
+        },
+        {
+          "name": "resultado",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["ganho", "perdido", "desqualificado"]
+        },
+        {
+          "name": "inativo",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -629,7 +657,10 @@
         "CREATE INDEX idx_com_negocios_equipe ON com_negocios (equipe_id)",
         "CREATE INDEX idx_com_negocios_responsavel ON com_negocios (responsavel_id)",
         "CREATE INDEX idx_com_negocios_empresa ON com_negocios (empresa_id)",
-        "CREATE INDEX idx_com_negocios_created ON com_negocios (created)"
+        "CREATE INDEX idx_com_negocios_created ON com_negocios (created)",
+        "CREATE INDEX `idx_com_negocios_etapa` ON `com_negocios` (etapa)",
+        "CREATE INDEX `idx_com_negocios_resultado` ON `com_negocios` (resultado)",
+        "CREATE INDEX `idx_com_negocios_inativo` ON `com_negocios` (inativo)"
       ]
     },
     {
