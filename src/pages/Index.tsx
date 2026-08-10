@@ -44,10 +44,11 @@ export default function Index() {
 
   const totalPipeline = negocios.reduce((acc, n) => acc + (Number(n.valor) || 0), 0)
   const activeNegocios = negocios.filter(
-    (n) => n.status === 'em_andamento' || n.status === 'aberto',
+    (n) =>
+      n.status === 'prospects' || n.status === 'producao_proposta' || n.status === 'negociacao',
   )
   const wonNegocios = negocios.filter((n) => n.status === 'ganho')
-  const orphanNegocios = negocios.filter((n) => n.status === 'aberto' && !n.responsavel_id)
+  const orphanNegocios = negocios.filter((n) => n.status === 'prospects' && !n.responsavel_id)
   const empresasAtivas = empresas.filter((e) => e.status === 'ativo').length
 
   const formatBRL = (val: number) =>
@@ -182,7 +183,7 @@ export default function Index() {
             ) : (
               <div className="text-3xl font-bold text-slate-900">{formatBRL(totalPipeline)}</div>
             )}
-            <p className="text-xs text-slate-500 mt-1">Soma de todas as oportunidades</p>
+            <p className="text-xs text-slate-500 mt-1">Soma de todos os negócios</p>
             <Button
               asChild
               variant="ghost"

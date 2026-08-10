@@ -107,6 +107,9 @@ export function ParametrosTab() {
                 <Badge variant={r.ativo ? 'default' : 'secondary'}>{r.ativo ? 'Sim' : 'Não'}</Badge>
               </TableCell>
               <TableCell className="text-right">
+                <Button variant="ghost" size="sm" onClick={() => openDetail(r)} title="Detalhes">
+                  <Eye className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -137,6 +140,7 @@ export function ParametrosTab() {
       </Table>
       <ParametroForm open={formOpen} onOpenChange={setFormOpen} editing={editing} />
       <ParametroVersionHistory parametroId={histId} open={histOpen} onOpenChange={setHistOpen} />
+      <ParametroDetail parametro={detailParam} open={detailOpen} onOpenChange={setDetailOpen} />
     </div>
   )
 }
