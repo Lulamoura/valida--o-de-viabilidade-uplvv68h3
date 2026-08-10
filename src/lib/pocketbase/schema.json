@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T00:46:37.534Z",
+  "generatedAt": "2026-08-10T00:53:46.141Z",
   "collections": [
     {
       "name": "users",
@@ -123,7 +123,7 @@
       "name": "com_perfis",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
@@ -178,7 +178,7 @@
       "name": "com_permissoes",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
@@ -291,7 +291,7 @@
       "name": "com_usuarios_equipes",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
@@ -370,7 +370,7 @@
       "name": "com_parametros",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
         "view": "@request.auth.id != ''",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",

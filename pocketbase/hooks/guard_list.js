@@ -27,6 +27,17 @@ onRecordListRequest((e) => {
   var authId = e.auth ? e.auth.id : ''
   if (!authId) throw new ForbiddenError('Autenticacao necessaria')
 
+  try {
+    var authPerfilId = e.auth.getString('perfil_id')
+    if (authPerfilId) {
+      var perfilRec = $app.findRecordById('com_perfis', authPerfilId)
+      if (perfilRec.getString('slug') === 'superadministrador') {
+        e.next()
+        return
+      }
+    }
+  } catch (_) {}
+
   var now = new Date().toISOString().split('T')[0]
   var permSet = {}
 
