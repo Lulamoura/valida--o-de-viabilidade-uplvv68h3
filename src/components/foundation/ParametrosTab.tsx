@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useRealtime } from '@/hooks/use-realtime'
-import { getParametros, updateParametro, createAuditRecord } from '@/services/foundation'
+import { getParametros, updateParametro } from '@/services/foundation'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -62,15 +62,6 @@ export function ParametrosTab() {
       autor_id: user?.id,
       data_hora: new Date().toISOString(),
       justificativa,
-    })
-    await createAuditRecord({
-      collection_name: 'com_parametros',
-      record_id: r.id,
-      acao: r.ativo ? 'inactivate' : 'update',
-      valor_anterior: r.ativo ? 'ativo' : 'inativo',
-      valor_novo: r.ativo ? 'inativo' : 'ativo',
-      justificativa,
-      origem_alteracao: 'manual',
     })
   }
 

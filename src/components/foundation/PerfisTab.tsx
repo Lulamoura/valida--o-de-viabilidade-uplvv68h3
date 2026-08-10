@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
-import { getPerfis, createPerfil, updatePerfil, createAuditRecord } from '@/services/foundation'
+import { getPerfis, createPerfil, updatePerfil } from '@/services/foundation'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,18 +68,8 @@ export function PerfisTab() {
 
   const toggleAtivo = async (r: RecordModel) => {
     const action = r.ativo ? 'inativar' : 'ativar'
-    const justificativa = prompt(`Justificativa para ${action} este perfil:`)
-    if (!justificativa) return
+    if (!confirm(`Confirma ${action} este perfil?`)) return
     await updatePerfil(r.id, { ativo: !r.ativo })
-    await createAuditRecord({
-      collection_name: 'com_perfis',
-      record_id: r.id,
-      acao: r.ativo ? 'inactivate' : 'update',
-      valor_anterior: r.ativo ? 'ativo' : 'inativo',
-      valor_novo: r.ativo ? 'inativo' : 'ativo',
-      justificativa,
-      origem_alteracao: 'manual',
-    })
   }
 
   return (

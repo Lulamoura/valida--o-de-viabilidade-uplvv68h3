@@ -52,17 +52,3 @@ export const getParametroVersoes = (parametroId: string): Promise<RecordModel[]>
     sort: '-versao',
     expand: 'autor_id',
   })
-
-export const createAuditRecord = (data: {
-  collection_name: string
-  record_id: string
-  acao: string
-  valor_anterior: string
-  valor_novo: string
-  justificativa: string
-  origem_alteracao: string
-}) =>
-  pb.collection('com_auditoria').create({
-    ...data,
-    usuario_id: pb.authStore.record?.id,
-  })

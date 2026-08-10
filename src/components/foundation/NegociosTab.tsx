@@ -10,7 +10,7 @@ import {
   getNegocioHistorico,
   getDefaultEtapa,
 } from '@/services/commercial'
-import { getEquipes, createAuditRecord } from '@/services/foundation'
+import { getEquipes } from '@/services/foundation'
 import { getActiveUsers } from '@/services/users'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -159,33 +159,13 @@ export function NegociosTab() {
   }
 
   const inactivate = async (r: RecordModel) => {
-    const j = prompt('Justificativa para inativação do negócio:')
-    if (!j) return
+    if (!confirm('Confirma a inativação do negócio?')) return
     await updateNegocio(r.id, { inativo: true })
-    await createAuditRecord({
-      collection_name: 'com_negocios',
-      record_id: r.id,
-      acao: 'inactivate',
-      valor_anterior: 'ativo',
-      valor_novo: 'inativo',
-      justificativa: j,
-      origem_alteracao: 'manual',
-    })
   }
 
   const activate = async (r: RecordModel) => {
-    const j = prompt('Justificativa para ativação do negócio:')
-    if (!j) return
+    if (!confirm('Confirma a ativação do negócio?')) return
     await updateNegocio(r.id, { inativo: false })
-    await createAuditRecord({
-      collection_name: 'com_negocios',
-      record_id: r.id,
-      acao: 'update',
-      valor_anterior: 'inativo',
-      valor_novo: 'ativo',
-      justificativa: j,
-      origem_alteracao: 'manual',
-    })
   }
 
   const showHistory = async (negocioId: string) => {

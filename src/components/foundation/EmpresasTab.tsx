@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
 import { getEmpresas, createEmpresa, updateEmpresa } from '@/services/commercial'
-import { getEquipes, createAuditRecord } from '@/services/foundation'
+import { getEquipes } from '@/services/foundation'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -111,18 +111,8 @@ export function EmpresasTab() {
   }
 
   const inactivate = async (r: RecordModel) => {
-    const justificativa = prompt('Justificativa para inativação da empresa:')
-    if (!justificativa) return
+    if (!confirm('Confirma a inativação da empresa?')) return
     await updateEmpresa(r.id, { status: 'inativo' })
-    await createAuditRecord({
-      collection_name: 'com_empresas',
-      record_id: r.id,
-      acao: 'inactivate',
-      valor_anterior: r.status,
-      valor_novo: 'inativo',
-      justificativa,
-      origem_alteracao: 'manual',
-    })
   }
 
   return (

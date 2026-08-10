@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
-import { createParametro, updateParametro, createAuditRecord } from '@/services/foundation'
+import { createParametro, updateParametro } from '@/services/foundation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -71,15 +71,6 @@ export function ParametroForm({ open, onOpenChange, editing }: Props) {
       }
       if (editing) {
         await updateParametro(editing.id, data)
-        await createAuditRecord({
-          collection_name: 'com_parametros',
-          record_id: editing.id,
-          acao: 'update',
-          valor_anterior: editing.valor,
-          valor_novo: form.valor,
-          justificativa: form.justificativa,
-          origem_alteracao: 'manual',
-        })
       } else {
         await createParametro({ ...data, versao: 1 })
       }
