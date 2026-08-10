@@ -33,8 +33,41 @@ onRecordUpdateRequest((e) => {
   var authId = e.auth ? e.auth.id : ''
   if (!authId) throw new ForbiddenError('Autenticacao necessaria')
 
+  try {
+    var authPerfilId = e.auth.getString('perfil_id')
+    if (authPerfilId) {
+      var perfilRec = $app.findRecordById('com_perfis', authPerfilId)
+      if (perfilRec.getString('slug') === 'superadministrador') {
+        e.next()
+        return
+      }
+    }
+  } catch (_) {}
+
   var now = new Date().toISOString().split('T')[0]
   var permSet = {}
+
+  try {
+    var directPerfilId = e.auth.getString('perfil_id')
+    if (directPerfilId) {
+      var directLinks = $app.findRecordsByFilter(
+        'com_perfil_permissoes',
+        "perfil_id = '" + directPerfilId + "'",
+        '',
+        500,
+        0,
+      )
+      for (var dl = 0; dl < directLinks.length; dl++) {
+        try {
+          var dPerm = $app.findRecordById(
+            'com_permissoes',
+            directLinks[dl].getString('permissao_id'),
+          )
+          permSet[dPerm.getString('slug')] = true
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
 
   try {
     var bindings = $app.findRecordsByFilter(

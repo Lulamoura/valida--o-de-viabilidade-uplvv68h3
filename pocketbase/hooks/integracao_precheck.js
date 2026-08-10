@@ -120,6 +120,31 @@ routerAdd(
       spokInfo = { id: s.id, name: s.getString('name'), perfil: sp }
     } catch (_) {}
 
+    var integracaoUsers = []
+    try {
+      var iu = $app.findRecordsByFilter(
+        'users',
+        "perfil_id = '" + integracaoProfile.id + "'",
+        '',
+        500,
+        0,
+      )
+      for (var iu2 = 0; iu2 < iu.length; iu2++) {
+        integracaoUsers.push({
+          id: iu[iu2].id,
+          name: iu[iu2].getString('name'),
+          email: iu[iu2].getString('email'),
+        })
+      }
+    } catch (_) {}
+
+    var duplicateAccounts = []
+    for (var da = 0; da < integracaoUsers.length; da++) {
+      if (!priorAccount || integracaoUsers[da].id !== priorAccount.id) {
+        duplicateAccounts.push(integracaoUsers[da])
+      }
+    }
+
     return e.json(200, {
       integracaoProfile: { id: integracaoProfile.id, ativo: integracaoProfile.getBool('ativo') },
       expectedPermissionMatrix: expectedSlugs,
@@ -127,6 +152,8 @@ routerAdd(
       exceedingPermissionsRemoved: removedSlugs,
       missingPermissions: missingSlugs,
       priorAccount: priorAccount,
+      integracaoUsers: integracaoUsers,
+      duplicateAccounts: duplicateAccounts,
       spokUser: spokInfo,
       secretName: 'COMERCIAL_INTEGRACAO_PASSWORD',
       secretRegistered:

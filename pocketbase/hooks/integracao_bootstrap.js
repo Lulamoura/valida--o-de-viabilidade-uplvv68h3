@@ -82,6 +82,22 @@ routerAdd(
       }
     } catch (_) {}
 
+    var otherIntegracaoUsers = []
+    try {
+      var oi = $app.findRecordsByFilter(
+        'users',
+        "perfil_id = '" + integracaoProfile.id + "'",
+        '',
+        500,
+        0,
+      )
+      for (var oi2 = 0; oi2 < oi.length; oi2++) {
+        if (oi[oi2].id !== account.id) {
+          otherIntegracaoUsers.push({ id: oi[oi2].id, name: oi[oi2].getString('name') })
+        }
+      }
+    } catch (_) {}
+
     return e.json(200, {
       status: 'OK',
       action: created ? 'created' : 'aligned',
@@ -91,6 +107,7 @@ routerAdd(
         perfil: 'integracao',
         ativo_comercial: true,
       },
+      otherIntegracaoUsers: otherIntegracaoUsers,
       message: 'Technical account aligned. Remove this endpoint after validation.',
     })
   },
