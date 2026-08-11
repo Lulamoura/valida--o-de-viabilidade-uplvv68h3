@@ -19,10 +19,9 @@ interface DiagTransportEvidence {
 const SESSION_KEY = 'ac_diag_transport_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-transport'
 const DIAGNOSTIC_VERSION = 'R13-DIAG-TRANSPORTE-20260812-v1'
-const FRONTEND_BUNDLE = 'R13-DIAG-UI-20260812-v1'
-const EXECUTION_ENABLED = false
+const FRONTEND_BUNDLE = 'R13-DIAG-TRANSPORTE-FRONTEND-GATESYNC-20260812-v1'
+const EXECUTION_ENABLED = true
 const SERVER_SIDE_LOCK = 'armed'
-
 const NOMINAL_VARIANTS = [
   '1_valid_signature_current_transport',
   '2_invalid_signature_current_transport',
@@ -231,13 +230,6 @@ export function DiagTransportEvidenceBlock() {
             Executar diagnóstico de transporte
           </Button>
 
-          {!EXECUTION_ENABLED && (
-            <Badge variant="destructive" className="text-xs">
-              <ShieldOff className="h-3 w-3 mr-1" />
-              Execução desativada
-            </Badge>
-          )}
-
           {executedRef.current && (
             <Badge variant="secondary" className="text-xs">
               <Lock className="h-3 w-3 mr-1" />
@@ -311,8 +303,9 @@ export function DiagTransportEvidenceBlock() {
         {!evidence && !executing && (
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">
-              Nenhuma evidência de diagnóstico de transporte capturada. A execução está desativada
-              nesta versão — será habilitada em uma alteração futura autorizada.
+              Nenhuma evidência de diagnóstico de transporte capturada. O botão "Executar
+              diagnóstico de transporte" está habilitado — clique para iniciar a execução única e
+              exclusiva.
             </div>
             <div className="text-xs text-muted-foreground font-mono">
               Bundle: {FRONTEND_BUNDLE} | Route: POST {ROUTE_PATH}
