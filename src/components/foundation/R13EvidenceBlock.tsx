@@ -28,8 +28,8 @@ interface R13Evidence {
 const SESSION_KEY = 'ac_r13_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/run-round-2d2a-r13'
 const BACKEND_VERSION = 'R13-GATE-20260812-v1'
-const FRONTEND_BUNDLE = 'R13-UI-20260812-v2'
-const EXECUTION_ENABLED = false
+const FRONTEND_BUNDLE = 'R13-UI-20260812-v3'
+const EXECUTION_ENABLED = true
 const SERVER_SIDE_LOCK = 'armed'
 
 function loadFromSession(): R13Evidence | null {
