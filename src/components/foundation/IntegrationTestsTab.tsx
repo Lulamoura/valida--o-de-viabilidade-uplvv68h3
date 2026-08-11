@@ -14,6 +14,7 @@ import {
 } from '@/services/integration-tests'
 import { RoundEvidence } from '@/components/foundation/RoundEvidence'
 import { RoundEvidenceBlock } from '@/components/foundation/RoundEvidenceBlock'
+import { R9EvidenceBlock } from '@/components/foundation/R9EvidenceBlock'
 
 export function IntegrationTestsTab() {
   const [loading, setLoading] = useState<string | null>(null)
@@ -200,6 +201,8 @@ export function IntegrationTestsTab() {
         onStart={() => setLoading('r8')}
         onEnd={() => setLoading(null)}
       />
+
+      <R9EvidenceBlock />
     </div>
   )
 }
