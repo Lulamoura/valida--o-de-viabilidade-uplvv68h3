@@ -30,7 +30,7 @@ routerAdd(
 
     var ts = new Date().toISOString().replace(/[:.]/g, '-')
     var nonce = $security.randomString(8)
-    var correlationKey = 'TESTE-2D2A-R3-' + ts + '-' + nonce
+    var correlationKey = 'TESTE-2D2A-R4-' + ts + '-' + nonce
 
     var baseUrl = ($secrets.get('PB_INSTANCE_URL') || '').replace(/\/$/, '')
     var whSecret = $secrets.get('AC_WEBHOOK_SECRET') || ''
@@ -285,7 +285,11 @@ routerAdd(
         var r7 = callWH(
           'POST',
           { 'Content-Type': 'application/json' },
-          JSON.stringify({ type: 't', contact: { id: correlationKey + '-SM-001' } }),
+          JSON.stringify({
+            type: 't',
+            contact: { id: correlationKey + '-SM-001' },
+            timestamp: new Date().toISOString(),
+          }),
         )
         var ca7 = getCounts()
         securityMatrix.push({

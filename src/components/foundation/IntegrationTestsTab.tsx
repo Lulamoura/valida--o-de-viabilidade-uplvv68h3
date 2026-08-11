@@ -84,7 +84,7 @@ export function IntegrationTestsTab() {
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              Full Round (R3)
+              Full Round (R4)
             </Button>
           </div>
 

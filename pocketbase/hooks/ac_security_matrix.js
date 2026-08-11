@@ -193,7 +193,11 @@ routerAdd(
       r = callWH(
         'POST',
         { 'Content-Type': 'application/json' },
-        JSON.stringify({ type: 't', contact: { id: 'TESTE-SM-001' } }),
+        JSON.stringify({
+          type: 't',
+          contact: { id: 'TESTE-SM-001' },
+          timestamp: new Date().toISOString(),
+        }),
       )
       results.push({
         test: 'missing_signature',
