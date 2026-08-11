@@ -2,12 +2,17 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/rollback',
   (e) => {
-    // ═══ FEATURE FLAG: DISABLED — Porta 2D Etapa 1 (preparatory) ═══
+    // ═══ ACTIVATION FLAG: server-side parameter (never exposed to frontend) ═══
     var ROLLBACK_ENABLED = false
+    try {
+      var _flagParam = $app.findFirstRecordByData('com_parametros', 'chave', 'ac_webhook_enabled')
+      if (_flagParam && _flagParam.getString('valor') === 'true' && _flagParam.getBool('ativo'))
+        ROLLBACK_ENABLED = true
+    } catch (_) {}
     if (!ROLLBACK_ENABLED) {
       return e.json(503, {
-        error: 'Rollback desabilitado nesta etapa preparatoria',
-        stage: 'porta-2d-etapa-1',
+        error: 'Rollback desabilitado',
+        stage: 'porta-2d-etapa-2a',
         enabled: false,
       })
     }

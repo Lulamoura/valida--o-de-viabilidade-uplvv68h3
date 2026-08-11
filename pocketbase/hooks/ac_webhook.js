@@ -1,10 +1,15 @@
 routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
-  // ═══ FEATURE FLAG: DISABLED — Porta 2D Etapa 1 (preparatory) ═══
+  // ═══ ACTIVATION FLAG: server-side parameter (never exposed to frontend) ═══
   var WEBHOOK_ENABLED = false
+  try {
+    var _flagParam = $app.findFirstRecordByData('com_parametros', 'chave', 'ac_webhook_enabled')
+    if (_flagParam && _flagParam.getString('valor') === 'true' && _flagParam.getBool('ativo'))
+      WEBHOOK_ENABLED = true
+  } catch (_) {}
   if (!WEBHOOK_ENABLED) {
     return e.json(503, {
-      error: 'Webhook desabilitado nesta etapa preparatoria',
-      stage: 'porta-2d-etapa-1',
+      error: 'Webhook desabilitado',
+      stage: 'porta-2d-etapa-2a',
       enabled: false,
     })
   }
