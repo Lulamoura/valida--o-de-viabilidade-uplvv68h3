@@ -231,8 +231,8 @@ routerAdd(
     results.push({
       test: 'replay_same_event',
       status: r.status,
-      expected: 200,
-      pass: r.status === 200 && r.json.duplicate === true,
+      expected: 409,
+      pass: r.status === 409 && r.json.duplicate === true,
       dup: r.json.duplicate,
     })
 

@@ -95,12 +95,12 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
   } catch (_) {}
 
   if (existingEvent) {
-    return e.json(200, {
+    return e.json(409, {
       received: true,
       duplicate: true,
       event_id: existingEvent.id,
       status: existingEvent.getString('status'),
-      message: 'Evento ja processado anteriormente',
+      message: 'Evento ja processado anteriormente — replay bloqueado',
     })
   }
 

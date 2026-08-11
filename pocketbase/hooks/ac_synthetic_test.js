@@ -144,7 +144,7 @@ routerAdd(
     var contactRes2 = callWH(contactEvt)
     results.idempotency_replay = {
       status: contactRes2.status,
-      pass: contactRes2.status === 200 && contactRes2.json.duplicate === true,
+      pass: contactRes2.status === 409 && contactRes2.json.duplicate === true,
       dup: contactRes2.json.duplicate,
     }
 
