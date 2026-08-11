@@ -16,6 +16,7 @@ import { RoundEvidence } from '@/components/foundation/RoundEvidence'
 import { RoundEvidenceBlock } from '@/components/foundation/RoundEvidenceBlock'
 import { R9EvidenceBlock } from '@/components/foundation/R9EvidenceBlock'
 import { R10EvidenceBlock } from '@/components/foundation/R10EvidenceBlock'
+import { R11EvidenceBlock } from '@/components/foundation/R11EvidenceBlock'
 
 export function IntegrationTestsTab() {
   const [loading, setLoading] = useState<string | null>(null)
@@ -206,6 +207,8 @@ export function IntegrationTestsTab() {
       <R9EvidenceBlock />
 
       <R10EvidenceBlock />
+
+      <R11EvidenceBlock />
     </div>
   )
 }

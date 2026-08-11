@@ -24,7 +24,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
   }
 
   var signature = e.request.header.get('X-AC-Signature') || ''
-  if (!signature) return e.unauthorizedError('Assinatura ausente')
+  if (!signature) return e.json(401, { error: 'missing_signature', message: 'Assinatura ausente' })
 
   var webhookSecret = $secrets.get('AC_WEBHOOK_SECRET') || ''
   if (!webhookSecret) {
@@ -59,7 +59,8 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
   var sigDiff = 0
   for (var si = 0; si < expectedSig.length; si++)
     sigDiff |= expectedSig.charCodeAt(si) ^ signature.charCodeAt(si)
-  if (sigDiff !== 0) return e.unauthorizedError('Assinatura invalida')
+  if (sigDiff !== 0)
+    return e.json(401, { error: 'invalid_signature', message: 'Assinatura invalida' })
 
   var eventTimestamp = body.timestamp || body.ts || ''
   if (eventTimestamp) {
