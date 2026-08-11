@@ -1,267 +1,122 @@
 import { useState } from 'react'
+import { ShieldCheck, Play, Loader2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 import {
-  runRound2D2A,
+  runRound,
   runPrecheck,
-  verifyRoutes,
-  type R3Response,
+  type RoundResult,
   type PrecheckResult,
-  type RouteVerification,
 } from '@/services/integration-tests'
-import {
-  Loader2,
-  Play,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  ShieldCheck,
-  Route as RouteIcon,
-} from 'lucide-react'
-
-type LoadingState = 'none' | 'precheck' | 'routes' | 'round'
+import { RoundEvidence } from '@/components/foundation/RoundEvidence'
 
 export function IntegrationTestsTab() {
-  const [loading, setLoading] = useState<LoadingState>('none')
-  const [evidence, setEvidence] = useState<R3Response | null>(null)
-  const [precheck, setPrecheck] = useState<PrecheckResult | null>(null)
-  const [routes, setRoutes] = useState<RouteVerification[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const isLoading = loading !== 'none'
+  const [loading, setLoading] = useState<string | null>(null)
+  const [roundResult, setRoundResult] = useState<RoundResult | null>(null)
+  const [precheckResult, setPrecheckResult] = useState<PrecheckResult | null>(null)
 
   const handlePrecheck = async () => {
     setLoading('precheck')
-    setError(null)
     try {
-      setPrecheck(await runPrecheck())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Precheck failed')
+      const result = await runPrecheck()
+      setPrecheckResult(result)
+      toast.success(result.message)
+    } catch {
+      toast.error('Erro ao executar precheck')
     } finally {
-      setLoading('none')
+      setLoading(null)
     }
   }
 
-  const handleVerifyRoutes = async () => {
-    setLoading('routes')
-    setError(null)
+  const handleRound = async (mode: 'security-only' | 'full') => {
+    setLoading(mode)
     try {
-      setRoutes(await verifyRoutes())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Route verification failed')
+      const result = await runRound(mode)
+      setRoundResult(result)
+      if (result.stopReason) {
+        toast.error(`Round parou: ${result.stopReason}`)
+      } else if (result.securityMatrixPassed) {
+        toast.success(`Round ${mode} concluído — matriz 100% PASS`)
+      } else {
+        toast.warning(`Round ${mode} — matriz não passou`)
+      }
+    } catch {
+      toast.error('Erro ao executar round')
     } finally {
-      setLoading('none')
+      setLoading(null)
     }
   }
-
-  const handleRunRound = async () => {
-    setLoading('round')
-    setError(null)
-    setEvidence(null)
-    try {
-      setEvidence(await runRound2D2A('security-only'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Round execution failed')
-    } finally {
-      setLoading('none')
-    }
-  }
-
-  const passedCount = evidence?.tests?.filter((t) => t.passed).length ?? 0
-  const totalCount = evidence?.tests?.length ?? 0
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5" />
-            Porta 2D.2A R3 — Round Execution
-            {evidence && (
-              <Badge variant={evidence.stopReason ? 'destructive' : 'default'}>
-                {passedCount}/{totalCount} passed
-              </Badge>
-            )}
-          </CardTitle>
+          <CardTitle>Testes de Integração ActiveCampaign</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            <Button onClick={handlePrecheck} disabled={isLoading} variant="outline" size="sm">
+            <Button onClick={handlePrecheck} disabled={!!loading} variant="outline" size="sm">
               {loading === 'precheck' ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <ShieldCheck className="mr-2 h-4 w-4" />
+                <ShieldCheck className="h-4 w-4" />
               )}
               Pre-check
             </Button>
-            <Button onClick={handleVerifyRoutes} disabled={isLoading} variant="outline" size="sm">
-              {loading === 'routes' ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Button
+              onClick={() => handleRound('security-only')}
+              disabled={!!loading}
+              variant="outline"
+              size="sm"
+            >
+              {loading === 'security-only' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <RouteIcon className="mr-2 h-4 w-4" />
+                <Play className="h-4 w-4" />
               )}
-              Verify Routes
+              Security-Only
             </Button>
-            <Button onClick={handleRunRound} disabled={isLoading} size="sm">
-              {loading === 'round' ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Button onClick={() => handleRound('full')} disabled={!!loading} size="sm">
+              {loading === 'full' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Play className="mr-2 h-4 w-4" />
+                <Play className="h-4 w-4" />
               )}
-              Execute Round 2D.2A R3 (security-only)
+              Full Round (R3)
             </Button>
           </div>
-          {error && (
-            <div className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-sm">{error}</span>
+
+          {precheckResult && (
+            <div className="rounded-lg border p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                {precheckResult.ready ? (
+                  <ShieldCheck className="h-5 w-5 text-green-500" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                )}
+                <span className="font-medium">Pre-check</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                {Object.entries(precheckResult.secrets).map(([key, val]) => (
+                  <div key={key} className="flex items-center gap-1">
+                    <Badge variant={val === 'PRESENTE' ? 'default' : 'destructive'}>{val}</Badge>
+                    <span className="text-xs">{key}</span>
+                  </div>
+                ))}
+              </div>
+              {precheckResult.hs256Test && (
+                <div className="text-sm">
+                  hs256: {precheckResult.hs256Test.passed ? '✅ PASS' : '❌ FAIL'}
+                </div>
+              )}
             </div>
           )}
-          {evidence?.stopReason && (
-            <div className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-sm font-medium">BLOCKED: {evidence.stopReason}</span>
-            </div>
-          )}
-          {evidence && (
-            <div className="text-xs text-muted-foreground">
-              Correlation Key: <span className="font-mono">{evidence.correlationKey}</span>
-            </div>
-          )}
+
+          {roundResult && <RoundEvidence result={roundResult} />}
         </CardContent>
       </Card>
-
-      {evidence && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Security Tests (R3)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {evidence.tests.map((t, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                {t.passed ? (
-                  <CheckCircle className="h-3 w-3 text-green-600" />
-                ) : (
-                  <XCircle className="h-3 w-3 text-red-600" />
-                )}
-                <span className="font-mono">{t.testName}</span>
-                <Badge variant="outline" className="text-xs">
-                  expected: {t.expected}
-                </Badge>
-                <Badge
-                  variant={t.actual === t.expected ? 'default' : 'destructive'}
-                  className="text-xs"
-                >
-                  actual: {t.actual}
-                </Badge>
-                {t.countsUnchanged !== undefined && (
-                  <Badge
-                    variant={t.countsUnchanged ? 'default' : 'destructive'}
-                    className="text-xs"
-                  >
-                    counts: {t.countsUnchanged ? 'unchanged' : 'CHANGED'}
-                  </Badge>
-                )}
-              </div>
-            ))}
-            <div className="mt-2 text-xs space-y-1">
-              <div>
-                Webhook Active: <span className="font-mono">{String(evidence.webhookActive)}</span>
-              </div>
-              <div>
-                Flag Final: <span className="font-mono">{String(evidence.flagFinal)}</span>
-              </div>
-              <div>
-                Mode: <span className="font-mono">{evidence.mode}</span>
-              </div>
-              <div>
-                HTTP Status: <span className="font-mono">{evidence.httpStatus}</span>
-              </div>
-              <div className="mt-2">
-                <span className="font-medium">Before Counts:</span>
-                <pre className="text-xs mt-1 p-2 bg-muted rounded">
-                  {JSON.stringify(evidence.beforeCounts, null, 2)}
-                </pre>
-              </div>
-              <div>
-                <span className="font-medium">After Counts:</span>
-                <pre className="text-xs mt-1 p-2 bg-muted rounded">
-                  {JSON.stringify(evidence.afterCounts, null, 2)}
-                </pre>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {precheck && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Pre-check Results</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs space-y-2">
-            <div className="flex items-center gap-2">
-              {precheck.ready ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-600" />
-              )}
-              <span>{precheck.message}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(precheck.secrets).map(([k, v]) => (
-                <Badge
-                  key={k}
-                  variant={v === 'PRESENTE' ? 'default' : 'destructive'}
-                  className="text-xs"
-                >
-                  {k}: {v}
-                </Badge>
-              ))}
-            </div>
-            <div>HS256: {precheck.hs256Test.passed ? 'PASS' : 'FAIL'}</div>
-            <div>
-              Integracao Account: {precheck.integracaoCheck.accountCount} (unique:{' '}
-              {String(precheck.integracaoCheck.uniqueAccount)})
-            </div>
-            <div>Webhook Enabled: {String(precheck.webhookEnabled)}</div>
-            <div className="flex flex-wrap gap-1 mt-1">
-              {Object.entries(precheck.counts).map(([k, v]) => (
-                <Badge key={k} variant="secondary" className="text-xs">
-                  {k}: {v}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {routes && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Route Verification</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {routes.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                {r.reachable ? (
-                  <CheckCircle className="h-3 w-3 text-green-600" />
-                ) : (
-                  <XCircle className="h-3 w-3 text-red-600" />
-                )}
-                <span className="font-mono">
-                  {r.method} {r.route}
-                </span>
-                <Badge variant="outline" className="text-xs">
-                  HTTP {r.status}
-                </Badge>
-                {r.error && <span className="text-destructive">{r.error}</span>}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

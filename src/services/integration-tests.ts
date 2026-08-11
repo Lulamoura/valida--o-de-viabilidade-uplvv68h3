@@ -1,35 +1,52 @@
 import pb from '@/lib/pocketbase/client'
 
-export interface CountSnapshot {
-  eventos: number
-  execucoes: number
-  vinculos: number
-  ocorrencias: number
-  snapshots: number
-  negocios: number
-}
-
-export interface R3TestResult {
-  testName: string
+export interface SecurityTest {
+  test: string
   expected: number
   actual: number
   passed: boolean
-  countsUnchanged?: boolean
-  beforeCounts?: CountSnapshot
-  afterCounts?: CountSnapshot
+  beforeCounts?: Record<string, number>
+  afterCounts?: Record<string, number>
+  [key: string]: unknown
 }
 
-export interface R3Response {
+export interface EvidenceEntry {
+  collection: string
+  id: string
+  created: string
+  correlationKey: string
+}
+
+export interface FunctionalResults {
+  contact_create?: Record<string, unknown>
+  idempotency_replay?: Record<string, unknown>
+  deal_create?: Record<string, unknown>
+  deal_update_snapshot?: Record<string, unknown>
+  unmapped_stage_quality?: Record<string, unknown>
+  rollback?: Record<string, unknown>
+  rollback_idempotency?: Record<string, unknown>
+}
+
+export interface DeactivationProof {
+  status: number
+  pass: boolean
+  webhookEnabled: boolean
+}
+
+export interface RoundResult {
   httpStatus: number
   correlationKey: string
   mode: string
-  tests: R3TestResult[]
+  securityMatrix: SecurityTest[]
+  securityMatrixPassed: boolean
+  functionalResults: FunctionalResults | null
+  deactivationProof: DeactivationProof
+  evidenceLedger: EvidenceEntry[]
   stopReason: string | null
+  beforeCounts: Record<string, number>
+  afterCounts: Record<string, number>
   webhookActive: boolean
-  beforeCounts: CountSnapshot
-  afterCounts: CountSnapshot
   flagFinal: boolean
-  functionalResults?: Record<string, unknown> | null
 }
 
 export interface PrecheckResult {
@@ -47,56 +64,19 @@ export interface PrecheckResult {
   }
   counts: Record<string, number>
   webhookEnabled: boolean
+  zeroExternalTraffic: boolean
+  zeroRealData: boolean
   message: string
 }
 
-export interface RouteVerification {
-  route: string
-  method: string
-  reachable: boolean
-  status: number
-  error?: string
-}
-
-export const runRound2D2A = (
-  mode: 'security-only' | 'full' = 'security-only',
-): Promise<R3Response> =>
-  pb.send('/backend/v1/integracao/ac/run-round-2d2a-r3', {
+export async function runRound(mode: 'security-only' | 'full'): Promise<RoundResult> {
+  return pb.send('/backend/v1/integracao/ac/run-round-2d2a-r3', {
     method: 'POST',
     body: JSON.stringify({ mode }),
+    headers: { 'Content-Type': 'application/json' },
   })
+}
 
-export const runPrecheck = (): Promise<PrecheckResult> =>
-  pb.send('/backend/v1/integracao/ac/precheck', { method: 'GET' })
-
-export const runSecurityMatrix = (): Promise<Record<string, unknown>> =>
-  pb.send('/backend/v1/integracao/ac/security-matrix', { method: 'POST' })
-
-export const runSyntheticTest = (): Promise<Record<string, unknown>> =>
-  pb.send('/backend/v1/integracao/ac/synthetic-test', { method: 'POST' })
-
-export async function verifyRoutes(): Promise<RouteVerification[]> {
-  const routes = [
-    { route: '/backend/v1/integracao/ac/precheck', method: 'GET' as const },
-    { route: '/backend/v1/integracao/ac/security-matrix', method: 'POST' as const },
-    { route: '/backend/v1/integracao/ac/synthetic-test', method: 'POST' as const },
-    { route: '/backend/v1/integracao/ac/run-round-2d2a-r3', method: 'POST' as const },
-  ]
-  const results: RouteVerification[] = []
-  for (const r of routes) {
-    try {
-      await pb.send(r.route, { method: r.method })
-      results.push({ route: r.route, method: r.method, reachable: true, status: 200 })
-    } catch (err: unknown) {
-      const status = (err as { status?: number })?.status || 0
-      results.push({
-        route: r.route,
-        method: r.method,
-        reachable: status !== 404,
-        status,
-        error: status === 404 ? 'Route not found (404)' : (err as { message?: string })?.message,
-      })
-    }
-  }
-  return results
+export async function runPrecheck(): Promise<PrecheckResult> {
+  return pb.send('/backend/v1/integracao/ac/precheck', { method: 'GET' })
 }
