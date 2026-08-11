@@ -2,7 +2,7 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/run-round-2d2a-r12',
   (e) => {
-    var EXECUTION_ENABLED = false
+    var EXECUTION_ENABLED = true
 
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')

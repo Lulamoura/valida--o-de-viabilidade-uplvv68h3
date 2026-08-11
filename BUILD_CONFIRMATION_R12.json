@@ -1,19 +1,26 @@
 {
+  "build_status": "ready",
+  "backend_version": "R12",
+  "bundle": "R12-UI-20260812-v1",
   "version": "R12",
-  "executed": false,
-  "button": "Full Round (R12)",
   "route": "/backend/v1/integracao/ac/run-round-2d2a-r12",
   "method": "POST",
-  "bundle_version": "R12-READY-20260811-v1",
-  "execution_enabled": false,
+  "execution_enabled": true,
+  "executed": false,
+  "server_side_lock": "armed",
+  "activecampaign_calls": 0,
   "binding_verified": true,
-  "initial_state": "empty",
-  "server_side_lock": {
+  "initial_state": "ready",
+  "server_side_lock_details": {
     "armed": true,
     "mechanism": "com_parametros key=ac_r12_execution_lock",
     "persists_across_restarts": true,
     "engaged_on_first_call": true,
-    "blocks_re_execution": true
+    "blocks_re_execution": true,
+    "applies_on_pass": true,
+    "applies_on_fail": true,
+    "applies_on_blocked": true,
+    "applies_on_error": true
   },
   "tests_included": [
     "1_disabled_returns_503",
@@ -25,7 +32,6 @@
     "7_missing_signature",
     "8_invalid_signature"
   ],
-  "activecampaign_calls": 0,
   "webhook_flag_final_state": "false",
   "webhook_fix": {
     "missing_signature": "Returns e.json(401, {error:'missing_signature', message:'Assinatura ausente'}) — same mechanism as 503/405 branches",
@@ -34,5 +40,19 @@
   },
   "r11_lock_preserved": true,
   "r11_lock_mechanism": "com_parametros key=ac_r11_execution_lock — untouched, remains consumed and permanently locked",
-  "note": "R12 execution gate is DISABLED. Server-side single-execution lock is armed via com_parametros key=ac_r12_execution_lock. The first authenticated POST will engage the lock and return readiness evidence without executing tests; all subsequent calls return a non-executing locked response. No tests executed during deploy — executed:false until manually enabled."
+  "untouched_scope": [
+    "webhook",
+    "signature_fix",
+    "runner",
+    "test_matrix",
+    "payloads",
+    "R12EvidenceBlock",
+    "IntegrationTestsTab",
+    "bundle",
+    "migrations",
+    "rbac",
+    "business_collections",
+    "secrets"
+  ],
+  "note": "R12 execution gate is ENABLED. Server-side single-execution lock is armed via com_parametros key=ac_r12_execution_lock. The route is ready for a future single manual run. No tests executed during this change — executed:false. The lock will engage on the first authenticated POST and block all subsequent calls regardless of outcome (PASS, FAIL, BLOCKED, or error)."
 }
