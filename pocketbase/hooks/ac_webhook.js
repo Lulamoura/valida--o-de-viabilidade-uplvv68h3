@@ -23,6 +23,42 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
     return e.badRequestError('Corpo da requisicao excede o limite de 256KB')
   }
 
+  var r13Sig = e.request.header.get('X-AC-Signature') || ''
+  if (!r13Sig) {
+    return e.json(401, { error: 'missing_signature' })
+  }
+  var r13Secret = $secrets.get('AC_WEBHOOK_SECRET') || ''
+  var r13Body = e.requestInfo().body || {}
+  var r13Canonicalize = function (obj) {
+    if (obj === null || obj === undefined) return 'null'
+    if (typeof obj !== 'object') return JSON.stringify(obj)
+    if (Array.isArray(obj)) {
+      var items = []
+      for (var ci = 0; ci < obj.length; ci++) items.push(r13Canonicalize(obj[ci]))
+      return '[' + items.join(',') + ']'
+    }
+    var keys = Object.keys(obj)
+      .filter(function (k) {
+        return obj[k] !== undefined
+      })
+      .sort()
+    var parts = []
+    for (var cj = 0; cj < keys.length; cj++)
+      parts.push(JSON.stringify(keys[cj]) + ':' + r13Canonicalize(obj[keys[cj]]))
+    return '{' + parts.join(',') + '}'
+  }
+  var r13CanonicalStr = r13Canonicalize(r13Body)
+  var r13ExpectedSig = $security.hs256(r13CanonicalStr, r13Secret)
+  if (r13ExpectedSig.length !== r13Sig.length) {
+    return e.json(401, { error: 'invalid_signature' })
+  }
+  var r13SigDiff = 0
+  for (var r13si = 0; r13si < r13ExpectedSig.length; r13si++)
+    r13SigDiff |= r13ExpectedSig.charCodeAt(r13si) ^ r13Sig.charCodeAt(r13si)
+  if (r13SigDiff !== 0) {
+    return e.json(401, { error: 'invalid_signature' })
+  }
+
   var signature = e.request.header.get('X-AC-Signature') || ''
   if (!signature) return e.json(401, { error: 'missing_signature', message: 'Assinatura ausente' })
 
