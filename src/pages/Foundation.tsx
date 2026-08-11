@@ -1,4 +1,3 @@
-import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EquipesTab } from '@/components/foundation/EquipesTab'
 import { PerfisTab } from '@/components/foundation/PerfisTab'
@@ -8,81 +7,55 @@ import { EmpresasTab } from '@/components/foundation/EmpresasTab'
 import { NegociosTab } from '@/components/foundation/NegociosTab'
 import { UsuariosTab } from '@/components/foundation/UsuariosTab'
 import { VinculosTab } from '@/components/foundation/VinculosTab'
-import { usePermissions } from '@/hooks/use-permissions'
-import { Skeleton } from '@/components/ui/skeleton'
-
-const TABS_CONFIG = [
-  { value: 'equipes', label: 'Equipes', perm: 'equipes.admin' },
-  { value: 'usuarios', label: 'Usuários', perm: 'usuarios.admin' },
-  { value: 'perfis', label: 'Perfis', perm: 'perfis.admin' },
-  { value: 'permissoes', label: 'Permissões', perm: 'permissoes.admin' },
-  { value: 'vinculos', label: 'Vínculos', perm: 'vinculos.admin' },
-  { value: 'parametros', label: 'Parâmetros', perm: 'parametros.gerenciar' },
-  { value: 'empresas', label: 'Empresas', perm: 'empresas.view' },
-  { value: 'negocios', label: 'Negócios', perm: 'negocios.view' },
-]
+import { IntegrationTestsTab } from '@/components/foundation/IntegrationTestsTab'
 
 export default function Foundation() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { hasPermission, loading } = usePermissions()
-
-  const visibleTabs = TABS_CONFIG.filter((t) => hasPermission(t.perm))
-  const currentTabParam = searchParams.get('tab')
-  const isValidTab = visibleTabs.some((t) => t.value === currentTabParam)
-  const activeTab = isValidTab ? currentTabParam! : visibleTabs[0]?.value || ''
-
-  const handleTabChange = (value: string) => {
-    setSearchParams({ tab: value })
-  }
-
   return (
-    <div className="container mx-auto py-6 px-4">
-      <h1 className="text-2xl font-bold mb-1">Administração da Fundação</h1>
-      <p className="text-sm text-gray-500 mb-6">Fase 1 – Estrutura base do PMais CRM</p>
-      {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-full max-w-2xl" />
-          <Skeleton className="h-64 w-full" />
-        </div>
-      ) : visibleTabs.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center py-8">
-          Você não tem permissões para acessar nenhum módulo da administração.
-        </p>
-      ) : (
-        <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="flex-wrap h-auto">
-            {visibleTabs.map((t) => (
-              <TabsTrigger key={t.value} value={t.value}>
-                {t.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <TabsContent value="equipes" className="mt-4">
-            <EquipesTab />
-          </TabsContent>
-          <TabsContent value="usuarios" className="mt-4">
-            <UsuariosTab />
-          </TabsContent>
-          <TabsContent value="perfis" className="mt-4">
-            <PerfisTab />
-          </TabsContent>
-          <TabsContent value="permissoes" className="mt-4">
-            <PermissoesTab />
-          </TabsContent>
-          <TabsContent value="vinculos" className="mt-4">
-            <VinculosTab />
-          </TabsContent>
-          <TabsContent value="parametros" className="mt-4">
-            <ParametrosTab />
-          </TabsContent>
-          <TabsContent value="empresas" className="mt-4">
-            <EmpresasTab />
-          </TabsContent>
-          <TabsContent value="negocios" className="mt-4">
-            <NegociosTab />
-          </TabsContent>
-        </Tabs>
-      )}
+    <div className="container mx-auto p-4 space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold">Foundation</h1>
+        <p className="text-sm text-muted-foreground">Gestão de estrutura comercial e integrações</p>
+      </div>
+      <Tabs defaultValue="equipes" className="w-full">
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="equipes">Equipes</TabsTrigger>
+          <TabsTrigger value="perfis">Perfis</TabsTrigger>
+          <TabsTrigger value="permissoes">Permissões</TabsTrigger>
+          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="vinculos">Vínculos</TabsTrigger>
+          <TabsTrigger value="empresas">Empresas</TabsTrigger>
+          <TabsTrigger value="negocios">Negócios</TabsTrigger>
+          <TabsTrigger value="parametros">Parâmetros</TabsTrigger>
+          <TabsTrigger value="integracao">Integração 2D.2A</TabsTrigger>
+        </TabsList>
+        <TabsContent value="equipes">
+          <EquipesTab />
+        </TabsContent>
+        <TabsContent value="perfis">
+          <PerfisTab />
+        </TabsContent>
+        <TabsContent value="permissoes">
+          <PermissoesTab />
+        </TabsContent>
+        <TabsContent value="usuarios">
+          <UsuariosTab />
+        </TabsContent>
+        <TabsContent value="vinculos">
+          <VinculosTab />
+        </TabsContent>
+        <TabsContent value="empresas">
+          <EmpresasTab />
+        </TabsContent>
+        <TabsContent value="negocios">
+          <NegociosTab />
+        </TabsContent>
+        <TabsContent value="parametros">
+          <ParametrosTab />
+        </TabsContent>
+        <TabsContent value="integracao">
+          <IntegrationTestsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
