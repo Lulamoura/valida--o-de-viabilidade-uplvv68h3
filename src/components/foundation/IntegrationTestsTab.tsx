@@ -97,22 +97,25 @@ export function IntegrationTestsTab() {
       const rawText = await res.text()
       const executedAt = new Date().toISOString()
 
-      let correlationKey: string | null = null
-      try {
-        const parsed = JSON.parse(rawText) as { correlation_key?: string }
-        if (parsed.correlation_key) correlationKey = parsed.correlation_key
-      } catch {
-        /* keep null if not parseable */
-      }
-
       const evidence: R6Evidence = {
         rawText,
         httpStatus: res.status,
-        correlationKey,
+        correlationKey: null,
         executedAt,
       }
 
       saveR6ToSession(evidence)
+
+      try {
+        const parsed = JSON.parse(rawText) as { correlation_key?: string }
+        if (parsed.correlation_key) {
+          evidence.correlationKey = parsed.correlation_key
+          saveR6ToSession(evidence)
+        }
+      } catch {
+        /* keep null if not parseable */
+      }
+
       setR6Evidence(evidence)
 
       if (res.ok) {
