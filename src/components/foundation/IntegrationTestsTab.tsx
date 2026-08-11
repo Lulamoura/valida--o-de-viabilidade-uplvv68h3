@@ -7,8 +7,10 @@ import { toast } from 'sonner'
 import {
   runRound,
   runPrecheck,
+  runRoundR5,
   type RoundResult,
   type PrecheckResult,
+  type R5Result,
 } from '@/services/integration-tests'
 import { RoundEvidence } from '@/components/foundation/RoundEvidence'
 
@@ -16,6 +18,24 @@ export function IntegrationTestsTab() {
   const [loading, setLoading] = useState<string | null>(null)
   const [roundResult, setRoundResult] = useState<RoundResult | null>(null)
   const [precheckResult, setPrecheckResult] = useState<PrecheckResult | null>(null)
+  const [r5Result, setR5Result] = useState<R5Result | null>(null)
+
+  const handleRoundR5 = async () => {
+    setLoading('r5')
+    try {
+      const result = await runRoundR5()
+      setR5Result(result)
+      if (result.overall_status === 'PASS') {
+        toast.success('R5 Round concluído — PASS')
+      } else {
+        toast.error(`R5 Round: ${result.overall_status} — ${result.stop_reason || ''}`)
+      }
+    } catch {
+      toast.error('Erro ao executar R5 round')
+    } finally {
+      setLoading(null)
+    }
+  }
 
   const handlePrecheck = async () => {
     setLoading('precheck')
@@ -86,6 +106,14 @@ export function IntegrationTestsTab() {
               )}
               Full Round (R4)
             </Button>
+            <Button onClick={handleRoundR5} disabled={!!loading} variant="outline" size="sm">
+              {loading === 'r5' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              Full Round (R5)
+            </Button>
           </div>
 
           {precheckResult && (
@@ -111,6 +139,33 @@ export function IntegrationTestsTab() {
                   hs256: {precheckResult.hs256Test.passed ? '✅ PASS' : '❌ FAIL'}
                 </div>
               )}
+            </div>
+          )}
+
+          {r5Result && (
+            <div className="rounded-lg border p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant={r5Result.overall_status === 'PASS' ? 'default' : 'destructive'}>
+                  {r5Result.overall_status}
+                </Badge>
+                <span className="font-medium">R5 Round</span>
+              </div>
+              <div className="text-sm space-y-1">
+                <div>
+                  Correlation: <code className="text-xs">{r5Result.correlation_key}</code>
+                </div>
+                <div>Matrix: {r5Result.security_matrix.length} tests</div>
+                <div>
+                  Flag Final: valor={r5Result.flag_final?.valor}, ativo=
+                  {r5Result.flag_final?.ativo?.toString()}
+                </div>
+                <div>Probe: {r5Result.final_webhook_probe_status}</div>
+                <div>AC Calls: {r5Result.activecampaign_calls}</div>
+                <div>Evidence: {r5Result.evidence_ids.length} records</div>
+                {r5Result.stop_reason && (
+                  <div className="text-red-500">Stop: {r5Result.stop_reason}</div>
+                )}
+              </div>
             </div>
           )}
 

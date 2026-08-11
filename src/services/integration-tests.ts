@@ -80,3 +80,33 @@ export async function runRound(mode: 'security-only' | 'full'): Promise<RoundRes
 export async function runPrecheck(): Promise<PrecheckResult> {
   return pb.send('/backend/v1/integracao/ac/precheck', { method: 'GET' })
 }
+
+export interface R5Result {
+  runner_version: string
+  correlation_key: string
+  started_at: string
+  finished_at: string
+  build_timestamp: string
+  overall_status: 'PASS' | 'FAIL' | 'BLOCKED'
+  stop_reason: string | null
+  security_matrix: unknown[]
+  functional_flow: unknown | 'not_started'
+  idempotency_replay: unknown | 'not_started'
+  rollback: unknown | 'not_started'
+  counts_before: Record<string, number>
+  counts_after: Record<string, number>
+  flag_before: { valor: string | null; ativo: boolean | null; error: string | null } | null
+  flag_during: { valor: string | null; ativo: boolean | null; error: string | null } | null
+  flag_final: { valor: string | null; ativo: boolean | null; error: string | null } | null
+  final_webhook_probe_status: number | null
+  evidence_ids: Array<{ collection: string; id: string }>
+  activecampaign_calls: number
+}
+
+export async function runRoundR5(): Promise<R5Result> {
+  return pb.send('/backend/v1/integracao/ac/run-round-2d2a-r5', {
+    method: 'POST',
+    body: JSON.stringify({ mode: 'full' }),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
