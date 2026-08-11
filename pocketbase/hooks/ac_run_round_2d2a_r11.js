@@ -2,7 +2,7 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/run-round-2d2a-r11',
   (e) => {
-    var EXECUTION_ENABLED = false
+    var EXECUTION_ENABLED = true
 
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')
@@ -25,16 +25,6 @@ routerAdd(
       } catch (_) {}
     }
     if (!isSA) return e.forbiddenError('Apenas superadministrador')
-
-    if (!EXECUTION_ENABLED) {
-      return e.json(200, {
-        build_status: 'READY',
-        runner: 'R11',
-        route: '/backend/v1/integracao/ac/run-round-2d2a-r11',
-        executed: false,
-        webhook_change: 'explicit_json_401_for_signature_errors',
-      })
-    }
 
     var reqBody = e.requestInfo().body || {}
     var mode = reqBody.mode || 'security-only'
@@ -264,6 +254,50 @@ routerAdd(
         ended_at: et,
       }
     }
+
+    function checkLock() {
+      try {
+        var rec = $app.findFirstRecordByData('com_parametros', 'chave', 'ac_r11_execution_lock')
+        return rec.getString('valor') === 'locked' && rec.getBool('ativo')
+      } catch (_) {
+        return false
+      }
+    }
+
+    function engageLock() {
+      try {
+        var pc = $app.findCollectionByNameOrId('com_parametros')
+        var fr
+        try {
+          fr = $app.findFirstRecordByData('com_parametros', 'chave', 'ac_r11_execution_lock')
+        } catch (_) {
+          fr = new Record(pc)
+          fr.set('chave', 'ac_r11_execution_lock')
+          fr.set('versao', 1)
+        }
+        fr.set('valor', 'locked')
+        fr.set('ativo', true)
+        fr.set('descricao', 'Server-side single-execution lock for R11 runner')
+        fr.set('tipo', 'lock')
+        $app.save(fr)
+        return true
+      } catch (_) {
+        return false
+      }
+    }
+
+    if (checkLock()) {
+      return e.json(200, {
+        runner_version: 'R11',
+        route: '/backend/v1/integracao/ac/run-round-2d2a-r11',
+        execution_enabled: true,
+        executed: true,
+        locked: true,
+        message: 'R11 already executed — server-side single-execution lock prevents re-execution',
+      })
+    }
+
+    engageLock()
 
     var overallStatus = 'PASS'
     var stopReason = null
