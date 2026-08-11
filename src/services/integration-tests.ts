@@ -1,52 +1,35 @@
 import pb from '@/lib/pocketbase/client'
 
-export interface EvidenceLedgerEntry {
-  id: string
-  collection: string
-  created: string
-  correlationKey: string
-}
-
 export interface CountSnapshot {
   eventos: number
   execucoes: number
   vinculos: number
-  negocios: number
-  snapshots: number
   ocorrencias: number
+  snapshots: number
+  negocios: number
 }
 
-export interface SecurityMatrixEntry {
-  test: string
-  status: number
+export interface R3TestResult {
+  testName: string
   expected: number
-  pass: boolean
-  before?: CountSnapshot
-  after?: CountSnapshot
-  [key: string]: unknown
+  actual: number
+  passed: boolean
+  countsUnchanged?: boolean
+  beforeCounts?: CountSnapshot
+  afterCounts?: CountSnapshot
 }
 
-export interface RoundSummary {
-  totalTests: number
-  passed: number
-  failed: number
-  webhookDisabled: boolean
-  zeroExternalCalls: boolean
-  zeroRealData: boolean
-  testeRecordsPreserved: boolean
-  message: string
-}
-
-export interface Round2D2AEvidence {
-  round: string
-  startedAt: string
-  completedAt?: string
-  stoppedAt?: string
-  stopReason?: string
-  tests: Record<string, unknown>
-  ledger: EvidenceLedgerEntry[]
-  finalCounts?: CountSnapshot
-  summary?: RoundSummary
+export interface R3Response {
+  httpStatus: number
+  correlationKey: string
+  mode: string
+  tests: R3TestResult[]
+  stopReason: string | null
+  webhookActive: boolean
+  beforeCounts: CountSnapshot
+  afterCounts: CountSnapshot
+  flagFinal: boolean
+  functionalResults?: Record<string, unknown> | null
 }
 
 export interface PrecheckResult {
@@ -75,8 +58,13 @@ export interface RouteVerification {
   error?: string
 }
 
-export const runRound2D2A = (): Promise<Round2D2AEvidence> =>
-  pb.send('/backend/v1/integracao/ac/run-round-2d2a', { method: 'POST' })
+export const runRound2D2A = (
+  mode: 'security-only' | 'full' = 'security-only',
+): Promise<R3Response> =>
+  pb.send('/backend/v1/integracao/ac/run-round-2d2a-r3', {
+    method: 'POST',
+    body: JSON.stringify({ mode }),
+  })
 
 export const runPrecheck = (): Promise<PrecheckResult> =>
   pb.send('/backend/v1/integracao/ac/precheck', { method: 'GET' })
@@ -92,7 +80,7 @@ export async function verifyRoutes(): Promise<RouteVerification[]> {
     { route: '/backend/v1/integracao/ac/precheck', method: 'GET' as const },
     { route: '/backend/v1/integracao/ac/security-matrix', method: 'POST' as const },
     { route: '/backend/v1/integracao/ac/synthetic-test', method: 'POST' as const },
-    { route: '/backend/v1/integracao/ac/run-round-2d2a', method: 'POST' as const },
+    { route: '/backend/v1/integracao/ac/run-round-2d2a-r3', method: 'POST' as const },
   ]
   const results: RouteVerification[] = []
   for (const r of routes) {

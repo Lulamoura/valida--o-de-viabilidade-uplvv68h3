@@ -6,11 +6,10 @@ import {
   runRound2D2A,
   runPrecheck,
   verifyRoutes,
-  type Round2D2AEvidence,
+  type R3Response,
   type PrecheckResult,
   type RouteVerification,
 } from '@/services/integration-tests'
-import { RoundEvidence } from '@/components/foundation/RoundEvidence'
 import {
   Loader2,
   Play,
@@ -25,7 +24,7 @@ type LoadingState = 'none' | 'precheck' | 'routes' | 'round'
 
 export function IntegrationTestsTab() {
   const [loading, setLoading] = useState<LoadingState>('none')
-  const [evidence, setEvidence] = useState<Round2D2AEvidence | null>(null)
+  const [evidence, setEvidence] = useState<R3Response | null>(null)
   const [precheck, setPrecheck] = useState<PrecheckResult | null>(null)
   const [routes, setRoutes] = useState<RouteVerification[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +60,7 @@ export function IntegrationTestsTab() {
     setError(null)
     setEvidence(null)
     try {
-      setEvidence(await runRound2D2A())
+      setEvidence(await runRound2D2A('security-only'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Round execution failed')
     } finally {
@@ -69,16 +68,19 @@ export function IntegrationTestsTab() {
     }
   }
 
+  const passedCount = evidence?.tests?.filter((t) => t.passed).length ?? 0
+  const totalCount = evidence?.tests?.length ?? 0
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5" />
-            Porta 2D.2A — Round Execution
-            {evidence?.summary && (
-              <Badge variant={evidence.summary.failed > 0 ? 'destructive' : 'default'}>
-                {evidence.summary.passed}/{evidence.summary.totalTests} passed
+            Porta 2D.2A R3 — Round Execution
+            {evidence && (
+              <Badge variant={evidence.stopReason ? 'destructive' : 'default'}>
+                {passedCount}/{totalCount} passed
               </Badge>
             )}
           </CardTitle>
@@ -107,7 +109,7 @@ export function IntegrationTestsTab() {
               ) : (
                 <Play className="mr-2 h-4 w-4" />
               )}
-              Execute Round 2D.2A
+              Execute Round 2D.2A R3 (security-only)
             </Button>
           </div>
           {error && (
@@ -122,8 +124,76 @@ export function IntegrationTestsTab() {
               <span className="text-sm font-medium">BLOCKED: {evidence.stopReason}</span>
             </div>
           )}
+          {evidence && (
+            <div className="text-xs text-muted-foreground">
+              Correlation Key: <span className="font-mono">{evidence.correlationKey}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {evidence && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Security Tests (R3)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {evidence.tests.map((t, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                {t.passed ? (
+                  <CheckCircle className="h-3 w-3 text-green-600" />
+                ) : (
+                  <XCircle className="h-3 w-3 text-red-600" />
+                )}
+                <span className="font-mono">{t.testName}</span>
+                <Badge variant="outline" className="text-xs">
+                  expected: {t.expected}
+                </Badge>
+                <Badge
+                  variant={t.actual === t.expected ? 'default' : 'destructive'}
+                  className="text-xs"
+                >
+                  actual: {t.actual}
+                </Badge>
+                {t.countsUnchanged !== undefined && (
+                  <Badge
+                    variant={t.countsUnchanged ? 'default' : 'destructive'}
+                    className="text-xs"
+                  >
+                    counts: {t.countsUnchanged ? 'unchanged' : 'CHANGED'}
+                  </Badge>
+                )}
+              </div>
+            ))}
+            <div className="mt-2 text-xs space-y-1">
+              <div>
+                Webhook Active: <span className="font-mono">{String(evidence.webhookActive)}</span>
+              </div>
+              <div>
+                Flag Final: <span className="font-mono">{String(evidence.flagFinal)}</span>
+              </div>
+              <div>
+                Mode: <span className="font-mono">{evidence.mode}</span>
+              </div>
+              <div>
+                HTTP Status: <span className="font-mono">{evidence.httpStatus}</span>
+              </div>
+              <div className="mt-2">
+                <span className="font-medium">Before Counts:</span>
+                <pre className="text-xs mt-1 p-2 bg-muted rounded">
+                  {JSON.stringify(evidence.beforeCounts, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <span className="font-medium">After Counts:</span>
+                <pre className="text-xs mt-1 p-2 bg-muted rounded">
+                  {JSON.stringify(evidence.afterCounts, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {precheck && (
         <Card>
@@ -192,8 +262,6 @@ export function IntegrationTestsTab() {
           </CardContent>
         </Card>
       )}
-
-      {evidence && <RoundEvidence evidence={evidence} />}
     </div>
   )
 }
