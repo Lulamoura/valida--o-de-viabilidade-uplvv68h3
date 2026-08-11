@@ -13,16 +13,6 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
     })
   }
 
-  var contentType = e.request.header.get('Content-Type') || ''
-  if (contentType.indexOf('application/json') === -1) {
-    return e.badRequestError('Content-Type deve ser application/json')
-  }
-
-  var contentLength = parseInt(e.request.header.get('Content-Length') || '0', 10)
-  if (contentLength > 262144) {
-    return e.badRequestError('Corpo da requisicao excede o limite de 256KB')
-  }
-
   var signature = e.request.header.get('X-AC-Signature') || ''
   if (!signature) return e.unauthorizedError('Assinatura ausente')
 
@@ -60,6 +50,16 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
   for (var si = 0; si < expectedSig.length; si++)
     sigDiff |= expectedSig.charCodeAt(si) ^ signature.charCodeAt(si)
   if (sigDiff !== 0) return e.unauthorizedError('Assinatura invalida')
+
+  var contentType = e.request.header.get('Content-Type') || ''
+  if (contentType.indexOf('application/json') === -1) {
+    return e.badRequestError('Content-Type deve ser application/json')
+  }
+
+  var contentLength = parseInt(e.request.header.get('Content-Length') || '0', 10)
+  if (contentLength > 262144) {
+    return e.badRequestError('Corpo da requisicao excede o limite de 256KB')
+  }
 
   var eventTimestamp = body.timestamp || body.ts || ''
   if (eventTimestamp) {
