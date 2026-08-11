@@ -1,27 +1,13 @@
 {
   "build_status": "READY",
-  "diagnostic_version": "R13-DIAG-TRANSPORTE-20260812-v1",
-  "route_version": "R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v1",
+  "audit_version": "R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v1",
+  "bundle_version": "R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v1",
   "route": "/backend/v1/integracao/ac/diag-compensacao-auditoria",
-  "allowed_collections": [
-    "com_eventos_integracao",
-    "com_execucoes_sincronizacao",
-    "com_vinculos_externos"
-  ],
-  "fixed_filters": {
-    "contact_identifier": "DIAG-TRANSPORT-FN-C1",
-    "email": "teste-r13@teste.local",
-    "event_id": "pq4npvruaak9gpb",
-    "temporal_window": "2026-08-11T20:38:39.922Z",
-    "origin": "ActiveCampaign"
-  },
-  "read_only": true,
-  "client_filters_allowed": false,
+  "frontend_control": "PRESENT",
   "execution_enabled": false,
   "server_side_lock": "armed",
+  "button_enabled": false,
   "executed": false,
   "deletion_executed": false,
-  "frontend": "ABSENT",
-  "activecampaign_calls": 0,
   "preview": "https://validacao-de-viabilidade-89fff--preview.goskip.app"
 }
