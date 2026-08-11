@@ -191,6 +191,15 @@ export function IntegrationTestsTab() {
         onStart={() => setLoading('r7')}
         onEnd={() => setLoading(null)}
       />
+
+      <RoundEvidenceBlock
+        roundLabel="R8"
+        routePath="/backend/v1/integracao/ac/run-round-2d2a-r8"
+        sessionKey="r8_evidence_raw"
+        disabled={!!loading}
+        onStart={() => setLoading('r8')}
+        onEnd={() => setLoading(null)}
+      />
     </div>
   )
 }
