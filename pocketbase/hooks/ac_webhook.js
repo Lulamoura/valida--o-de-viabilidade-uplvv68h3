@@ -1,5 +1,4 @@
 routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
-  // ═══ ACTIVATION FLAG: server-side parameter (never exposed to frontend) ═══
   var WEBHOOK_ENABLED = false
   try {
     var _flagParam = $app.findFirstRecordByData('com_parametros', 'chave', 'ac_webhook_enabled')
@@ -14,19 +13,16 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
     })
   }
 
-  // ═══ 1. CONTENT-TYPE VALIDATION ═══
   var contentType = e.request.header.get('Content-Type') || ''
   if (contentType.indexOf('application/json') === -1) {
     return e.badRequestError('Content-Type deve ser application/json')
   }
 
-  // ═══ 2. BODY SIZE LIMIT (256 KB) ═══
   var contentLength = parseInt(e.request.header.get('Content-Length') || '0', 10)
   if (contentLength > 262144) {
     return e.badRequestError('Corpo da requisicao excede o limite de 256KB')
   }
 
-  // ═══ 3. SIGNATURE VALIDATION (HMAC-SHA256) ═══
   var signature = e.request.header.get('X-AC-Signature') || ''
   if (!signature) return e.unauthorizedError('Assinatura ausente')
 
@@ -36,36 +32,47 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
     return e.internalServerError('Configuracao do servidor ausente')
   }
 
+  function canonicalize(obj) {
+    if (obj === null || obj === undefined) return 'null'
+    if (typeof obj !== 'object') return JSON.stringify(obj)
+    if (Array.isArray(obj)) {
+      var items = []
+      for (var i = 0; i < obj.length; i++) items.push(canonicalize(obj[i]))
+      return '[' + items.join(',') + ']'
+    }
+    var keys = Object.keys(obj)
+      .filter(function (k) {
+        return obj[k] !== undefined
+      })
+      .sort()
+    var parts = []
+    for (var i = 0; i < keys.length; i++)
+      parts.push(JSON.stringify(keys[i]) + ':' + canonicalize(obj[keys[i]]))
+    return '{' + parts.join(',') + '}'
+  }
+
   var body = e.requestInfo().body || {}
-  var bodyStr = JSON.stringify(body)
+  var canonicalStr = canonicalize(body)
 
-  var expectedSig = $security.hs256(bodyStr, webhookSecret)
-
-  if (expectedSig.length !== signature.length) {
-    return e.unauthorizedError('Assinatura invalida')
-  }
+  var expectedSig = $security.hs256(canonicalStr, webhookSecret)
+  if (expectedSig.length !== signature.length) return e.unauthorizedError('Assinatura invalida')
   var sigDiff = 0
-  for (var si = 0; si < expectedSig.length; si++) {
+  for (var si = 0; si < expectedSig.length; si++)
     sigDiff |= expectedSig.charCodeAt(si) ^ signature.charCodeAt(si)
-  }
   if (sigDiff !== 0) return e.unauthorizedError('Assinatura invalida')
 
-  // ═══ 4. ANTIREPLAY WINDOW (5 minutes) ═══
   var eventTimestamp = body.timestamp || body.ts || ''
   if (eventTimestamp) {
     var eventTime = new Date(eventTimestamp).getTime()
-    var nowTime = Date.now()
-    if (!isNaN(eventTime) && Math.abs(nowTime - eventTime) > 300000) {
+    if (isNaN(eventTime)) return e.badRequestError('Timestamp invalido')
+    if (Math.abs(Date.now() - eventTime) > 300000)
       return e.badRequestError('Evento fora da janela de tempo permitida')
-    }
   }
 
-  // ═══ 5. EXTRACT EVENT FIELDS (canonical taxonomy) ═══
   var sistemaOrigem = 'activecampaign'
   var eventoTipo = body.type || body.event || body.action || ''
-  var externalId = ''
-  var entityType = ''
-
+  var externalId = '',
+    entityType = ''
   if (body.contact && body.contact.id) {
     externalId = String(body.contact.id)
     entityType = 'contact'
@@ -76,15 +83,10 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
     externalId = String(body.deal.id)
     entityType = 'business'
   }
-
-  if (!eventoTipo || !externalId) {
+  if (!eventoTipo || !externalId)
     return e.badRequestError('Evento sem tipo ou id externo identificavel')
-  }
 
-  // ═══ 6. IDEMPOTENCY KEY: SHA-256(sistema_origem|evento_tipo|external_id) ═══
   var idempotencyKey = $security.sha256(sistemaOrigem + '|' + eventoTipo + '|' + externalId)
-
-  // ═══ 7. IDEMPOTENCY CHECK ═══
   var existingEvent = null
   try {
     existingEvent = $app.findFirstRecordByData(
@@ -93,7 +95,6 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
       idempotencyKey,
     )
   } catch (_) {}
-
   if (existingEvent) {
     return e.json(409, {
       received: true,
@@ -104,7 +105,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
     })
   }
 
-  // ═══ 8. CREATE EXECUTION RECORD ═══
+  var bodyStr = JSON.stringify(body)
   var execCol = $app.findCollectionByNameOrId('com_execucoes_sincronizacao')
   var execRec = new Record(execCol)
   execRec.set('sistema_origem', sistemaOrigem)
@@ -113,7 +114,6 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
   execRec.set('inicio', new Date().toISOString())
   $app.save(execRec)
 
-  // ═══ 9. PERSIST EVENT ═══
   var eventoCol = $app.findCollectionByNameOrId('com_eventos_integracao')
   var eventoRec = new Record(eventoCol)
   eventoRec.set('sistema_origem', sistemaOrigem)
@@ -124,7 +124,6 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
   eventoRec.set('status', 'received')
   $app.save(eventoRec)
 
-  // ═══ 10. PROCESS EVENT ═══
   try {
     var existingVinculo = null
     try {
@@ -256,7 +255,6 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
     $app.save(execRec)
   } catch (err) {
     eventoRec.set('status', 'error')
-    eventoRec.set('erro', String(err).substring(0, 2000))
     $app.save(eventoRec)
     execRec.set('status', 'error')
     execRec.set('erro', String(err).substring(0, 2000))

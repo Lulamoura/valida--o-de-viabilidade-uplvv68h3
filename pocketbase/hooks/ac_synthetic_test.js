@@ -28,6 +28,24 @@ routerAdd(
     var whSecret = $secrets.get('AC_WEBHOOK_SECRET') || ''
     var authHeader = e.request.header.get('Authorization') || ''
 
+    function canonicalize(obj) {
+      if (obj === null || obj === undefined) return 'null'
+      if (typeof obj !== 'object') return JSON.stringify(obj)
+      if (Array.isArray(obj)) {
+        var items = []
+        for (var i = 0; i < obj.length; i++) items.push(canonicalize(obj[i]))
+        return '[' + items.join(',') + ']'
+      }
+      var keys = Object.keys(obj)
+        .filter(function (k) {
+          return obj[k] !== undefined
+        })
+        .sort()
+      var parts = []
+      for (var i = 0; i < keys.length; i++)
+        parts.push(JSON.stringify(keys[i]) + ':' + canonicalize(obj[keys[i]]))
+      return '{' + parts.join(',') + '}'
+    }
     function setWH(en) {
       try {
         var pc = $app.findCollectionByNameOrId('com_parametros')
