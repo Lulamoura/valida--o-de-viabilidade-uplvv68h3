@@ -5,7 +5,7 @@
   "version": "R13",
   "route": "/backend/v1/integracao/ac/run-round-2d2a-r13",
   "method": "POST",
-  "execution_enabled": false,
+  "execution_enabled": true,
   "server_side_lock": "armed",
   "executed": false,
   "button_enabled": false,
@@ -85,5 +85,5 @@
     "copy_download_gated": true,
     "full_response_no_truncation": true
   },
-  "note": "R13 frontend evidence control block shipped (R13EvidenceBlock component). Execution gate is DISABLED (execution_enabled: false, button_enabled: false). Server-side single-execution lock is armed via com_parametros key=ac_r13_execution_lock. No HTTP calls performed. No backend changes. R11/R12 locks preserved."
+  "note": "R13 gate flipped from execution_enabled:false to execution_enabled:true on the backend. Frontend bundle R13-UI-20260812-v2 remains unchanged — button_enabled:false as served. Server-side single-execution lock remains armed. No HTTP calls performed. No execution. R11/R12 locks preserved."
 }
