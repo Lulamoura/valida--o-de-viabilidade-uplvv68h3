@@ -17,6 +17,7 @@ import { RoundEvidenceBlock } from '@/components/foundation/RoundEvidenceBlock'
 import { R9EvidenceBlock } from '@/components/foundation/R9EvidenceBlock'
 import { R10EvidenceBlock } from '@/components/foundation/R10EvidenceBlock'
 import { R11EvidenceBlock } from '@/components/foundation/R11EvidenceBlock'
+import { R12EvidenceBlock } from '@/components/foundation/R12EvidenceBlock'
 
 export function IntegrationTestsTab() {
   const [loading, setLoading] = useState<string | null>(null)
@@ -210,9 +211,11 @@ export function IntegrationTestsTab() {
 
       <R11EvidenceBlock />
 
+      <R12EvidenceBlock />
+
       <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground font-mono py-2">
         <GitCommit className="h-3 w-3" />
-        <span>Bundle version: R11-FIX-20260811-v2</span>
+        <span>Bundle version: R12-UI-20260812-v1</span>
       </div>
     </div>
   )
