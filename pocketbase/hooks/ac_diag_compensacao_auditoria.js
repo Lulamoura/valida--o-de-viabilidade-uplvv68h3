@@ -4,7 +4,7 @@ routerAdd(
   (e) => {
     var ROUTE_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v1'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-auditoria'
-    var EXECUTION_ENABLED = false
+    var EXECUTION_ENABLED = true
     var LOCK_KEY = 'ac_diag_compensacao_auditoria_lock'
 
     var DIAGNOSTIC_VERSION = 'R13-DIAG-TRANSPORTE-20260812-v1'
