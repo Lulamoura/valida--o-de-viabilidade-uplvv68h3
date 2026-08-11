@@ -27,6 +27,7 @@ interface R11Evidence {
 
 const SESSION_KEY = 'comercial_2d2a_r11_http_response_raw'
 const ROUTE_PATH = '/backend/v1/integracao/ac/run-round-2d2a-r11'
+const BUILD_VERSION = 'R11-FIX-20260811-v2'
 
 function loadFromSession(): R11Evidence | null {
   try {
@@ -151,6 +152,9 @@ export function R11EvidenceBlock() {
         <CardTitle className="flex items-center gap-2">
           <Lock className="h-4 w-4" />
           Full Round (R11) — Resposta HTTP Capturada
+          <Badge variant="outline" className="ml-auto text-xs font-mono">
+            {BUILD_VERSION}
+          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -237,8 +241,14 @@ export function R11EvidenceBlock() {
         )}
 
         {!evidence && !executing && (
-          <div className="text-sm text-muted-foreground">
-            Nenhuma evidência R11 capturada. Clique em "Full Round (R11)" e confirme para executar.
+          <div className="space-y-1">
+            <div className="text-sm text-muted-foreground">
+              Nenhuma evidência R11 capturada. Clique em "Full Round (R11)" e confirme para
+              executar.
+            </div>
+            <div className="text-xs text-muted-foreground font-mono">
+              Bundle: {BUILD_VERSION} | Route: POST {ROUTE_PATH}
+            </div>
           </div>
         )}
       </CardContent>

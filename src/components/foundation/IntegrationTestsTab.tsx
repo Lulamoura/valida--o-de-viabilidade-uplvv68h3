@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ShieldCheck, Play, Loader2, AlertTriangle } from 'lucide-react'
+import { ShieldCheck, Play, Loader2, AlertTriangle, GitCommit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -209,6 +209,11 @@ export function IntegrationTestsTab() {
       <R10EvidenceBlock />
 
       <R11EvidenceBlock />
+
+      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground font-mono py-2">
+        <GitCommit className="h-3 w-3" />
+        <span>Bundle version: R11-FIX-20260811-v2</span>
+      </div>
     </div>
   )
 }

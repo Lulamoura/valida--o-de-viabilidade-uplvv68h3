@@ -1,5 +1,16 @@
 {
   "executed": false,
   "button": "Full Round (R11)",
-  "route": "/backend/v1/integracao/ac/run-round-2d2a-r11"
+  "route": "/backend/v1/integracao/ac/run-round-2d2a-r11",
+  "method": "POST",
+  "bundle_version": "R11-FIX-20260811-v2",
+  "binding_verified": true,
+  "initial_state": "empty",
+  "session_key": "comercial_2d2a_r11_http_response_raw",
+  "captured_from_success": "HTTP_RESPONSE",
+  "captured_from_error": "FETCH_ERROR",
+  "single_execution_per_session": true,
+  "copy_download_condition": "captured_from === HTTP_RESPONSE && raw_response filled",
+  "file_prefix": "r11-http-response-",
+  "note": "R11EvidenceBlock performs real authenticated POST fetch to the route. No pre-loaded manifest or mock content. Build version marker visible in UI for deployment verification."
 }
