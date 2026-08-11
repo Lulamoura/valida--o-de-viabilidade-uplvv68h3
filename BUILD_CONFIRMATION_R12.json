@@ -1,0 +1,38 @@
+{
+  "version": "R12",
+  "executed": false,
+  "button": "Full Round (R12)",
+  "route": "/backend/v1/integracao/ac/run-round-2d2a-r12",
+  "method": "POST",
+  "bundle_version": "R12-READY-20260811-v1",
+  "execution_enabled": false,
+  "binding_verified": true,
+  "initial_state": "empty",
+  "server_side_lock": {
+    "armed": true,
+    "mechanism": "com_parametros key=ac_r12_execution_lock",
+    "persists_across_restarts": true,
+    "engaged_on_first_call": true,
+    "blocks_re_execution": true
+  },
+  "tests_included": [
+    "1_disabled_returns_503",
+    "2_wrong_method_get",
+    "3_invalid_content_type",
+    "4_empty_body",
+    "5_malformed_body",
+    "6_oversized_body",
+    "7_missing_signature",
+    "8_invalid_signature"
+  ],
+  "activecampaign_calls": 0,
+  "webhook_flag_final_state": "false",
+  "webhook_fix": {
+    "missing_signature": "Returns e.json(401, {error:'missing_signature', message:'Assinatura ausente'}) — same mechanism as 503/405 branches",
+    "invalid_signature": "Returns e.json(401, {error:'invalid_signature', message:'Assinatura invalida'}) — both length check and comparison use e.json, no e.unauthorizedError",
+    "mechanism": "Both 401 branches use e.json() exactly like the JSON 503 and 405 branches — no throw, no BadRequest, no raw text 400"
+  },
+  "r11_lock_preserved": true,
+  "r11_lock_mechanism": "com_parametros key=ac_r11_execution_lock — untouched, remains consumed and permanently locked",
+  "note": "R12 execution gate is DISABLED. Server-side single-execution lock is armed via com_parametros key=ac_r12_execution_lock. The first authenticated POST will engage the lock and return readiness evidence without executing tests; all subsequent calls return a non-executing locked response. No tests executed during deploy — executed:false until manually enabled."
+}

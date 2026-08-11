@@ -55,7 +55,8 @@ routerAdd('POST', '/backend/v1/integracao/ac/webhook', (e) => {
   var canonicalStr = canonicalize(body)
 
   var expectedSig = $security.hs256(canonicalStr, webhookSecret)
-  if (expectedSig.length !== signature.length) return e.unauthorizedError('Assinatura invalida')
+  if (expectedSig.length !== signature.length)
+    return e.json(401, { error: 'invalid_signature', message: 'Assinatura invalida' })
   var sigDiff = 0
   for (var si = 0; si < expectedSig.length; si++)
     sigDiff |= expectedSig.charCodeAt(si) ^ signature.charCodeAt(si)
