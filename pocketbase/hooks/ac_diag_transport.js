@@ -2,7 +2,7 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/diag-transport',
   (e) => {
-    var EXECUTION_ENABLED = false
+    var EXECUTION_ENABLED = true
 
     var BUNDLE_VERSION = 'R13-DIAG-TRANSPORTE-20260812-v1'
     var DIAG_ROUTE = '/backend/v1/integracao/ac/diag-transport'
