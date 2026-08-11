@@ -28,8 +28,8 @@ interface R12Evidence {
 const SESSION_KEY = 'ac_r12_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/run-round-2d2a-r12'
 const BACKEND_VERSION = 'R12-GATE-20260812-v1'
-const FRONTEND_BUNDLE = 'R12-UI-20260812-v1'
-const EXECUTION_ENABLED = false
+const FRONTEND_BUNDLE = 'R12-UI-20260812-v2'
+const EXECUTION_ENABLED = true
 const SERVER_SIDE_LOCK = 'armed'
 
 function loadFromSession(): R12Evidence | null {
@@ -284,8 +284,8 @@ export function R12EvidenceBlock() {
         {!evidence && !executing && (
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">
-              Nenhuma evidência R12 capturada. A execução está desativada — nenhum teste será
-              executado até que execution_enabled seja ativado.
+              Nenhuma evidência R12 capturada. Clique em "Full Round (R12)" e confirme para
+              executar.
             </div>
             <div className="text-xs text-muted-foreground font-mono">
               Bundle: {FRONTEND_BUNDLE} | Route: POST {ROUTE_PATH}
