@@ -17,9 +17,9 @@ interface AuditEvidence {
 const SESSION_KEY = 'ac_diag_compensacao_audit_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-auditoria'
 const AUDIT_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v1'
-const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v1'
-const EXECUTION_ENABLED = false
-const BUTTON_ENABLED = false
+const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v2'
+const EXECUTION_ENABLED = true
+const BUTTON_ENABLED = true
 const AUTHENTICATED = true
 const READ_ONLY = true
 const SERVER_SIDE_LOCK = 'armed'

@@ -224,7 +224,7 @@ export function IntegrationTestsTab() {
 
       <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground font-mono py-2">
         <GitCommit className="h-3 w-3" />
-        <span>Bundle version: R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v1</span>
+        <span>Bundle version: R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v2</span>
       </div>
     </div>
   )
