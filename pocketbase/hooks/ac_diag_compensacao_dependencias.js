@@ -2,7 +2,7 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/diag-compensacao-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v5'
+    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v6'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
     var LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
     var DEP_QUERY_LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
@@ -35,6 +35,12 @@ routerAdd(
       concurrent_double_execution_prevented: true,
       pocketbase_version_confirmed: POCKETBASE_VERSION,
       apis_verified_against_version: true,
+      lock_fallback_creation_removed: true,
+      strict_armed_equality_required: true,
+      same_transactional_lock_object_saved: true,
+      saved_lock_variable: 'txLockRec',
+      lock_missing_aborts: true,
+      reference_filters_literal_and_complete: true,
     }
 
     var FIXED_IDS = {
@@ -177,7 +183,6 @@ routerAdd(
       }
     }
 
-    var compensationLockState = readLockState(LOCK_KEY)
     var depQueryLockState = readLockState(DEP_QUERY_LOCK_KEY)
     var origAuditLockState = readLockState(ORIG_AUDIT_LOCK_KEY)
 
@@ -218,24 +223,17 @@ routerAdd(
         concurrent_double_execution_prevented: CONCURRENT_DOUBLE_EXECUTION_PREVENTED,
         pocketbase_version_confirmed: POCKETBASE_VERSION,
         apis_verified_against_version: true,
+        lock_fallback_creation_removed: true,
+        strict_armed_equality_required: true,
+        same_transactional_lock_object_saved: true,
+        saved_lock_variable: 'txLockRec',
+        lock_missing_aborts: true,
+        reference_filters_literal_and_complete: true,
       }
       for (var k in overrides) {
         base[k] = overrides[k]
       }
       return base
-    }
-
-    if (compensationLockState === 'consumed') {
-      return e.json(
-        200,
-        buildCommonResponse({
-          lock_state: 'consumed',
-          compensation_lock: 'consumed',
-          compensation_executed: true,
-          deletion_executed: true,
-          message: 'Compensation already executed — independent lock prevents re-execution',
-        }),
-      )
     }
 
     var preconditionsMet = false
@@ -246,7 +244,7 @@ routerAdd(
     var postValidation = null
     var txError = null
     var lockConsumedInsideTx = false
-    var concurrencyAbort = false
+    var lockNotArmed = false
 
     try {
       $app.runInTransaction(function (txApp) {
@@ -260,20 +258,12 @@ routerAdd(
           return txApp.findRecordsByFilter(name, filter, '', 100, 0)
         }
 
-        // Concurrency guard: re-check lock INSIDE the transaction using txApp
-        var txLockRec = null
-        try {
-          txLockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
-          var txLockVal = txLockRec.getString('valor')
-          if (txLockVal && txLockVal !== 'armed') {
-            concurrencyAbort = true
-            throw new Error(
-              'Concurrency guard: lock already consumed inside transaction — aborting',
-            )
-          }
-        } catch (err) {
-          if (concurrencyAbort) throw err
-          // Lock record doesn't exist yet — treat as armed, proceed
+        // Strict lock guard — locate lock inside transaction, no fallback
+        var txLockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
+        var txLockVal = txLockRec.getString('valor')
+        if (txLockVal !== 'armed') {
+          lockNotArmed = true
+          throw new Error('Compensation lock is not strictly armed')
         }
 
         var vinculo = null
@@ -560,28 +550,15 @@ routerAdd(
           throw new Error('Post-validation failed — native rollback triggered')
         }
 
-        // Transactional lock persistence via txApp
-        var pc = txApp.findCollectionByNameOrId('com_parametros')
-        var lockRec = null
-        if (txLockRec) {
-          lockRec = txLockRec
-        } else {
-          try {
-            lockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
-          } catch (_) {
-            lockRec = new Record(pc)
-            lockRec.set('chave', LOCK_KEY)
-            lockRec.set('versao', 1)
-          }
-        }
-        lockRec.set('valor', 'consumed')
-        lockRec.set('ativo', true)
-        lockRec.set(
+        // Persist same transactional lock object (no fallback creation)
+        txLockRec.set('valor', 'consumed')
+        txLockRec.set('ativo', true)
+        txLockRec.set(
           'descricao',
           'Compensation dependencias single-execution lock (consumed inside transaction on successful commit)',
         )
-        lockRec.set('tipo', 'lock')
-        txApp.save(lockRec)
+        txLockRec.set('tipo', 'lock')
+        txApp.save(txLockRec)
         lockConsumedInsideTx = true
       })
     } catch (err) {
@@ -589,20 +566,31 @@ routerAdd(
     }
 
     if (txError) {
+      var errorLockState = 'armed'
+      if (lockNotArmed) {
+        try {
+          var errLockRec = $app.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
+          var errLockVal = errLockRec.getString('valor')
+          errorLockState = errLockVal === 'armed' ? 'armed' : 'consumed'
+        } catch (_) {
+          errorLockState = 'missing'
+        }
+      }
       return e.json(
         200,
         buildCommonResponse({
-          lock_state: concurrencyAbort ? 'consumed' : 'armed',
-          compensation_lock: concurrencyAbort ? 'consumed' : 'armed',
+          lock_state: errorLockState,
+          compensation_lock: errorLockState,
           compensation_executed: false,
           deletion_executed: false,
           preconditions_met: preconditionsMet,
           transaction_error: txError,
           lock_consumed_inside_transaction: lockConsumedInsideTx,
-          concurrency_abort: concurrencyAbort,
+          lock_not_armed: lockNotArmed,
           captured_records_before_deletion: capturedRecords,
-          message: concurrencyAbort
-            ? 'Concurrency guard: lock already consumed by another request inside transaction — aborted without deletion'
+          message: lockNotArmed
+            ? 'Compensation lock is not strictly armed — transaction aborted, nothing deleted. Lock state: ' +
+              errorLockState
             : 'Transaction failed — native rollback via ' +
               NATIVE_TRANSACTION_API +
               ', all records restored. Lock remains armed. Rollback-by-manual-recreation is prohibited.',

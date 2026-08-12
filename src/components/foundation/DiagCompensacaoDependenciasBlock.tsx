@@ -25,8 +25,8 @@ interface CompEvidence {
 
 const SESSION_KEY = 'ac_diag_compensacao_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
-const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v5'
-const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v5'
+const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v6'
+const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v6'
 const NATIVE_TRANSACTION_API = '$app.runInTransaction'
 const RECORD_LOOKUP_API = 'txApp.findRecordById'
 const RECORD_DELETE_API = 'txApp.delete'
@@ -74,6 +74,11 @@ const ORIGINAL_AUDIT_LOCK = 'consumed'
 const NONEXISTENT_DB_COLLECTION_API_USED = false
 const LOCK_PERSISTED_TRANSACTIONALLY = true
 const CONCURRENT_DOUBLE_EXECUTION_PREVENTED = true
+const LOCK_FALLBACK_CREATION_REMOVED = true
+const STRICT_ARMED_EQUALITY_REQUIRED = true
+const SAME_TRANSACTIONAL_LOCK_OBJECT_SAVED = true
+const SAVED_LOCK_VARIABLE = 'txLockRec'
+const LOCK_MISSING_ABORTS = true
 const EXPECTED_COUNTS_BEFORE = {
   com_eventos_integracao: 15,
   com_execucoes_sincronizacao: 11,
@@ -231,7 +236,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Estado da Compensação (v5 — real APIs, concurrency guard, transactional lock)
+            Estado da Compensação (v6 — strict lock guard, no fallback, same transactional object)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">transactional_ready:</span>
@@ -278,6 +283,34 @@ export function DiagCompensacaoDependenciasBlock() {
             </Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">lock_fallback_creation_removed:</span>
+            <Badge variant={LOCK_FALLBACK_CREATION_REMOVED ? 'default' : 'destructive'}>
+              {String(LOCK_FALLBACK_CREATION_REMOVED)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">strict_armed_equality_required:</span>
+            <Badge variant={STRICT_ARMED_EQUALITY_REQUIRED ? 'default' : 'destructive'}>
+              {String(STRICT_ARMED_EQUALITY_REQUIRED)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">same_transactional_lock_object_saved:</span>
+            <Badge variant={SAME_TRANSACTIONAL_LOCK_OBJECT_SAVED ? 'default' : 'destructive'}>
+              {String(SAME_TRANSACTIONAL_LOCK_OBJECT_SAVED)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">saved_lock_variable:</span>
+            <code className="text-foreground">{SAVED_LOCK_VARIABLE}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">lock_missing_aborts:</span>
+            <Badge variant={LOCK_MISSING_ABORTS ? 'default' : 'destructive'}>
+              {String(LOCK_MISSING_ABORTS)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">pocketbase_version_confirmed:</span>
             <code className="text-foreground">{POCKETBASE_VERSION}</code>
           </div>
@@ -313,7 +346,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Precondition Counts (v5 — corrected per-collection mapping)
+            Precondition Counts (v6 — corrected per-collection mapping)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">expected_before:</span>
@@ -352,7 +385,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Expected Identity (v5 — literal audited values, no invented fields)
+            Expected Identity (v6 — literal audited values, no invented fields)
           </div>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
@@ -421,13 +454,14 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Structural Pseudocode (v5 — real APIs only, exclusive txApp usage)
+            Structural Pseudocode (v6 — strict lock guard, no fallback, same transactional object)
           </div>
           <pre className="text-xs font-mono whitespace-pre-wrap break-all text-muted-foreground">
             {`$app.runInTransaction(function(txApp) {
-  // 1. Concurrency guard — re-check lock via txApp
+  // 1. Strict lock guard — locate lock inside transaction, no fallback
   txLockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
-  if (txLockRec.valor !== 'armed') throw → rollback
+  txLockVal = txLockRec.getString('valor')
+  if (txLockVal !== 'armed') throw → rollback
 
   // 2. Precondition counts via txApp.countRecords
   countsBefore = { eventos: txApp.countRecords('com_eventos_integracao'), ... }
@@ -454,7 +488,7 @@ export function DiagCompensacaoDependenciasBlock() {
   // 8. Post-deletion validation via txApp.countRecords + txApp.findRecordById
   //    If validation fails → throw → native rollback
 
-  // 9. Transactional lock persistence via txApp
+  // 9. Persist same transactional lock object (no fallback creation)
   txLockRec.set('valor', 'consumed')
   txApp.save(txLockRec)  // only commits on success
 })`}
