@@ -1,6 +1,6 @@
-# R13 Diagnóstico de Compensação — Auditoria Somente-Leitura (v3)
+# R13 Diagnóstico de Compensação — Auditoria Somente-Leitura (v4)
 
-## Relatório de Publicação v3
+## Relatório de Publicação v4
 
 ### Versões Concretas
 
@@ -8,7 +8,7 @@
 | --------------------- | ----------------------------------------------------- |
 | Backend hook          | `ac_diag_compensacao_auditoria`                       |
 | Backend route version | `R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v3`          |
-| Frontend bundle       | `R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v3` |
+| Frontend bundle       | `R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v4` |
 
 ### Rota Somente-Leitura
 
@@ -38,11 +38,11 @@ GET /backend/v1/integracao/ac/diag-compensacao-auditoria
 | executed                   | `false`        |
 | deletion_executed          | não verificado |
 | v7 lock state              | `armed`        |
-| data writes                | `0`            |
-| ActiveCampaign calls       | `0`            |
-| external calls             | `0`            |
+| data writes                | não verificado |
+| ActiveCampaign calls       | não verificado |
+| external calls             | não verificado |
 | locks consumed             | `0`            |
-| locks modified             | `0`            |
+| locks modified             | não verificado |
 | client parameters accepted | `0`            |
 
 ### IDs Fixos
@@ -95,7 +95,7 @@ GET /backend/v1/integracao/ac/diag-compensacao-auditoria
 - `sistema_origem`: `activecampaign`
 - `status`: `completed`
 
-### Campos JSON de Resposta (v3)
+### Campos JSON de Resposta (v3 — backend não modificado)
 
 | Campo                        | Descrição                                                                                                                                      |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -127,6 +127,44 @@ GET /backend/v1/integracao/ac/diag-compensacao-auditoria
 | `error`                      | (somente em falha) mensagem de erro truncada                                                                                                   |
 | `message`                    | Descrição legível do resultado                                                                                                                 |
 
+### v4 Correção Frontend — Contrato de Validade
+
+O frontend v4 não fabrica valores quando a resposta está ausente, inválida ou incompleta. O contrato de validade exige **todas** as condições abaixo, avaliadas em conjunto:
+
+1. `captured_from === "HTTP_RESPONSE"`
+2. JSON foi parseado com sucesso
+3. HTTP status entre 200 e 299 (inclusive)
+4. `query_succeeded === true`
+5. `lock_state_read_succeeded === true`
+6. `dependency_query_succeeded === true`
+7. `records_created` é número finito
+8. `records_updated` é número finito
+9. `records_deleted` é número finito
+10. `locks_modified` é número finito
+11. `activecampaign_calls` é número finito
+12. `external_calls` é número finito
+13. `dependency_count` é número finito
+14. `v7_lock.state` é string
+15. `v7_lock.modified` é boolean
+16. `counts` é objeto com números para as 4 coleções
+17. `target_identity_verified` é objeto com booleanos para os 3 registros
+
+Quando qualquer condição falha:
+
+- Campos afetados mostram "não verificado nesta sessão"
+- Aviso visível: "Resposta inválida ou incompleta — evidência não homologável"
+- `data_writes` não é calculado
+- `deletion_executed` não é inferido
+- Chamadas externas zero não são inferidas
+- Resposta bruta é preservada para diagnóstico
+
+Quando todas as condições são satisfeitas:
+
+- `data_writes = records_created + records_updated + records_deleted`
+- `deletion_executed = records_deleted > 0`
+- `activecampaign_calls` = valor literal recebido
+- `v7_lock_state` = valor literal recebido
+
 ### v7 Preservação
 
 - Hook `pocketbase/hooks/ac_diag_compensacao_dependencias.js`: **não modificado**
@@ -135,276 +173,24 @@ GET /backend/v1/integracao/ac/diag-compensacao-auditoria
 - Lock consumido: **não**
 - Compensação v7: **publicada, não homologada, não autorizada para execução**
 
-### Diff v2 → v3 (Resumo de Mudanças)
+### Diff v3 → v4 (Resumo de Mudanças Frontend)
 
-1. **ROUTE_VERSION**: `v2` → `v3`
-2. **FIXED_IDS**: Adicionado `com_vinculos_externos: 'phzmobi8mfb34ha'`
-3. **Removido**: `FIXED_FILTERS` (substituído por `findRecordById` direto)
-4. **Removido**: `safeFindById`, `safeFind`, `safeCount`, `readLockState` — todas as funções que convertiam falhas em `null`/`[]`/`-1`/`"unknown"`
-5. **Adicionado**: `EXPECTED_IDENTITY` com identidades literais completas para os três registros
-6. **Link consultado via**: `$app.findRecordById("com_vinculos_externos", "phzmobi8mfb34ha")` (não mais via `external_id` em `findRecordsByFilter`)
-7. **Fail-closed**: Todas as leituras operacionais envolvidas em um único `try/catch` que retorna erro 500 explícito — nenhum valor seguro falsificado
-8. **Identidade validada**: `verifyIdentity()` compara cada campo do registro com o esperado e retorna `true`/`false` por registro
-9. **Dependency query**: Limite mantido em `100` (não `1`) — inventaria todas as ocorrências
-10. **Novos campos JSON**: `query_succeeded`, `target_identity_verified` (per-record), `target_identity_details`, `dependency_query_succeeded`, `dependency_filter`, `dependency_limit`, `dependency_count`, `lock_state_read_succeeded`, `error` (em falha)
-11. **Lock lido diretamente**: `$app.findFirstRecordByData('com_parametros', 'chave', V7_LOCK_KEY)` sem fallback — ausência é erro
-12. **Proibições**: Nenhum `save`, `delete`, `runInTransaction`, `new Record`, HTTP/fetch, ActiveCampaign SDK, ou alteração de lock
+1. **FRONTEND_BUNDLE**: `v3` → `v4`
+2. **Removido**: Todos os fallbacks que fabricam `0` ou `false` quando a resposta está ausente, inválida ou incompleta
+3. **Adicionado**: Função `validateEvidence()` que verifica o contrato completo de validade antes de exibir qualquer valor como evidência
+4. **Adicionado**: Aviso visível "Resposta inválida ou incompleta — evidência não homologável" quando o contrato falha
+5. **Adicionado**: Validação explícita de tipo para cada campo (número, string, boolean, objeto)
+6. **Adicionado**: Exibição de `evidence_valid` no painel de estado
+7. **Adicionado**: Exibição de identidades verificadas e contagens apenas quando válido
+8. **Modificado**: `data_writes`, `deletion_executed`, `activecampaign_calls`, `v7_lock_state` só são calculados/exibidos quando o contrato é satisfeito
+9. **Modificado**: Copy/Download habilitados para qualquer resposta capturada (não apenas HTTP_RESPONSE) para fins de diagnóstico
+10. **Backend**: Permanece v3, byte-for-byte idêntico
+11. **Rota**: Permanece v3
 
-### Código Completo do Handler v3
+### Reversões
 
-Arquivo: `pocketbase/hooks/ac_diag_compensacao_auditoria.js`
-
-```javascript
-routerAdd(
-  'GET',
-  '/backend/v1/integracao/ac/diag-compensacao-auditoria',
-  (e) => {
-    var ROUTE_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v3'
-    var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-auditoria'
-
-    var FIXED_IDS = {
-      com_vinculos_externos: 'phzmobi8mfb34ha',
-      com_eventos_integracao: 'pq4npvruaak9gpb',
-      com_execucoes_sincronizacao: '62otoics23ul0vy',
-    }
-
-    var EXPECTED_IDENTITY = {
-      com_vinculos_externos: {
-        id: 'phzmobi8mfb34ha',
-        created: '2026-08-11T20:38:39.951Z',
-        collection_name: 'com_contatos',
-        external_id: 'DIAG-TRANSPORT-FN-C1',
-        external_type: 'contact',
-        record_id: 'hfjq2q1olefske7',
-        sistema_origem: 'activecampaign',
-      },
-      com_eventos_integracao: {
-        id: 'pq4npvruaak9gpb',
-        created: '2026-08-11T20:38:39.950Z',
-        evento_tipo: 'contact_create',
-        external_id: 'DIAG-TRANSPORT-FN-C1',
-        idempotency_key: 'e860fa5a9d8615c44a7db52b909b70b816f80b74123b96780e7bb309e53d34ec',
-        sistema_origem: 'activecampaign',
-        status: 'processed',
-      },
-      com_execucoes_sincronizacao: {
-        id: '62otoics23ul0vy',
-        created: '2026-08-11T20:38:39.948Z',
-        inicio: '2026-08-11T20:38:39.948Z',
-        fim: '2026-08-11T20:38:39.952Z',
-        sistema_origem: 'activecampaign',
-        status: 'completed',
-      },
-    }
-
-    var V7_LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
-
-    var INVOLVED_COLLECTIONS = [
-      'com_vinculos_externos',
-      'com_eventos_integracao',
-      'com_execucoes_sincronizacao',
-      'com_ocorrencias_qualidade',
-    ]
-
-    var authId = e.auth ? e.auth.id : ''
-    if (!authId) return e.unauthorizedError('Autenticacao necessaria')
-
-    var isSA = false
-    try {
-      var p = $app.findRecordById('com_perfis', e.auth.getString('perfil_id'))
-      if (p && p.getString('slug') === 'superadministrador') isSA = true
-    } catch (_) {}
-    if (!isSA) {
-      try {
-        var sp = $app.findFirstRecordByData('com_perfis', 'slug', 'superadministrador')
-        var b = $app.findRecordsByFilter(
-          'com_usuarios_equipes',
-          "usuario_id = '" + authId + "' && perfil_id = '" + sp.id + "' && ativo = true",
-          '',
-          1,
-          0,
-        )
-        if (b && b.length > 0) isSA = true
-      } catch (_) {}
-    }
-    if (!isSA) return e.forbiddenError('Apenas superadministrador')
-
-    function verifyIdentity(record, expected, fields) {
-      var verified = true
-      var actual = {}
-      for (var i = 0; i < fields.length; i++) {
-        var f = fields[i]
-        if (f === 'id') {
-          actual[f] = record.id
-        } else {
-          actual[f] = record.getString(f)
-        }
-        if (actual[f] !== expected[f]) verified = false
-      }
-      return { verified: verified, actual: actual }
-    }
-
-    var vinculoFields = [
-      'id',
-      'created',
-      'collection_name',
-      'external_id',
-      'external_type',
-      'record_id',
-      'sistema_origem',
-    ]
-    var eventoFields = [
-      'id',
-      'created',
-      'evento_tipo',
-      'external_id',
-      'idempotency_key',
-      'sistema_origem',
-      'status',
-    ]
-    var execucaoFields = ['id', 'created', 'inicio', 'fim', 'sistema_origem', 'status']
-
-    var queryError = null
-
-    var vinculo = null
-    var evento = null
-    var execucao = null
-    var ocorrencias = null
-    var counts = null
-    var lockRec = null
-    var v7LockState = null
-
-    try {
-      vinculo = $app.findRecordById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos)
-      evento = $app.findRecordById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
-      execucao = $app.findRecordById(
-        'com_execucoes_sincronizacao',
-        FIXED_IDS.com_execucoes_sincronizacao,
-      )
-      ocorrencias = $app.findRecordsByFilter(
-        'com_ocorrencias_qualidade',
-        'execucao_id = "62otoics23ul0vy"',
-        'created',
-        100,
-        0,
-      )
-      counts = {
-        com_vinculos_externos: $app.countRecords('com_vinculos_externos'),
-        com_eventos_integracao: $app.countRecords('com_eventos_integracao'),
-        com_execucoes_sincronizacao: $app.countRecords('com_execucoes_sincronizacao'),
-        com_ocorrencias_qualidade: $app.countRecords('com_ocorrencias_qualidade'),
-      }
-      lockRec = $app.findFirstRecordByData('com_parametros', 'chave', V7_LOCK_KEY)
-      v7LockState = lockRec.getString('valor')
-    } catch (err) {
-      queryError = String(err).substring(0, 500)
-    }
-
-    if (queryError) {
-      return e.json(500, {
-        route_version: ROUTE_VERSION,
-        route: ROUTE_PATH,
-        method: 'GET',
-        read_only: true,
-        client_parameters_accepted: 0,
-        query_succeeded: false,
-        target_identity_verified: false,
-        dependency_query_succeeded: false,
-        dependency_count: null,
-        counts: null,
-        lock_state_read_succeeded: false,
-        v7_lock: {
-          key: V7_LOCK_KEY,
-          state: null,
-          modified: false,
-        },
-        error: queryError,
-        records_created: 0,
-        records_updated: 0,
-        records_deleted: 0,
-        locks_modified: 0,
-        activecampaign_calls: 0,
-        external_calls: 0,
-        message:
-          'Audit FAILED — a query, count, or lock read threw an error. No conclusion of zero dependencies or safety is emitted. No writes, deletions, or lock changes occurred.',
-      })
-    }
-
-    var vinculoIdentity = verifyIdentity(
-      vinculo,
-      EXPECTED_IDENTITY.com_vinculos_externos,
-      vinculoFields,
-    )
-    var eventoIdentity = verifyIdentity(
-      evento,
-      EXPECTED_IDENTITY.com_eventos_integracao,
-      eventoFields,
-    )
-    var execucaoIdentity = verifyIdentity(
-      execucao,
-      EXPECTED_IDENTITY.com_execucoes_sincronizacao,
-      execucaoFields,
-    )
-
-    var ocorrenciasInventory = []
-    for (var k = 0; k < ocorrencias.length; k++) {
-      var oc = ocorrencias[k]
-      ocorrenciasInventory.push({
-        id: oc.id,
-        execucao_id: oc.getString('execucao_id'),
-        tipo: oc.getString('tipo'),
-        severidade: oc.getString('severidade'),
-        descricao: oc.getString('descricao'),
-        resolvida: oc.getBool('resolvida'),
-        created: oc.getString('created'),
-      })
-    }
-
-    return e.json(200, {
-      route_version: ROUTE_VERSION,
-      route: ROUTE_PATH,
-      method: 'GET',
-      read_only: true,
-      client_parameters_accepted: 0,
-      query_succeeded: true,
-      target_identity_verified: {
-        com_vinculos_externos: vinculoIdentity.verified,
-        com_eventos_integracao: eventoIdentity.verified,
-        com_execucoes_sincronizacao: execucaoIdentity.verified,
-      },
-      target_identity_details: {
-        com_vinculos_externos: vinculoIdentity.actual,
-        com_eventos_integracao: eventoIdentity.actual,
-        com_execucoes_sincronizacao: execucaoIdentity.actual,
-      },
-      expected_identity: EXPECTED_IDENTITY,
-      fixed_ids: FIXED_IDS,
-      involved_collections: INVOLVED_COLLECTIONS,
-      dependency_query_succeeded: true,
-      dependency_filter: 'execucao_id = "62otoics23ul0vy"',
-      dependency_limit: 100,
-      dependency_count: ocorrencias.length,
-      dependency_items: ocorrenciasInventory,
-      counts: counts,
-      lock_state_read_succeeded: true,
-      v7_lock: {
-        key: V7_LOCK_KEY,
-        state: v7LockState,
-        modified: false,
-      },
-      records_created: 0,
-      records_updated: 0,
-      records_deleted: 0,
-      locks_modified: 0,
-      activecampaign_calls: 0,
-      external_calls: 0,
-      message:
-        'Read-only audit completed (v3). All queries succeeded. No records were created, updated, or deleted. No locks were modified or consumed. No external calls were made.',
-    })
-  },
-  $apis.requireAuth(),
-)
-```
+- `package.json`: `version` restaurada de `"0.0.106"` para `"0.0.105"`
+- `src/lib/pocketbase/schema.json`: `generatedAt` restaurado de `"2026-08-12T21:11:56.119Z"` para `"2026-08-12T20:44:42.987Z"`
 
 ### Proibições Cumpridas
 
@@ -422,14 +208,42 @@ routerAdd(
 - [x] Nenhuma chamada HTTP/fetch/request no handler v3
 - [x] Nenhuma credencial ActiveCampaign no handler v3
 - [x] Lock lido diretamente — ausência é erro explícito
-- [x] `safeFindById`, `safeFind`, `safeCount`, `readLockState` totalmente removidos
-- [x] Link consultado via `findRecordById` — `external_id` não usado como identificação de registro
-- [x] Dependency query com limite 100 (não 1)
-- [x] Frontend: version strings em v3
-- [x] Frontend: "não verificado nesta sessão" antes da execução
-- [x] Frontend: valores apenas da resposta HTTP após execução
+- [x] Backend v3 permanece byte-for-byte idêntico (SHA-256: bf731b86a59d8a05135ed343f11e9a1a0a5ce22cf009cf1fd98a8dffe2cba375)
+- [x] Frontend: version strings em v4
+- [x] Frontend: "não verificado nesta sessão" antes da execução ou quando resposta é inválida/incompleta
+- [x] Frontend: valores apenas da resposta HTTP validada após execução
 - [x] Frontend: uma chamada por sessão
 - [x] Frontend: não auto-executado no mount
 - [x] Frontend: botão separado da compensação v7
+- [x] Frontend: nenhum valor fabricado quando resposta é ausente, inválida ou incompleta
+- [x] Frontend: aviso visível quando contrato de validade falha
+- [x] Frontend: raw response preservado para diagnóstico em todos os casos
+
+### Declaração JSON Expressa
+
+```json
+{
+  "audit_route_executed": false,
+  "compensation_executed": false,
+  "records_created": 0,
+  "records_updated": 0,
+  "records_deleted": 0,
+  "locks_modified": 0,
+  "activecampaign_calls": 0,
+  "external_calls": 0,
+  "v7_lock_expected_state": "armed"
+}
+```
+
+### Arquivos Diferentes da Exportação v3
+
+**Arquivos funcionais autorizados:**
+
+1. `src/components/foundation/DiagCompensacaoAuditEvidenceBlock.tsx` — correção v4 do frontend
+2. `REPORT_R13_DIAG_COMPENSACAO_AUDITORIA_PUBLICATION.md` — atualização do relatório para v4
+
+**Reversões obrigatórias:** 3. `package.json` — `version` restaurada de `"0.0.106"` para `"0.0.105"` 4. `src/lib/pocketbase/schema.json` — `generatedAt` restaurado de `"2026-08-12T21:11:56.119Z"` para `"2026-08-12T20:44:42.987Z"`
+
+**Metadados automáticos da plataforma:** 5. `.skip.config.json` — se modificado automaticamente pelo mecanismo interno de build/export da plataforma, não é uma alteração funcional. Diff literal a ser declarado separadamente quando ocorrer.
 
 PARE — Aguardando autorização explícita para execução ou teste.
