@@ -8,6 +8,7 @@ import { NegociosTab } from '@/components/foundation/NegociosTab'
 import { UsuariosTab } from '@/components/foundation/UsuariosTab'
 import { VinculosTab } from '@/components/foundation/VinculosTab'
 import { IntegrationTestsTab } from '@/components/foundation/IntegrationTestsTab'
+import { DiagConsultaDependenciasBlock } from '@/components/foundation/DiagConsultaDependenciasBlock'
 
 export default function Foundation() {
   return (
@@ -53,7 +54,10 @@ export default function Foundation() {
           <ParametrosTab />
         </TabsContent>
         <TabsContent value="integracao">
-          <IntegrationTestsTab />
+          <div className="space-y-4">
+            <IntegrationTestsTab />
+            <DiagConsultaDependenciasBlock />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
