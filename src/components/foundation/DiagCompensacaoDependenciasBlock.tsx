@@ -1,5 +1,14 @@
 import { useState, useRef } from 'react'
-import { Play, Loader2, Lock, Copy, Download, ShieldOff, GitBranch } from 'lucide-react'
+import {
+  Play,
+  Loader2,
+  Lock,
+  Copy,
+  Download,
+  ShieldOff,
+  GitBranch,
+  ShieldCheck,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,8 +25,8 @@ interface CompEvidence {
 
 const SESSION_KEY = 'ac_diag_compensacao_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
-const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v1'
-const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v1'
+const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v2'
+const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v2'
 const FIXED_IDS = {
   com_vinculos_externos: 'phzmobi8mfb34ha',
   com_eventos_integracao: 'pq4npvruaak9gpb',
@@ -25,6 +34,19 @@ const FIXED_IDS = {
 }
 const BUTTON_ENABLED = true
 const COMPENSATION_LOCK = 'armed'
+const TRANSACTIONAL_READY = true
+const DEPENDENCY_QUERY_LOCK = 'consumed'
+const ORIGINAL_AUDIT_LOCK = 'consumed'
+const EXPECTED_COUNTS_BEFORE = {
+  com_eventos_integracao: 15,
+  com_execucoes_sincronizacao: 11,
+  com_vinculos_externos: 10,
+}
+const EXPECTED_COUNTS_AFTER = {
+  com_eventos_integracao: 14,
+  com_execucoes_sincronizacao: 10,
+  com_vinculos_externos: 9,
+}
 
 function loadFromSession(): CompEvidence | null {
   try {
@@ -172,11 +194,25 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Estado da Compensação
+            Estado da Compensação (v2 — native transaction)
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">transactional_ready:</span>
+            <Badge variant={TRANSACTIONAL_READY ? 'default' : 'destructive'}>
+              {String(TRANSACTIONAL_READY)}
+            </Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">compensation_lock:</span>
             <Badge variant="secondary">{COMPENSATION_LOCK}</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">dependency_query_lock:</span>
+            <Badge variant="secondary">{DEPENDENCY_QUERY_LOCK}</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">original_audit_lock:</span>
+            <Badge variant="secondary">{ORIGINAL_AUDIT_LOCK}</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">compensation_executed:</span>
@@ -189,6 +225,44 @@ export function DiagCompensacaoDependenciasBlock() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">activecampaign_calls:</span>
             <Badge variant="outline">0</Badge>
+          </div>
+        </div>
+
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+          <div className="text-xs font-medium text-muted-foreground mb-1">
+            Precondition Counts (v2 — corrected per-collection mapping)
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">expected_before:</span>
+            <code className="text-foreground">
+              eventos={EXPECTED_COUNTS_BEFORE.com_eventos_integracao}
+            </code>
+            <code className="text-foreground">
+              execuções={EXPECTED_COUNTS_BEFORE.com_execucoes_sincronizacao}
+            </code>
+            <code className="text-foreground">
+              vínculos={EXPECTED_COUNTS_BEFORE.com_vinculos_externos}
+            </code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">expected_after:</span>
+            <code className="text-foreground">
+              eventos={EXPECTED_COUNTS_AFTER.com_eventos_integracao}
+            </code>
+            <code className="text-foreground">
+              execuções={EXPECTED_COUNTS_AFTER.com_execucoes_sincronizacao}
+            </code>
+            <code className="text-foreground">
+              vínculos={EXPECTED_COUNTS_AFTER.com_vinculos_externos}
+            </code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">rollback_by_manual_recreation:</span>
+            <Badge variant="destructive">prohibited</Badge>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <ShieldCheck className="h-3 w-3" />
+            All preconditions, deletions, and post-validations inside single native transaction
           </div>
         </div>
 
@@ -261,8 +335,9 @@ export function DiagCompensacaoDependenciasBlock() {
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">
               Nenhuma compensação executada. O botão "Preparar compensação (não executada)" está
-              habilitado. A rota é {`POST ${ROUTE_PATH}`}, utiliza IDs fixos server-side e possui
-              lock independente ({COMPENSATION_LOCK}). O botão não é acionado automaticamente.
+              habilitado. A rota é {`POST ${ROUTE_PATH}`}, utiliza IDs fixos server-side, possui
+              lock independente ({COMPENSATION_LOCK}) e transação nativa atômica com rollback
+              nativo. O botão não é acionado automaticamente.
             </div>
             <div className="text-xs text-muted-foreground font-mono">
               Bundle: {FRONTEND_VERSION} | Route: POST {ROUTE_PATH}

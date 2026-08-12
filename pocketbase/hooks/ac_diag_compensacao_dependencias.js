@@ -2,9 +2,11 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/diag-compensacao-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v1'
+    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v2'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
     var LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
+    var DEP_QUERY_LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
+    var ORIG_AUDIT_LOCK_KEY = 'ac_diag_compensacao_auditoria_lock'
 
     var FIXED_IDS = {
       com_vinculos_externos: 'phzmobi8mfb34ha',
@@ -13,20 +15,85 @@ routerAdd(
     }
 
     var EXPECTED_COUNTS_BEFORE = {
-      com_vinculos_externos: 15,
-      com_eventos_integracao: 11,
-      com_execucoes_sincronizacao: 10,
+      com_eventos_integracao: 15,
+      com_execucoes_sincronizacao: 11,
+      com_vinculos_externos: 10,
     }
     var EXPECTED_COUNTS_AFTER = {
-      com_vinculos_externos: 14,
-      com_eventos_integracao: 10,
-      com_execucoes_sincronizacao: 9,
+      com_eventos_integracao: 14,
+      com_execucoes_sincronizacao: 10,
+      com_vinculos_externos: 9,
     }
 
     var DIAGNOSTIC_WINDOW_START = '2026-08-11T20:38:39.900Z'
     var DIAGNOSTIC_WINDOW_END = '2026-08-11T20:38:40.000Z'
     var windowStartMs = new Date(DIAGNOSTIC_WINDOW_START).getTime()
     var windowEndMs = new Date(DIAGNOSTIC_WINDOW_END).getTime()
+
+    var EXPECTED_IDENTITY = {
+      com_vinculos_externos: {
+        collection: 'com_vinculos_externos',
+        id: FIXED_IDS.com_vinculos_externos,
+        expected_created_window_start: DIAGNOSTIC_WINDOW_START,
+        expected_created_window_end: DIAGNOSTIC_WINDOW_END,
+      },
+      com_eventos_integracao: {
+        collection: 'com_eventos_integracao',
+        id: FIXED_IDS.com_eventos_integracao,
+        expected_created_window_start: DIAGNOSTIC_WINDOW_START,
+        expected_created_window_end: DIAGNOSTIC_WINDOW_END,
+      },
+      com_execucoes_sincronizacao: {
+        collection: 'com_execucoes_sincronizacao',
+        id: FIXED_IDS.com_execucoes_sincronizacao,
+        expected_created_window_start: DIAGNOSTIC_WINDOW_START,
+        expected_created_window_end: DIAGNOSTIC_WINDOW_END,
+      },
+    }
+
+    var REFERENCE_ABSENCE_CHECKS = [
+      {
+        check_number: 1,
+        collection: 'com_ocorrencias_qualidade',
+        field: 'execucao_id',
+        filter: 'execucao_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
+        expected_count: 0,
+        description: 'Zero quality occurrences referencing the target execucao record',
+      },
+      {
+        check_number: 2,
+        collection: 'com_vinculos_externos',
+        field: 'record_id',
+        filter: 'record_id = "' + FIXED_IDS.com_eventos_integracao + '"',
+        expected_additional_count: 0,
+        excludes_id: FIXED_IDS.com_vinculos_externos,
+        description:
+          'No additional external links referencing the target evento (excluding the fixed vinculo itself)',
+      },
+      {
+        check_number: 3,
+        collection: 'com_vinculos_externos',
+        field: 'record_id',
+        filter: 'record_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
+        expected_additional_count: 0,
+        excludes_id: FIXED_IDS.com_vinculos_externos,
+        description:
+          'No additional external links referencing the target execucao (excluding the fixed vinculo itself)',
+      },
+    ]
+
+    var DELETION_ORDER = [
+      { order: 1, collection: 'com_vinculos_externos', id: FIXED_IDS.com_vinculos_externos },
+      { order: 2, collection: 'com_eventos_integracao', id: FIXED_IDS.com_eventos_integracao },
+      {
+        order: 3,
+        collection: 'com_execucoes_sincronizacao',
+        id: FIXED_IDS.com_execucoes_sincronizacao,
+      },
+    ]
+
+    var TRANSACTIONAL_READY = true
+    var ROLLBACK_BY_MANUAL_RECREATION = 'prohibited'
 
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')
@@ -51,10 +118,12 @@ routerAdd(
     }
     if (!isSA) return e.forbiddenError('Apenas superadministrador')
 
-    function checkLock() {
+    function readLockState(key) {
       try {
-        var rec = $app.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
-        return rec.getString('valor')
+        var rec = $app.findFirstRecordByData('com_parametros', 'chave', key)
+        var val = rec.getString('valor')
+        if (val && val !== 'armed') return 'consumed'
+        return 'armed'
       } catch (_) {
         return 'armed'
       }
@@ -82,9 +151,11 @@ routerAdd(
       }
     }
 
-    var lockState = checkLock()
+    var compensationLockState = readLockState(LOCK_KEY)
+    var depQueryLockState = readLockState(DEP_QUERY_LOCK_KEY)
+    var origAuditLockState = readLockState(ORIG_AUDIT_LOCK_KEY)
 
-    if (lockState === 'consumed') {
+    if (compensationLockState === 'consumed') {
       return e.json(200, {
         route_version: ROUTE_VERSION,
         route: ROUTE_PATH,
@@ -96,190 +167,291 @@ routerAdd(
         compensation_executed: true,
         deletion_executed: true,
         activecampaign_calls: 0,
+        transactional_ready: TRANSACTIONAL_READY,
+        rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
+        compensation_lock: 'consumed',
+        dependency_query_lock: depQueryLockState,
+        original_audit_lock: origAuditLockState,
+        expected_counts_before: EXPECTED_COUNTS_BEFORE,
+        expected_counts_after: EXPECTED_COUNTS_AFTER,
+        expected_identity: EXPECTED_IDENTITY,
+        reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
+        deletion_order: DELETION_ORDER,
         message: 'Compensation already executed — independent lock prevents re-execution',
       })
     }
 
-    function safeCount(n) {
-      try {
-        return $app.countRecords(n)
-      } catch (_) {
-        return -1
-      }
-    }
-    function safeFindById(name, id) {
-      try {
-        return $app.findRecordById(name, id)
-      } catch (_) {
-        return null
-      }
-    }
-    function safeFind(name, filter) {
-      try {
-        return $app.findRecordsByFilter(name, filter, '', 100, 0)
-      } catch (_) {
-        return []
-      }
-    }
-
-    var vinculo = safeFindById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos)
-    var evento = safeFindById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
-    var execucao = safeFindById(
-      'com_execucoes_sincronizacao',
-      FIXED_IDS.com_execucoes_sincronizacao,
-    )
-
-    var preconditions = {
-      all_ids_exist: !!vinculo && !!evento && !!execucao,
-      vinculo_exists: !!vinculo,
-      evento_exists: !!evento,
-      execucao_exists: !!execucao,
-    }
-
+    var preconditionsMet = false
+    var preconditions = null
     var capturedRecords = {}
-    var identityVerified = true
-
-    if (vinculo) {
-      var vCreated = vinculo.getString('created')
-      var vMs = vCreated ? new Date(vCreated).getTime() : NaN
-      var vInWindow = !isNaN(vMs) && vMs >= windowStartMs && vMs <= windowEndMs
-      capturedRecords.com_vinculos_externos = {
-        id: vinculo.id,
-        sistema_origem: vinculo.getString('sistema_origem'),
-        external_type: vinculo.getString('external_type'),
-        external_id: vinculo.getString('external_id'),
-        collection_name: vinculo.getString('collection_name'),
-        record_id: vinculo.getString('record_id'),
-        created: vCreated,
-        updated: vinculo.getString('updated'),
-      }
-      if (!vInWindow) identityVerified = false
-      preconditions.vinculo_timestamp_in_window = vInWindow
-    }
-    if (evento) {
-      var eCreated = evento.getString('created')
-      var eMs = eCreated ? new Date(eCreated).getTime() : NaN
-      var eInWindow = !isNaN(eMs) && eMs >= windowStartMs && eMs <= windowEndMs
-      capturedRecords.com_eventos_integracao = {
-        id: evento.id,
-        sistema_origem: evento.getString('sistema_origem'),
-        evento_tipo: evento.getString('evento_tipo'),
-        external_id: evento.getString('external_id'),
-        idempotency_key: evento.getString('idempotency_key'),
-        payload: evento.getString('payload'),
-        status: evento.getString('status'),
-        created: eCreated,
-        updated: evento.getString('updated'),
-      }
-      if (!eInWindow) identityVerified = false
-      preconditions.evento_timestamp_in_window = eInWindow
-    }
-    if (execucao) {
-      var xCreated = execucao.getString('created')
-      var xMs = xCreated ? new Date(xCreated).getTime() : NaN
-      var xInWindow = !isNaN(xMs) && xMs >= windowStartMs && xMs <= windowEndMs
-      capturedRecords.com_execucoes_sincronizacao = {
-        id: execucao.id,
-        sistema_origem: execucao.getString('sistema_origem'),
-        status: execucao.getString('status'),
-        payload: execucao.getString('payload'),
-        erro: execucao.getString('erro'),
-        inicio: execucao.getString('inicio'),
-        fim: execucao.getString('fim'),
-        created: xCreated,
-        updated: execucao.getString('updated'),
-      }
-      if (!xInWindow) identityVerified = false
-      preconditions.execucao_timestamp_in_window = xInWindow
-    }
-    preconditions.identity_and_timestamps_verified = identityVerified
-
-    var ocorrencias = safeFind(
-      'com_ocorrencias_qualidade',
-      'execucao_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
-    )
-    preconditions.zero_ocorrencias = ocorrencias.length === 0
-    preconditions.ocorrencias_count = ocorrencias.length
-
-    var countsBefore = {
-      com_vinculos_externos: safeCount('com_vinculos_externos'),
-      com_eventos_integracao: safeCount('com_eventos_integracao'),
-      com_execucoes_sincronizacao: safeCount('com_execucoes_sincronizacao'),
-    }
-    preconditions.counts_match =
-      countsBefore.com_vinculos_externos === EXPECTED_COUNTS_BEFORE.com_vinculos_externos &&
-      countsBefore.com_eventos_integracao === EXPECTED_COUNTS_BEFORE.com_eventos_integracao &&
-      countsBefore.com_execucoes_sincronizacao ===
-        EXPECTED_COUNTS_BEFORE.com_execucoes_sincronizacao
-
-    var refsToEvento = safeFind(
-      'com_vinculos_externos',
-      'record_id = "' + FIXED_IDS.com_eventos_integracao + '"',
-    )
-    var refsToExecucao = safeFind(
-      'com_vinculos_externos',
-      'record_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
-    )
-    var additionalRefs = 0
-    for (var i = 0; i < refsToEvento.length; i++) {
-      if (refsToEvento[i].id !== FIXED_IDS.com_vinculos_externos) additionalRefs++
-    }
-    for (var j = 0; j < refsToExecucao.length; j++) {
-      if (refsToExecucao[j].id !== FIXED_IDS.com_vinculos_externos) additionalRefs++
-    }
-    preconditions.no_additional_references = additionalRefs === 0
-    preconditions.additional_references_count = additionalRefs
-
-    var allPreconditionsMet =
-      preconditions.all_ids_exist &&
-      preconditions.identity_and_timestamps_verified &&
-      preconditions.zero_ocorrencias &&
-      preconditions.counts_match &&
-      preconditions.no_additional_references
-
-    if (!allPreconditionsMet) {
-      return e.json(200, {
-        route_version: ROUTE_VERSION,
-        route: ROUTE_PATH,
-        method: 'POST',
-        lock_state: 'armed',
-        lock_key: LOCK_KEY,
-        fixed_ids: FIXED_IDS,
-        client_input_rejected: true,
-        compensation_executed: false,
-        deletion_executed: false,
-        activecampaign_calls: 0,
-        preconditions_met: false,
-        preconditions: preconditions,
-        counts_before: countsBefore,
-        expected_counts_before: EXPECTED_COUNTS_BEFORE,
-        captured_records: capturedRecords,
-        message: 'Preconditions not met — compensation aborted, nothing deleted',
-      })
-    }
-
-    var deletionOrder = [
-      { order: 1, collection: 'com_vinculos_externos', id: FIXED_IDS.com_vinculos_externos },
-      { order: 2, collection: 'com_eventos_integracao', id: FIXED_IDS.com_eventos_integracao },
-      {
-        order: 3,
-        collection: 'com_execucoes_sincronizacao',
-        id: FIXED_IDS.com_execucoes_sincronizacao,
-      },
-    ]
-
+    var countsBefore = null
+    var countsAfter = null
+    var postValidation = null
     var txError = null
+
     try {
       $app.runInTransaction(function (txApp) {
-        var v = txApp.findRecordById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos)
-        txApp.delete(v)
-        var ev = txApp.findRecordById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
-        txApp.delete(ev)
-        var ex = txApp.findRecordById(
+        function txCount(n) {
+          try {
+            return txApp.countRecords(n)
+          } catch (_) {
+            return -1
+          }
+        }
+        function txFindById(name, id) {
+          try {
+            return txApp.findRecordById(name, id)
+          } catch (_) {
+            return null
+          }
+        }
+        function txFind(name, filter) {
+          try {
+            return txApp.findRecordsByFilter(name, filter, '', 100, 0)
+          } catch (_) {
+            return []
+          }
+        }
+
+        var vinculo = txFindById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos)
+        var evento = txFindById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
+        var execucao = txFindById(
           'com_execucoes_sincronizacao',
           FIXED_IDS.com_execucoes_sincronizacao,
         )
-        txApp.delete(ex)
+
+        var identityVerified = true
+
+        if (vinculo) {
+          var vC = vinculo.getString('created')
+          var vMs = vC ? new Date(vC).getTime() : NaN
+          var vInWin = !isNaN(vMs) && vMs >= windowStartMs && vMs <= windowEndMs
+          capturedRecords.com_vinculos_externos = {
+            id: vinculo.id,
+            sistema_origem: vinculo.getString('sistema_origem'),
+            external_type: vinculo.getString('external_type'),
+            external_id: vinculo.getString('external_id'),
+            collection_name: vinculo.getString('collection_name'),
+            record_id: vinculo.getString('record_id'),
+            created: vC,
+            updated: vinculo.getString('updated'),
+            created_in_window: vInWin,
+          }
+          if (!vInWin) identityVerified = false
+        }
+        if (evento) {
+          var eC = evento.getString('created')
+          var eMs = eC ? new Date(eC).getTime() : NaN
+          var eInWin = !isNaN(eMs) && eMs >= windowStartMs && eMs <= windowEndMs
+          capturedRecords.com_eventos_integracao = {
+            id: evento.id,
+            sistema_origem: evento.getString('sistema_origem'),
+            evento_tipo: evento.getString('evento_tipo'),
+            external_id: evento.getString('external_id'),
+            idempotency_key: evento.getString('idempotency_key'),
+            payload: evento.getString('payload'),
+            status: evento.getString('status'),
+            created: eC,
+            updated: evento.getString('updated'),
+            created_in_window: eInWin,
+          }
+          if (!eInWin) identityVerified = false
+        }
+        if (execucao) {
+          var xC = execucao.getString('created')
+          var xMs = xC ? new Date(xC).getTime() : NaN
+          var xInWin = !isNaN(xMs) && xMs >= windowStartMs && xMs <= windowEndMs
+          capturedRecords.com_execucoes_sincronizacao = {
+            id: execucao.id,
+            sistema_origem: execucao.getString('sistema_origem'),
+            status: execucao.getString('status'),
+            payload: execucao.getString('payload'),
+            erro: execucao.getString('erro'),
+            inicio: execucao.getString('inicio'),
+            fim: execucao.getString('fim'),
+            created: xC,
+            updated: execucao.getString('updated'),
+            created_in_window: xInWin,
+          }
+          if (!xInWin) identityVerified = false
+        }
+
+        var ocorrencias = txFind(
+          'com_ocorrencias_qualidade',
+          'execucao_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
+        )
+
+        countsBefore = {
+          com_eventos_integracao: txCount('com_eventos_integracao'),
+          com_execucoes_sincronizacao: txCount('com_execucoes_sincronizacao'),
+          com_vinculos_externos: txCount('com_vinculos_externos'),
+        }
+
+        var refsEvt = txFind(
+          'com_vinculos_externos',
+          'record_id = "' + FIXED_IDS.com_eventos_integracao + '"',
+        )
+        var refsExec = txFind(
+          'com_vinculos_externos',
+          'record_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
+        )
+        var addlEvt = 0,
+          addlExec = 0
+        for (var i = 0; i < refsEvt.length; i++) {
+          if (refsEvt[i].id !== FIXED_IDS.com_vinculos_externos) addlEvt++
+        }
+        for (var j = 0; j < refsExec.length; j++) {
+          if (refsExec[j].id !== FIXED_IDS.com_vinculos_externos) addlExec++
+        }
+        var addlRefs = addlEvt + addlExec
+
+        var countsMatch =
+          countsBefore.com_eventos_integracao === EXPECTED_COUNTS_BEFORE.com_eventos_integracao &&
+          countsBefore.com_execucoes_sincronizacao ===
+            EXPECTED_COUNTS_BEFORE.com_execucoes_sincronizacao &&
+          countsBefore.com_vinculos_externos === EXPECTED_COUNTS_BEFORE.com_vinculos_externos
+
+        preconditions = {
+          all_ids_exist: !!vinculo && !!evento && !!execucao,
+          identity_and_timestamps_verified: identityVerified,
+          zero_ocorrencias: ocorrencias.length === 0,
+          ocorrencias_count: ocorrencias.length,
+          counts_match: countsMatch,
+          counts_per_collection: {
+            com_eventos_integracao: {
+              expected: EXPECTED_COUNTS_BEFORE.com_eventos_integracao,
+              actual: countsBefore.com_eventos_integracao,
+              match:
+                countsBefore.com_eventos_integracao ===
+                EXPECTED_COUNTS_BEFORE.com_eventos_integracao,
+            },
+            com_execucoes_sincronizacao: {
+              expected: EXPECTED_COUNTS_BEFORE.com_execucoes_sincronizacao,
+              actual: countsBefore.com_execucoes_sincronizacao,
+              match:
+                countsBefore.com_execucoes_sincronizacao ===
+                EXPECTED_COUNTS_BEFORE.com_execucoes_sincronizacao,
+            },
+            com_vinculos_externos: {
+              expected: EXPECTED_COUNTS_BEFORE.com_vinculos_externos,
+              actual: countsBefore.com_vinculos_externos,
+              match:
+                countsBefore.com_vinculos_externos === EXPECTED_COUNTS_BEFORE.com_vinculos_externos,
+            },
+          },
+          no_additional_references: addlRefs === 0,
+          additional_references_count: addlRefs,
+          reference_checks_performed: [
+            {
+              collection: 'com_ocorrencias_qualidade',
+              field: 'execucao_id',
+              filter: 'execucao_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
+              actual_count: ocorrencias.length,
+              expected_count: 0,
+              passed: ocorrencias.length === 0,
+            },
+            {
+              collection: 'com_vinculos_externos',
+              field: 'record_id',
+              filter: 'record_id = "' + FIXED_IDS.com_eventos_integracao + '"',
+              actual_additional_count: addlEvt,
+              expected_additional_count: 0,
+              excludes_id: FIXED_IDS.com_vinculos_externos,
+              passed: addlEvt === 0,
+            },
+            {
+              collection: 'com_vinculos_externos',
+              field: 'record_id',
+              filter: 'record_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
+              actual_additional_count: addlExec,
+              expected_additional_count: 0,
+              excludes_id: FIXED_IDS.com_vinculos_externos,
+              passed: addlExec === 0,
+            },
+          ],
+        }
+
+        var allMet =
+          preconditions.all_ids_exist &&
+          preconditions.identity_and_timestamps_verified &&
+          preconditions.zero_ocorrencias &&
+          preconditions.counts_match &&
+          preconditions.no_additional_references
+
+        if (!allMet) {
+          return
+        }
+
+        preconditionsMet = true
+
+        txApp.delete(txApp.findRecordById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos))
+        txApp.delete(
+          txApp.findRecordById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao),
+        )
+        txApp.delete(
+          txApp.findRecordById(
+            'com_execucoes_sincronizacao',
+            FIXED_IDS.com_execucoes_sincronizacao,
+          ),
+        )
+
+        countsAfter = {
+          com_eventos_integracao: txCount('com_eventos_integracao'),
+          com_execucoes_sincronizacao: txCount('com_execucoes_sincronizacao'),
+          com_vinculos_externos: txCount('com_vinculos_externos'),
+        }
+
+        var postCountsMatch =
+          countsAfter.com_eventos_integracao === EXPECTED_COUNTS_AFTER.com_eventos_integracao &&
+          countsAfter.com_execucoes_sincronizacao ===
+            EXPECTED_COUNTS_AFTER.com_execucoes_sincronizacao &&
+          countsAfter.com_vinculos_externos === EXPECTED_COUNTS_AFTER.com_vinculos_externos
+
+        postValidation = {
+          counts_match: postCountsMatch,
+          counts_per_collection: {
+            com_eventos_integracao: {
+              expected: EXPECTED_COUNTS_AFTER.com_eventos_integracao,
+              actual: countsAfter.com_eventos_integracao,
+              match:
+                countsAfter.com_eventos_integracao === EXPECTED_COUNTS_AFTER.com_eventos_integracao,
+            },
+            com_execucoes_sincronizacao: {
+              expected: EXPECTED_COUNTS_AFTER.com_execucoes_sincronizacao,
+              actual: countsAfter.com_execucoes_sincronizacao,
+              match:
+                countsAfter.com_execucoes_sincronizacao ===
+                EXPECTED_COUNTS_AFTER.com_execucoes_sincronizacao,
+            },
+            com_vinculos_externos: {
+              expected: EXPECTED_COUNTS_AFTER.com_vinculos_externos,
+              actual: countsAfter.com_vinculos_externos,
+              match:
+                countsAfter.com_vinculos_externos === EXPECTED_COUNTS_AFTER.com_vinculos_externos,
+            },
+          },
+          com_eventos_integracao_absent: !txFindById(
+            'com_eventos_integracao',
+            FIXED_IDS.com_eventos_integracao,
+          ),
+          com_execucoes_sincronizacao_absent: !txFindById(
+            'com_execucoes_sincronizacao',
+            FIXED_IDS.com_execucoes_sincronizacao,
+          ),
+          com_vinculos_externos_absent: !txFindById(
+            'com_vinculos_externos',
+            FIXED_IDS.com_vinculos_externos,
+          ),
+        }
+
+        if (
+          !postCountsMatch ||
+          !postValidation.com_eventos_integracao_absent ||
+          !postValidation.com_execucoes_sincronizacao_absent ||
+          !postValidation.com_vinculos_externos_absent
+        ) {
+          throw new Error('Post-validation failed — native rollback triggered')
+        }
       })
     } catch (err) {
       txError = String(err).substring(0, 300)
@@ -297,33 +469,52 @@ routerAdd(
         compensation_executed: false,
         deletion_executed: false,
         activecampaign_calls: 0,
-        preconditions_met: true,
-        deletion_failed: true,
+        transactional_ready: TRANSACTIONAL_READY,
+        rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
+        compensation_lock: 'armed',
+        dependency_query_lock: depQueryLockState,
+        original_audit_lock: origAuditLockState,
+        expected_counts_before: EXPECTED_COUNTS_BEFORE,
+        expected_counts_after: EXPECTED_COUNTS_AFTER,
+        expected_identity: EXPECTED_IDENTITY,
+        reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
+        deletion_order: DELETION_ORDER,
+        preconditions_met: preconditionsMet,
         transaction_error: txError,
         captured_records_before_deletion: capturedRecords,
-        deletion_order: deletionOrder,
         message:
-          'Deletion failed — transaction rolled back, all records restored to original state',
+          'Transaction failed — native rollback, all records restored. Rollback-by-manual-recreation is prohibited.',
       })
     }
 
-    var countsAfter = {
-      com_vinculos_externos: safeCount('com_vinculos_externos'),
-      com_eventos_integracao: safeCount('com_eventos_integracao'),
-      com_execucoes_sincronizacao: safeCount('com_execucoes_sincronizacao'),
-    }
-    var postValidation = {
-      counts_match:
-        countsAfter.com_vinculos_externos === EXPECTED_COUNTS_AFTER.com_vinculos_externos &&
-        countsAfter.com_eventos_integracao === EXPECTED_COUNTS_AFTER.com_eventos_integracao &&
-        countsAfter.com_execucoes_sincronizacao ===
-          EXPECTED_COUNTS_AFTER.com_execucoes_sincronizacao,
-      vinculo_absent: !safeFindById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos),
-      evento_absent: !safeFindById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao),
-      execucao_absent: !safeFindById(
-        'com_execucoes_sincronizacao',
-        FIXED_IDS.com_execucoes_sincronizacao,
-      ),
+    if (!preconditionsMet) {
+      return e.json(200, {
+        route_version: ROUTE_VERSION,
+        route: ROUTE_PATH,
+        method: 'POST',
+        lock_state: 'armed',
+        lock_key: LOCK_KEY,
+        fixed_ids: FIXED_IDS,
+        client_input_rejected: true,
+        compensation_executed: false,
+        deletion_executed: false,
+        activecampaign_calls: 0,
+        transactional_ready: TRANSACTIONAL_READY,
+        rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
+        compensation_lock: 'armed',
+        dependency_query_lock: depQueryLockState,
+        original_audit_lock: origAuditLockState,
+        expected_counts_before: EXPECTED_COUNTS_BEFORE,
+        expected_counts_after: EXPECTED_COUNTS_AFTER,
+        expected_identity: EXPECTED_IDENTITY,
+        reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
+        deletion_order: DELETION_ORDER,
+        preconditions_met: false,
+        preconditions: preconditions,
+        counts_before: countsBefore,
+        captured_records: capturedRecords,
+        message: 'Preconditions not met — compensation aborted, nothing deleted',
+      })
     }
 
     engageLock()
@@ -339,14 +530,23 @@ routerAdd(
       compensation_executed: true,
       deletion_executed: true,
       activecampaign_calls: 0,
+      transactional_ready: TRANSACTIONAL_READY,
+      rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
+      compensation_lock: 'consumed',
+      dependency_query_lock: depQueryLockState,
+      original_audit_lock: origAuditLockState,
+      expected_counts_before: EXPECTED_COUNTS_BEFORE,
+      expected_counts_after: EXPECTED_COUNTS_AFTER,
+      expected_identity: EXPECTED_IDENTITY,
+      reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
+      deletion_order: DELETION_ORDER,
       preconditions_met: true,
-      deletion_order: deletionOrder,
       counts_before: countsBefore,
       counts_after: countsAfter,
-      expected_counts_after: EXPECTED_COUNTS_AFTER,
       post_validation: postValidation,
       captured_records_before_deletion: capturedRecords,
-      message: 'Compensation executed successfully — all three records deleted atomically',
+      message:
+        'Compensation executed — all three records deleted atomically inside native transaction with native rollback',
     })
   },
   $apis.requireAuth(),

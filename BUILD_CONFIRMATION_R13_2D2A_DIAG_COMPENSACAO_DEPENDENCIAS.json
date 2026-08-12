@@ -1,0 +1,109 @@
+{
+  "build_status": "READY",
+  "correction_version": "R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-20260812-v2",
+  "backend_version": "R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v2",
+  "frontend_version": "R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v2",
+  "backend_hook": "ac_diag_compensacao_dependencias",
+  "backend_route_method": "POST",
+  "backend_route_path": "/backend/v1/integracao/ac/diag-compensacao-dependencias",
+  "route_description": "Destructive compensation route — deletes three fixed records atomically inside a native transaction",
+  "read_only": false,
+  "transactional_ready": true,
+  "rollback_by_manual_recreation": "prohibited",
+  "rollback_mechanism": "Native PocketBase runInTransaction — all preconditions, deletions, and post-validations inside a single SQLite BEGIN/COMMIT/ROLLBACK",
+  "compensation_executed": false,
+  "compensation_lock": "armed",
+  "dependency_query_lock": "consumed",
+  "original_audit_lock": "consumed",
+  "deletion_executed": false,
+  "activecampaign_calls": 0,
+  "expected_counts_before": {
+    "com_eventos_integracao": 15,
+    "com_execucoes_sincronizacao": 11,
+    "com_vinculos_externos": 10
+  },
+  "expected_counts_after": {
+    "com_eventos_integracao": 14,
+    "com_execucoes_sincronizacao": 10,
+    "com_vinculos_externos": 9
+  },
+  "v1_correction_summary": {
+    "preconditions_mapping_corrected": true,
+    "v1_swapped_mapping": {
+      "com_vinculos_externos": 15,
+      "com_eventos_integracao": 11,
+      "com_execucoes_sincronizacao": 10
+    },
+    "v2_corrected_mapping": {
+      "com_eventos_integracao": 15,
+      "com_execucoes_sincronizacao": 11,
+      "com_vinculos_externos": 10
+    },
+    "post_validation_corrected": true,
+    "v1_post_validation_used_generic_names": true,
+    "v2_post_validation_uses_per_collection_names": true,
+    "read_only_description_removed": true,
+    "native_atomic_transaction_implemented": true,
+    "all_preconditions_inside_transaction": true,
+    "all_deletions_inside_transaction": true,
+    "all_post_validations_inside_transaction": true,
+    "identity_timestamp_values_documented": true,
+    "reference_absence_checks_explicit": true
+  },
+  "fixed_ids": {
+    "com_vinculos_externos": "phzmobi8mfb34ha",
+    "com_eventos_integracao": "pq4npvruaak9gpb",
+    "com_execucoes_sincronizacao": "62otoics23ul0vy"
+  },
+  "deletion_order": [
+    { "order": 1, "collection": "com_vinculos_externos" },
+    { "order": 2, "collection": "com_eventos_integracao" },
+    { "order": 3, "collection": "com_execucoes_sincronizacao" }
+  ],
+  "expected_identity": {
+    "com_vinculos_externos": {
+      "id": "phzmobi8mfb34ha",
+      "expected_created_window_start": "2026-08-11T20:38:39.900Z",
+      "expected_created_window_end": "2026-08-11T20:38:40.000Z"
+    },
+    "com_eventos_integracao": {
+      "id": "pq4npvruaak9gpb",
+      "expected_created_window_start": "2026-08-11T20:38:39.900Z",
+      "expected_created_window_end": "2026-08-11T20:38:40.000Z"
+    },
+    "com_execucoes_sincronizacao": {
+      "id": "62otoics23ul0vy",
+      "expected_created_window_start": "2026-08-11T20:38:39.900Z",
+      "expected_created_window_end": "2026-08-11T20:38:40.000Z"
+    }
+  },
+  "reference_absence_checks": [
+    {
+      "collection": "com_ocorrencias_qualidade",
+      "field": "execucao_id",
+      "expected_count": 0
+    },
+    {
+      "collection": "com_vinculos_externos",
+      "field": "record_id",
+      "expected_additional_count": 0,
+      "excludes_fixed_vinculo": true
+    },
+    {
+      "collection": "com_vinculos_externos",
+      "field": "record_id",
+      "expected_additional_count": 0,
+      "excludes_fixed_vinculo": true
+    }
+  ],
+  "r14_scope_advanced": false,
+  "porta_2d_2b": "BLOCKED",
+  "porta_2e": "BLOCKED",
+  "no_unauthorized_changes": true,
+  "no_migrations_created": true,
+  "no_collections_altered": true,
+  "no_rbac_changed": true,
+  "no_webhook_changed": true,
+  "no_secrets_changed": true,
+  "preview": "https://validacao-de-viabilidade-89fff--preview.goskip.app"
+}
