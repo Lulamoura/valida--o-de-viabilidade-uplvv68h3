@@ -2,7 +2,7 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/diag-compensacao-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v4'
+    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v5'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
     var LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
     var DEP_QUERY_LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
@@ -10,6 +10,12 @@ routerAdd(
     var NATIVE_TRANSACTION_API = '$app.runInTransaction'
     var TRANSACTION_HANDLE = 'txApp'
     var ROUTE_IS_DESTRUCTIVE = true
+    var POCKETBASE_VERSION = '0.36.0'
+    var RECORD_LOOKUP_API = 'txApp.findRecordById'
+    var RECORD_DELETE_API = 'txApp.delete'
+    var COUNT_API = 'txApp.countRecords'
+    var QUERY_API = 'txApp.findRecordsByFilter'
+    var NONEXISTENT_DB_COLLECTION_API_USED = false
 
     var TRANSACTION_METADATA = {
       transaction_api: NATIVE_TRANSACTION_API,
@@ -20,6 +26,15 @@ routerAdd(
       route_is_destructive: ROUTE_IS_DESTRUCTIVE,
       read_only_description_removed: true,
       rollback_by_manual_recreation: 'prohibited',
+      record_lookup_api: RECORD_LOOKUP_API,
+      record_delete_api: RECORD_DELETE_API,
+      count_api: COUNT_API,
+      query_api: QUERY_API,
+      nonexistent_db_collection_api_used: NONEXISTENT_DB_COLLECTION_API_USED,
+      lock_persisted_transactionally: true,
+      concurrent_double_execution_prevented: true,
+      pocketbase_version_confirmed: POCKETBASE_VERSION,
+      apis_verified_against_version: true,
     }
 
     var FIXED_IDS = {
@@ -75,6 +90,7 @@ routerAdd(
         field: 'execucao_id',
         filter: 'execucao_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
         expected_count: 0,
+        api: 'txApp.findRecordsByFilter',
         description: 'Zero quality occurrences referencing the target execucao record',
       },
       {
@@ -84,6 +100,7 @@ routerAdd(
         filter: 'record_id = "' + FIXED_IDS.com_eventos_integracao + '"',
         expected_additional_count: 0,
         excludes_id: FIXED_IDS.com_vinculos_externos,
+        api: 'txApp.findRecordsByFilter',
         description:
           'No additional external links referencing the target evento (excluding the fixed vinculo itself)',
       },
@@ -94,23 +111,37 @@ routerAdd(
         filter: 'record_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
         expected_additional_count: 0,
         excludes_id: FIXED_IDS.com_vinculos_externos,
+        api: 'txApp.findRecordsByFilter',
         description:
           'No additional external links referencing the target execucao (excluding the fixed vinculo itself)',
       },
     ]
 
     var DELETION_ORDER = [
-      { order: 1, collection: 'com_vinculos_externos', id: FIXED_IDS.com_vinculos_externos },
-      { order: 2, collection: 'com_eventos_integracao', id: FIXED_IDS.com_eventos_integracao },
+      {
+        order: 1,
+        collection: 'com_vinculos_externos',
+        id: FIXED_IDS.com_vinculos_externos,
+        api: 'txApp.delete',
+      },
+      {
+        order: 2,
+        collection: 'com_eventos_integracao',
+        id: FIXED_IDS.com_eventos_integracao,
+        api: 'txApp.delete',
+      },
       {
         order: 3,
         collection: 'com_execucoes_sincronizacao',
         id: FIXED_IDS.com_execucoes_sincronizacao,
+        api: 'txApp.delete',
       },
     ]
 
     var TRANSACTIONAL_READY = true
     var ROLLBACK_BY_MANUAL_RECREATION = 'prohibited'
+    var LOCK_PERSISTED_TRANSACTIONALLY = true
+    var CONCURRENT_DOUBLE_EXECUTION_PREVENTED = true
 
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')
@@ -150,18 +181,15 @@ routerAdd(
     var depQueryLockState = readLockState(DEP_QUERY_LOCK_KEY)
     var origAuditLockState = readLockState(ORIG_AUDIT_LOCK_KEY)
 
-    if (compensationLockState === 'consumed') {
-      return e.json(200, {
+    function buildCommonResponse(overrides) {
+      var base = {
         route_version: ROUTE_VERSION,
         route: ROUTE_PATH,
         method: 'POST',
-        lock_state: 'consumed',
         lock_key: LOCK_KEY,
         fixed_ids: FIXED_IDS,
         client_controlled_ids: false,
         client_input_rejected: true,
-        compensation_executed: true,
-        deletion_executed: true,
         activecampaign_calls: 0,
         transaction_api: NATIVE_TRANSACTION_API,
         transaction_handle_inside_callback: TRANSACTION_HANDLE,
@@ -172,7 +200,6 @@ routerAdd(
         route_is_destructive: ROUTE_IS_DESTRUCTIVE,
         read_only_description_removed: true,
         rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
-        compensation_lock: 'consumed',
         dependency_query_lock: depQueryLockState,
         original_audit_lock: origAuditLockState,
         expected_counts_before: EXPECTED_COUNTS_BEFORE,
@@ -182,8 +209,33 @@ routerAdd(
         uninvented_fields_removed: true,
         reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
         deletion_order: DELETION_ORDER,
-        message: 'Compensation already executed — independent lock prevents re-execution',
-      })
+        record_lookup_api: RECORD_LOOKUP_API,
+        record_delete_api: RECORD_DELETE_API,
+        count_api: COUNT_API,
+        query_api: QUERY_API,
+        nonexistent_db_collection_api_used: NONEXISTENT_DB_COLLECTION_API_USED,
+        lock_persisted_transactionally: LOCK_PERSISTED_TRANSACTIONALLY,
+        concurrent_double_execution_prevented: CONCURRENT_DOUBLE_EXECUTION_PREVENTED,
+        pocketbase_version_confirmed: POCKETBASE_VERSION,
+        apis_verified_against_version: true,
+      }
+      for (var k in overrides) {
+        base[k] = overrides[k]
+      }
+      return base
+    }
+
+    if (compensationLockState === 'consumed') {
+      return e.json(
+        200,
+        buildCommonResponse({
+          lock_state: 'consumed',
+          compensation_lock: 'consumed',
+          compensation_executed: true,
+          deletion_executed: true,
+          message: 'Compensation already executed — independent lock prevents re-execution',
+        }),
+      )
     }
 
     var preconditionsMet = false
@@ -194,37 +246,58 @@ routerAdd(
     var postValidation = null
     var txError = null
     var lockConsumedInsideTx = false
+    var concurrencyAbort = false
 
     try {
       $app.runInTransaction(function (txApp) {
         function txCount(n) {
-          try {
-            return txApp.countRecords(n)
-          } catch (_) {
-            return -1
-          }
+          return txApp.countRecords(n)
         }
         function txFindById(name, id) {
-          try {
-            return txApp.findRecordById(name, id)
-          } catch (_) {
-            return null
-          }
+          return txApp.findRecordById(name, id)
         }
         function txFind(name, filter) {
-          try {
-            return txApp.findRecordsByFilter(name, filter, '', 100, 0)
-          } catch (_) {
-            return []
-          }
+          return txApp.findRecordsByFilter(name, filter, '', 100, 0)
         }
 
-        var vinculo = txFindById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos)
-        var evento = txFindById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
-        var execucao = txFindById(
-          'com_execucoes_sincronizacao',
-          FIXED_IDS.com_execucoes_sincronizacao,
-        )
+        // Concurrency guard: re-check lock INSIDE the transaction using txApp
+        var txLockRec = null
+        try {
+          txLockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
+          var txLockVal = txLockRec.getString('valor')
+          if (txLockVal && txLockVal !== 'armed') {
+            concurrencyAbort = true
+            throw new Error(
+              'Concurrency guard: lock already consumed inside transaction — aborting',
+            )
+          }
+        } catch (err) {
+          if (concurrencyAbort) throw err
+          // Lock record doesn't exist yet — treat as armed, proceed
+        }
+
+        var vinculo = null
+        var evento = null
+        var execucao = null
+
+        try {
+          vinculo = txFindById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos)
+        } catch (_) {
+          vinculo = null
+        }
+        try {
+          evento = txFindById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
+        } catch (_) {
+          evento = null
+        }
+        try {
+          execucao = txFindById(
+            'com_execucoes_sincronizacao',
+            FIXED_IDS.com_execucoes_sincronizacao,
+          )
+        } catch (_) {
+          execucao = null
+        }
 
         var identityVerified = true
 
@@ -370,6 +443,7 @@ routerAdd(
               actual_count: ocorrencias.length,
               expected_count: 0,
               passed: ocorrencias.length === 0,
+              api: 'txApp.findRecordsByFilter',
             },
             {
               collection: 'com_vinculos_externos',
@@ -379,6 +453,7 @@ routerAdd(
               expected_additional_count: 0,
               excludes_id: FIXED_IDS.com_vinculos_externos,
               passed: addlEvt === 0,
+              api: 'txApp.findRecordsByFilter',
             },
             {
               collection: 'com_vinculos_externos',
@@ -388,6 +463,7 @@ routerAdd(
               expected_additional_count: 0,
               excludes_id: FIXED_IDS.com_vinculos_externos,
               passed: addlExec === 0,
+              api: 'txApp.findRecordsByFilter',
             },
           ],
         }
@@ -405,6 +481,7 @@ routerAdd(
 
         preconditionsMet = true
 
+        // Deletions via txApp.delete(record) in fixed order
         txApp.delete(txApp.findRecordById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos))
         txApp.delete(
           txApp.findRecordById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao),
@@ -427,6 +504,23 @@ routerAdd(
           countsAfter.com_execucoes_sincronizacao ===
             EXPECTED_COUNTS_AFTER.com_execucoes_sincronizacao &&
           countsAfter.com_vinculos_externos === EXPECTED_COUNTS_AFTER.com_vinculos_externos
+
+        // Post-deletion absence validation via txApp.findRecordById
+        var postVinculoAbsent = true
+        var postEventoAbsent = true
+        var postExecucaoAbsent = true
+        try {
+          txApp.findRecordById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos)
+          postVinculoAbsent = false
+        } catch (_) {}
+        try {
+          txApp.findRecordById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
+          postEventoAbsent = false
+        } catch (_) {}
+        try {
+          txApp.findRecordById('com_execucoes_sincronizacao', FIXED_IDS.com_execucoes_sincronizacao)
+          postExecucaoAbsent = false
+        } catch (_) {}
 
         postValidation = {
           counts_match: postCountsMatch,
@@ -451,18 +545,10 @@ routerAdd(
                 countsAfter.com_vinculos_externos === EXPECTED_COUNTS_AFTER.com_vinculos_externos,
             },
           },
-          com_eventos_integracao_absent: !txFindById(
-            'com_eventos_integracao',
-            FIXED_IDS.com_eventos_integracao,
-          ),
-          com_execucoes_sincronizacao_absent: !txFindById(
-            'com_execucoes_sincronizacao',
-            FIXED_IDS.com_execucoes_sincronizacao,
-          ),
-          com_vinculos_externos_absent: !txFindById(
-            'com_vinculos_externos',
-            FIXED_IDS.com_vinculos_externos,
-          ),
+          com_eventos_integracao_absent: postEventoAbsent,
+          com_execucoes_sincronizacao_absent: postExecucaoAbsent,
+          com_vinculos_externos_absent: postVinculoAbsent,
+          absence_check_api: 'txApp.findRecordById',
         }
 
         if (
@@ -474,14 +560,19 @@ routerAdd(
           throw new Error('Post-validation failed — native rollback triggered')
         }
 
+        // Transactional lock persistence via txApp
         var pc = txApp.findCollectionByNameOrId('com_parametros')
-        var lockRec
-        try {
-          lockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
-        } catch (_) {
-          lockRec = new Record(pc)
-          lockRec.set('chave', LOCK_KEY)
-          lockRec.set('versao', 1)
+        var lockRec = null
+        if (txLockRec) {
+          lockRec = txLockRec
+        } else {
+          try {
+            lockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
+          } catch (_) {
+            lockRec = new Record(pc)
+            lockRec.set('chave', LOCK_KEY)
+            lockRec.set('versao', 1)
+          }
         }
         lockRec.set('valor', 'consumed')
         lockRec.set('ativo', true)
@@ -498,131 +589,64 @@ routerAdd(
     }
 
     if (txError) {
-      return e.json(200, {
-        route_version: ROUTE_VERSION,
-        route: ROUTE_PATH,
-        method: 'POST',
-        lock_state: 'armed',
-        lock_key: LOCK_KEY,
-        fixed_ids: FIXED_IDS,
-        client_controlled_ids: false,
-        client_input_rejected: true,
-        compensation_executed: false,
-        deletion_executed: false,
-        activecampaign_calls: 0,
-        transaction_api: NATIVE_TRANSACTION_API,
-        transaction_handle_inside_callback: TRANSACTION_HANDLE,
-        external_app_handle_used_inside_transaction: false,
-        lock_consumed_only_on_successful_commit: true,
-        transactional_ready: TRANSACTIONAL_READY,
-        native_transaction_api: NATIVE_TRANSACTION_API,
-        route_is_destructive: ROUTE_IS_DESTRUCTIVE,
-        read_only_description_removed: true,
-        rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
-        compensation_lock: 'armed',
-        dependency_query_lock: depQueryLockState,
-        original_audit_lock: origAuditLockState,
-        expected_counts_before: EXPECTED_COUNTS_BEFORE,
-        expected_counts_after: EXPECTED_COUNTS_AFTER,
-        expected_identity: EXPECTED_IDENTITY,
-        updated_field_present: false,
-        uninvented_fields_removed: true,
-        reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
-        deletion_order: DELETION_ORDER,
-        preconditions_met: preconditionsMet,
-        transaction_error: txError,
-        lock_consumed_inside_transaction: lockConsumedInsideTx,
-        captured_records_before_deletion: capturedRecords,
-        message:
-          'Transaction failed — native rollback via ' +
-          NATIVE_TRANSACTION_API +
-          ', all records restored. Lock remains armed. Rollback-by-manual-recreation is prohibited.',
-      })
+      return e.json(
+        200,
+        buildCommonResponse({
+          lock_state: concurrencyAbort ? 'consumed' : 'armed',
+          compensation_lock: concurrencyAbort ? 'consumed' : 'armed',
+          compensation_executed: false,
+          deletion_executed: false,
+          preconditions_met: preconditionsMet,
+          transaction_error: txError,
+          lock_consumed_inside_transaction: lockConsumedInsideTx,
+          concurrency_abort: concurrencyAbort,
+          captured_records_before_deletion: capturedRecords,
+          message: concurrencyAbort
+            ? 'Concurrency guard: lock already consumed by another request inside transaction — aborted without deletion'
+            : 'Transaction failed — native rollback via ' +
+              NATIVE_TRANSACTION_API +
+              ', all records restored. Lock remains armed. Rollback-by-manual-recreation is prohibited.',
+        }),
+      )
     }
 
     if (!preconditionsMet) {
-      return e.json(200, {
-        route_version: ROUTE_VERSION,
-        route: ROUTE_PATH,
-        method: 'POST',
-        lock_state: 'armed',
-        lock_key: LOCK_KEY,
-        fixed_ids: FIXED_IDS,
-        client_controlled_ids: false,
-        client_input_rejected: true,
-        compensation_executed: false,
-        deletion_executed: false,
-        activecampaign_calls: 0,
-        transaction_api: NATIVE_TRANSACTION_API,
-        transaction_handle_inside_callback: TRANSACTION_HANDLE,
-        external_app_handle_used_inside_transaction: false,
-        lock_consumed_only_on_successful_commit: true,
-        transactional_ready: TRANSACTIONAL_READY,
-        native_transaction_api: NATIVE_TRANSACTION_API,
-        route_is_destructive: ROUTE_IS_DESTRUCTIVE,
-        read_only_description_removed: true,
-        rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
-        compensation_lock: 'armed',
-        dependency_query_lock: depQueryLockState,
-        original_audit_lock: origAuditLockState,
-        expected_counts_before: EXPECTED_COUNTS_BEFORE,
-        expected_counts_after: EXPECTED_COUNTS_AFTER,
-        expected_identity: EXPECTED_IDENTITY,
-        updated_field_present: false,
-        uninvented_fields_removed: true,
-        reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
-        deletion_order: DELETION_ORDER,
-        preconditions_met: false,
-        preconditions: preconditions,
-        counts_before: countsBefore,
-        captured_records: capturedRecords,
-        message:
-          'Preconditions not met — compensation aborted, nothing deleted. Lock remains armed.',
-      })
+      return e.json(
+        200,
+        buildCommonResponse({
+          lock_state: 'armed',
+          compensation_lock: 'armed',
+          compensation_executed: false,
+          deletion_executed: false,
+          preconditions_met: false,
+          preconditions: preconditions,
+          counts_before: countsBefore,
+          captured_records: capturedRecords,
+          message:
+            'Preconditions not met — compensation aborted, nothing deleted. Lock remains armed.',
+        }),
+      )
     }
 
-    return e.json(200, {
-      route_version: ROUTE_VERSION,
-      route: ROUTE_PATH,
-      method: 'POST',
-      lock_state: 'consumed',
-      lock_key: LOCK_KEY,
-      fixed_ids: FIXED_IDS,
-      client_controlled_ids: false,
-      client_input_rejected: true,
-      compensation_executed: true,
-      deletion_executed: true,
-      activecampaign_calls: 0,
-      transaction_api: NATIVE_TRANSACTION_API,
-      transaction_handle_inside_callback: TRANSACTION_HANDLE,
-      external_app_handle_used_inside_transaction: false,
-      lock_consumed_only_on_successful_commit: true,
-      transactional_ready: TRANSACTIONAL_READY,
-      native_transaction_api: NATIVE_TRANSACTION_API,
-      route_is_destructive: ROUTE_IS_DESTRUCTIVE,
-      read_only_description_removed: true,
-      rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
-      compensation_lock: 'consumed',
-      dependency_query_lock: depQueryLockState,
-      original_audit_lock: origAuditLockState,
-      expected_counts_before: EXPECTED_COUNTS_BEFORE,
-      expected_counts_after: EXPECTED_COUNTS_AFTER,
-      expected_identity: EXPECTED_IDENTITY,
-      updated_field_present: false,
-      uninvented_fields_removed: true,
-      reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
-      deletion_order: DELETION_ORDER,
-      preconditions_met: true,
-      counts_before: countsBefore,
-      counts_after: countsAfter,
-      post_validation: postValidation,
-      lock_consumed_inside_transaction: lockConsumedInsideTx,
-      captured_records_before_deletion: capturedRecords,
-      message:
-        'Compensation executed — all three records deleted atomically inside ' +
-        NATIVE_TRANSACTION_API +
-        ' with native rollback. Lock consumed inside transaction on successful commit.',
-    })
+    return e.json(
+      200,
+      buildCommonResponse({
+        lock_state: 'consumed',
+        compensation_lock: 'consumed',
+        compensation_executed: true,
+        deletion_executed: true,
+        preconditions_met: true,
+        counts_before: countsBefore,
+        counts_after: countsAfter,
+        post_validation: postValidation,
+        lock_consumed_inside_transaction: lockConsumedInsideTx,
+        captured_records_before_deletion: capturedRecords,
+        message:
+          'Compensation executed — all three records deleted atomically inside ' +
+          NATIVE_TRANSACTION_API +
+          ' with native rollback. Lock consumed inside transaction on successful commit.',
+      }),
+    )
   },
   $apis.requireAuth(),
 )

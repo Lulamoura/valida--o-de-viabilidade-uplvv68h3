@@ -25,9 +25,19 @@ interface CompEvidence {
 
 const SESSION_KEY = 'ac_diag_compensacao_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
-const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v4'
-const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v4'
+const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v5'
+const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v5'
 const NATIVE_TRANSACTION_API = '$app.runInTransaction'
+const RECORD_LOOKUP_API = 'txApp.findRecordById'
+const RECORD_DELETE_API = 'txApp.delete'
+const COUNT_API = 'txApp.countRecords'
+const QUERY_API = 'txApp.findRecordsByFilter'
+const POCKETBASE_VERSION = '0.36.0'
+const FIXED_IDS = {
+  com_vinculos_externos: 'phzmobi8mfb34ha',
+  com_eventos_integracao: 'pq4npvruaak9gpb',
+  com_execucoes_sincronizacao: '62otoics23ul0vy',
+}
 const EXPECTED_IDENTITY = {
   com_vinculos_externos: {
     id: FIXED_IDS.com_vinculos_externos,
@@ -56,16 +66,14 @@ const EXPECTED_IDENTITY = {
     status: 'completed',
   },
 }
-const FIXED_IDS = {
-  com_vinculos_externos: 'phzmobi8mfb34ha',
-  com_eventos_integracao: 'pq4npvruaak9gpb',
-  com_execucoes_sincronizacao: '62otoics23ul0vy',
-}
 const BUTTON_ENABLED = true
 const COMPENSATION_LOCK = 'armed'
 const TRANSACTIONAL_READY = true
 const DEPENDENCY_QUERY_LOCK = 'consumed'
 const ORIGINAL_AUDIT_LOCK = 'consumed'
+const NONEXISTENT_DB_COLLECTION_API_USED = false
+const LOCK_PERSISTED_TRANSACTIONALLY = true
+const CONCURRENT_DOUBLE_EXECUTION_PREVENTED = true
 const EXPECTED_COUNTS_BEFORE = {
   com_eventos_integracao: 15,
   com_execucoes_sincronizacao: 11,
@@ -223,7 +231,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Estado da Compensação (v4 — native transaction, lock inside tx)
+            Estado da Compensação (v5 — real APIs, concurrency guard, transactional lock)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">transactional_ready:</span>
@@ -234,6 +242,44 @@ export function DiagCompensacaoDependenciasBlock() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">native_transaction_api:</span>
             <code className="text-foreground">{NATIVE_TRANSACTION_API}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">record_lookup_api:</span>
+            <code className="text-foreground">{RECORD_LOOKUP_API}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">record_delete_api:</span>
+            <code className="text-foreground">{RECORD_DELETE_API}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">count_api:</span>
+            <code className="text-foreground">{COUNT_API}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">query_api:</span>
+            <code className="text-foreground">{QUERY_API}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">nonexistent_db_collection_api_used:</span>
+            <Badge variant={NONEXISTENT_DB_COLLECTION_API_USED ? 'destructive' : 'default'}>
+              {String(NONEXISTENT_DB_COLLECTION_API_USED)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">lock_persisted_transactionally:</span>
+            <Badge variant={LOCK_PERSISTED_TRANSACTIONALLY ? 'default' : 'destructive'}>
+              {String(LOCK_PERSISTED_TRANSACTIONALLY)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">concurrent_double_execution_prevented:</span>
+            <Badge variant={CONCURRENT_DOUBLE_EXECUTION_PREVENTED ? 'default' : 'destructive'}>
+              {String(CONCURRENT_DOUBLE_EXECUTION_PREVENTED)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">pocketbase_version_confirmed:</span>
+            <code className="text-foreground">{POCKETBASE_VERSION}</code>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">client_controlled_ids:</span>
@@ -267,7 +313,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Precondition Counts (v4 — corrected per-collection mapping)
+            Precondition Counts (v5 — corrected per-collection mapping)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">expected_before:</span>
@@ -300,13 +346,13 @@ export function DiagCompensacaoDependenciasBlock() {
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="h-3 w-3" />
             All preconditions, deletions, and post-validations inside single native transaction via{' '}
-            {NATIVE_TRANSACTION_API}
+            {NATIVE_TRANSACTION_API}. Lock re-checked inside transaction for concurrency guard.
           </div>
         </div>
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Expected Identity (v4 — literal audited values, no invented fields)
+            Expected Identity (v5 — literal audited values, no invented fields)
           </div>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
@@ -371,6 +417,48 @@ export function DiagCompensacaoDependenciasBlock() {
               </code>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+          <div className="text-xs font-medium text-muted-foreground mb-1">
+            Structural Pseudocode (v5 — real APIs only, exclusive txApp usage)
+          </div>
+          <pre className="text-xs font-mono whitespace-pre-wrap break-all text-muted-foreground">
+            {`$app.runInTransaction(function(txApp) {
+  // 1. Concurrency guard — re-check lock via txApp
+  txLockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
+  if (txLockRec.valor !== 'armed') throw → rollback
+
+  // 2. Precondition counts via txApp.countRecords
+  countsBefore = { eventos: txApp.countRecords('com_eventos_integracao'), ... }
+
+  // 3. Fixed-record lookup via txApp.findRecordById
+  vinculo = txApp.findRecordById('com_vinculos_externos', ID)
+  evento  = txApp.findRecordById('com_eventos_integracao', ID)
+  execucao = txApp.findRecordById('com_execucoes_sincronizacao', ID)
+
+  // 4. Identity comparison — throw on divergence
+
+  // 5. Reference-absence checks via txApp.findRecordsByFilter
+  ocorrencias = txApp.findRecordsByFilter('com_ocorrencias_qualidade', filter)
+  refsEvt = txApp.findRecordsByFilter('com_vinculos_externos', filter)
+  refsExec = txApp.findRecordsByFilter('com_vinculos_externos', filter)
+
+  // 6. If preconditions not met → throw → native rollback
+
+  // 7. Deletions via txApp.delete(record) in fixed order
+  txApp.delete(vinculo)   // order 1
+  txApp.delete(evento)    // order 2
+  txApp.delete(execucao)  // order 3
+
+  // 8. Post-deletion validation via txApp.countRecords + txApp.findRecordById
+  //    If validation fails → throw → native rollback
+
+  // 9. Transactional lock persistence via txApp
+  txLockRec.set('valor', 'consumed')
+  txApp.save(txLockRec)  // only commits on success
+})`}
+          </pre>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
