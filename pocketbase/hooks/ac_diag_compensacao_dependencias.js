@@ -2,7 +2,7 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/diag-compensacao-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v7'
+    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v8'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
     var LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
     var DEP_QUERY_LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
@@ -68,7 +68,7 @@ routerAdd(
     var EXPECTED_IDENTITY = {
       com_vinculos_externos: {
         id: FIXED_IDS.com_vinculos_externos,
-        created: '2026-08-11T20:38:39.951Z',
+        created: '2026-08-11 20:38:39.951Z',
         collection_name: 'com_contatos',
         external_id: 'DIAG-TRANSPORT-FN-C1',
         external_type: 'contact',
@@ -77,7 +77,7 @@ routerAdd(
       },
       com_eventos_integracao: {
         id: FIXED_IDS.com_eventos_integracao,
-        created: '2026-08-11T20:38:39.950Z',
+        created: '2026-08-11 20:38:39.950Z',
         evento_tipo: 'contact_create',
         external_id: 'DIAG-TRANSPORT-FN-C1',
         idempotency_key: 'e860fa5a9d8615c44a7db52b909b70b816f80b74123b96780e7bb309e53d34ec',
@@ -86,9 +86,9 @@ routerAdd(
       },
       com_execucoes_sincronizacao: {
         id: FIXED_IDS.com_execucoes_sincronizacao,
-        created: '2026-08-11T20:38:39.948Z',
-        inicio: '2026-08-11T20:38:39.948Z',
-        fim: '2026-08-11T20:38:39.952Z',
+        created: '2026-08-11 20:38:39.948Z',
+        inicio: '2026-08-11 20:38:39.948Z',
+        fim: '2026-08-11 20:38:39.952Z',
         sistema_origem: 'activecampaign',
         status: 'completed',
       },

@@ -25,8 +25,8 @@ interface CompEvidence {
 
 const SESSION_KEY = 'ac_diag_compensacao_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
-const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v7'
-const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v7'
+const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v8'
+const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v8'
 const NATIVE_TRANSACTION_API = '$app.runInTransaction'
 const RECORD_LOOKUP_API = 'txApp.findRecordById'
 const RECORD_DELETE_API = 'txApp.delete'
@@ -41,7 +41,7 @@ const FIXED_IDS = {
 const EXPECTED_IDENTITY = {
   com_vinculos_externos: {
     id: FIXED_IDS.com_vinculos_externos,
-    created: '2026-08-11T20:38:39.951Z',
+    created: '2026-08-11 20:38:39.951Z',
     collection_name: 'com_contatos',
     external_id: 'DIAG-TRANSPORT-FN-C1',
     external_type: 'contact',
@@ -50,7 +50,7 @@ const EXPECTED_IDENTITY = {
   },
   com_eventos_integracao: {
     id: FIXED_IDS.com_eventos_integracao,
-    created: '2026-08-11T20:38:39.950Z',
+    created: '2026-08-11 20:38:39.950Z',
     evento_tipo: 'contact_create',
     external_id: 'DIAG-TRANSPORT-FN-C1',
     idempotency_key: 'e860fa5a9d8615c44a7db52b909b70b816f80b74123b96780e7bb309e53d34ec',
@@ -59,9 +59,9 @@ const EXPECTED_IDENTITY = {
   },
   com_execucoes_sincronizacao: {
     id: FIXED_IDS.com_execucoes_sincronizacao,
-    created: '2026-08-11T20:38:39.948Z',
-    inicio: '2026-08-11T20:38:39.948Z',
-    fim: '2026-08-11T20:38:39.952Z',
+    created: '2026-08-11 20:38:39.948Z',
+    inicio: '2026-08-11 20:38:39.948Z',
+    fim: '2026-08-11 20:38:39.952Z',
     sistema_origem: 'activecampaign',
     status: 'completed',
   },
@@ -241,7 +241,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Estado da Compensação (v7 — invalid record_id filters removed, sole structural
+            Estado da Compensação (v8 — invalid record_id filters removed, sole structural
             dependency guard)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
@@ -352,7 +352,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            v7 — Invalid record_id Filters Removed
+            v8 — Invalid record_id Filters Removed
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">invalid_record_id_filters_removed:</span>
@@ -402,7 +402,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Precondition Counts (v7 — corrected per-collection mapping)
+            Precondition Counts (v8 — corrected per-collection mapping)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">expected_before:</span>
@@ -441,7 +441,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Expected Identity (v7 — literal audited values, no invented fields)
+            Expected Identity (v8 — literal audited values, no invented fields)
           </div>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
@@ -510,7 +510,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Structural Pseudocode (v7 — invalid filters removed, sole dependency guard, same
+            Structural Pseudocode (v8 — invalid filters removed, sole dependency guard, same
             transactional object)
           </div>
           <pre className="text-xs font-mono whitespace-pre-wrap break-all text-muted-foreground">
