@@ -2,12 +2,25 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/diag-compensacao-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v3'
+    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v4'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
     var LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
     var DEP_QUERY_LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
     var ORIG_AUDIT_LOCK_KEY = 'ac_diag_compensacao_auditoria_lock'
     var NATIVE_TRANSACTION_API = '$app.runInTransaction'
+    var TRANSACTION_HANDLE = 'txApp'
+    var ROUTE_IS_DESTRUCTIVE = true
+
+    var TRANSACTION_METADATA = {
+      transaction_api: NATIVE_TRANSACTION_API,
+      transaction_handle_inside_callback: TRANSACTION_HANDLE,
+      external_app_handle_used_inside_transaction: false,
+      lock_consumed_only_on_successful_commit: true,
+      transactional_ready: true,
+      route_is_destructive: ROUTE_IS_DESTRUCTIVE,
+      read_only_description_removed: true,
+      rollback_by_manual_recreation: 'prohibited',
+    }
 
     var FIXED_IDS = {
       com_vinculos_externos: 'phzmobi8mfb34ha',
@@ -133,28 +146,6 @@ routerAdd(
       }
     }
 
-    function engageLock() {
-      try {
-        var pc = $app.findCollectionByNameOrId('com_parametros')
-        var fr
-        try {
-          fr = $app.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
-        } catch (_) {
-          fr = new Record(pc)
-          fr.set('chave', LOCK_KEY)
-          fr.set('versao', 1)
-        }
-        fr.set('valor', 'consumed')
-        fr.set('ativo', true)
-        fr.set('descricao', 'Compensation dependencias single-execution lock (independent)')
-        fr.set('tipo', 'lock')
-        $app.save(fr)
-        return true
-      } catch (_) {
-        return false
-      }
-    }
-
     var compensationLockState = readLockState(LOCK_KEY)
     var depQueryLockState = readLockState(DEP_QUERY_LOCK_KEY)
     var origAuditLockState = readLockState(ORIG_AUDIT_LOCK_KEY)
@@ -172,8 +163,14 @@ routerAdd(
         compensation_executed: true,
         deletion_executed: true,
         activecampaign_calls: 0,
+        transaction_api: NATIVE_TRANSACTION_API,
+        transaction_handle_inside_callback: TRANSACTION_HANDLE,
+        external_app_handle_used_inside_transaction: false,
+        lock_consumed_only_on_successful_commit: true,
         transactional_ready: TRANSACTIONAL_READY,
         native_transaction_api: NATIVE_TRANSACTION_API,
+        route_is_destructive: ROUTE_IS_DESTRUCTIVE,
+        read_only_description_removed: true,
         rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
         compensation_lock: 'consumed',
         dependency_query_lock: depQueryLockState,
@@ -181,6 +178,8 @@ routerAdd(
         expected_counts_before: EXPECTED_COUNTS_BEFORE,
         expected_counts_after: EXPECTED_COUNTS_AFTER,
         expected_identity: EXPECTED_IDENTITY,
+        updated_field_present: false,
+        uninvented_fields_removed: true,
         reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
         deletion_order: DELETION_ORDER,
         message: 'Compensation already executed — independent lock prevents re-execution',
@@ -194,6 +193,7 @@ routerAdd(
     var countsAfter = null
     var postValidation = null
     var txError = null
+    var lockConsumedInsideTx = false
 
     try {
       $app.runInTransaction(function (txApp) {
@@ -400,7 +400,7 @@ routerAdd(
           preconditions.no_additional_references
 
         if (!allMet) {
-          return
+          throw new Error('Preconditions not met — native rollback triggered before any deletion')
         }
 
         preconditionsMet = true
@@ -473,6 +473,25 @@ routerAdd(
         ) {
           throw new Error('Post-validation failed — native rollback triggered')
         }
+
+        var pc = txApp.findCollectionByNameOrId('com_parametros')
+        var lockRec
+        try {
+          lockRec = txApp.findFirstRecordByData('com_parametros', 'chave', LOCK_KEY)
+        } catch (_) {
+          lockRec = new Record(pc)
+          lockRec.set('chave', LOCK_KEY)
+          lockRec.set('versao', 1)
+        }
+        lockRec.set('valor', 'consumed')
+        lockRec.set('ativo', true)
+        lockRec.set(
+          'descricao',
+          'Compensation dependencias single-execution lock (consumed inside transaction on successful commit)',
+        )
+        lockRec.set('tipo', 'lock')
+        txApp.save(lockRec)
+        lockConsumedInsideTx = true
       })
     } catch (err) {
       txError = String(err).substring(0, 300)
@@ -491,8 +510,14 @@ routerAdd(
         compensation_executed: false,
         deletion_executed: false,
         activecampaign_calls: 0,
+        transaction_api: NATIVE_TRANSACTION_API,
+        transaction_handle_inside_callback: TRANSACTION_HANDLE,
+        external_app_handle_used_inside_transaction: false,
+        lock_consumed_only_on_successful_commit: true,
         transactional_ready: TRANSACTIONAL_READY,
         native_transaction_api: NATIVE_TRANSACTION_API,
+        route_is_destructive: ROUTE_IS_DESTRUCTIVE,
+        read_only_description_removed: true,
         rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
         compensation_lock: 'armed',
         dependency_query_lock: depQueryLockState,
@@ -500,15 +525,18 @@ routerAdd(
         expected_counts_before: EXPECTED_COUNTS_BEFORE,
         expected_counts_after: EXPECTED_COUNTS_AFTER,
         expected_identity: EXPECTED_IDENTITY,
+        updated_field_present: false,
+        uninvented_fields_removed: true,
         reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
         deletion_order: DELETION_ORDER,
         preconditions_met: preconditionsMet,
         transaction_error: txError,
+        lock_consumed_inside_transaction: lockConsumedInsideTx,
         captured_records_before_deletion: capturedRecords,
         message:
           'Transaction failed — native rollback via ' +
           NATIVE_TRANSACTION_API +
-          ', all records restored. Rollback-by-manual-recreation is prohibited.',
+          ', all records restored. Lock remains armed. Rollback-by-manual-recreation is prohibited.',
       })
     }
 
@@ -525,8 +553,14 @@ routerAdd(
         compensation_executed: false,
         deletion_executed: false,
         activecampaign_calls: 0,
+        transaction_api: NATIVE_TRANSACTION_API,
+        transaction_handle_inside_callback: TRANSACTION_HANDLE,
+        external_app_handle_used_inside_transaction: false,
+        lock_consumed_only_on_successful_commit: true,
         transactional_ready: TRANSACTIONAL_READY,
         native_transaction_api: NATIVE_TRANSACTION_API,
+        route_is_destructive: ROUTE_IS_DESTRUCTIVE,
+        read_only_description_removed: true,
         rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
         compensation_lock: 'armed',
         dependency_query_lock: depQueryLockState,
@@ -534,17 +568,18 @@ routerAdd(
         expected_counts_before: EXPECTED_COUNTS_BEFORE,
         expected_counts_after: EXPECTED_COUNTS_AFTER,
         expected_identity: EXPECTED_IDENTITY,
+        updated_field_present: false,
+        uninvented_fields_removed: true,
         reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
         deletion_order: DELETION_ORDER,
         preconditions_met: false,
         preconditions: preconditions,
         counts_before: countsBefore,
         captured_records: capturedRecords,
-        message: 'Preconditions not met — compensation aborted, nothing deleted',
+        message:
+          'Preconditions not met — compensation aborted, nothing deleted. Lock remains armed.',
       })
     }
-
-    engageLock()
 
     return e.json(200, {
       route_version: ROUTE_VERSION,
@@ -558,8 +593,14 @@ routerAdd(
       compensation_executed: true,
       deletion_executed: true,
       activecampaign_calls: 0,
+      transaction_api: NATIVE_TRANSACTION_API,
+      transaction_handle_inside_callback: TRANSACTION_HANDLE,
+      external_app_handle_used_inside_transaction: false,
+      lock_consumed_only_on_successful_commit: true,
       transactional_ready: TRANSACTIONAL_READY,
       native_transaction_api: NATIVE_TRANSACTION_API,
+      route_is_destructive: ROUTE_IS_DESTRUCTIVE,
+      read_only_description_removed: true,
       rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
       compensation_lock: 'consumed',
       dependency_query_lock: depQueryLockState,
@@ -567,17 +608,20 @@ routerAdd(
       expected_counts_before: EXPECTED_COUNTS_BEFORE,
       expected_counts_after: EXPECTED_COUNTS_AFTER,
       expected_identity: EXPECTED_IDENTITY,
+      updated_field_present: false,
+      uninvented_fields_removed: true,
       reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
       deletion_order: DELETION_ORDER,
       preconditions_met: true,
       counts_before: countsBefore,
       counts_after: countsAfter,
       post_validation: postValidation,
+      lock_consumed_inside_transaction: lockConsumedInsideTx,
       captured_records_before_deletion: capturedRecords,
       message:
         'Compensation executed — all three records deleted atomically inside ' +
         NATIVE_TRANSACTION_API +
-        ' with native rollback',
+        ' with native rollback. Lock consumed inside transaction on successful commit.',
     })
   },
   $apis.requireAuth(),

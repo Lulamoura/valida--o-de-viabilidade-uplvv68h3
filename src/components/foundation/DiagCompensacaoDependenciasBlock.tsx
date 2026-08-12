@@ -25,8 +25,8 @@ interface CompEvidence {
 
 const SESSION_KEY = 'ac_diag_compensacao_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
-const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v3'
-const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v3'
+const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v4'
+const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v4'
 const NATIVE_TRANSACTION_API = '$app.runInTransaction'
 const EXPECTED_IDENTITY = {
   com_vinculos_externos: {
@@ -223,7 +223,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Estado da Compensação (v2 — native transaction)
+            Estado da Compensação (v4 — native transaction, lock inside tx)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">transactional_ready:</span>
@@ -267,7 +267,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Precondition Counts (v2 — corrected per-collection mapping)
+            Precondition Counts (v4 — corrected per-collection mapping)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">expected_before:</span>
@@ -306,7 +306,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Expected Identity (v3 — literal audited values, no invented fields)
+            Expected Identity (v4 — literal audited values, no invented fields)
           </div>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
