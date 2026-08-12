@@ -16,8 +16,8 @@ interface DependencyEvidence {
 
 const SESSION_KEY = 'ac_diag_consulta_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-consulta-dependencias'
-const BACKEND_VERSION = 'R14-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1'
-const FRONTEND_VERSION = 'R14-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1'
+const BACKEND_VERSION = 'R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1'
+const FRONTEND_VERSION = 'R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1'
 const READ_ONLY = true
 const BUTTON_ENABLED = true
 

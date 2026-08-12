@@ -2,7 +2,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/diag-consulta-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R14-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1'
+    var ROUTE_VERSION = 'R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-consulta-dependencias'
     var LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
     var ORIGINAL_AUDIT_LOCK_KEY = 'ac_diag_compensacao_auditoria_lock'
