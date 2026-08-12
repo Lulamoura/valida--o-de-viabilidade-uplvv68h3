@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Play, Loader2, Lock, Copy, Download, ShieldOff, LinkSearch } from 'lucide-react'
+import { Play, Loader2, Lock, Copy, Download, ShieldOff, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -132,7 +132,7 @@ export function DiagConsultaDependenciasBlock() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <LinkSearch className="h-4 w-4" />
+          <Link2 className="h-4 w-4" />
           Consulta de Dependências — Somente-Leitura
           <Badge variant="outline" className="ml-auto text-xs font-mono">
             {FRONTEND_VERSION}
