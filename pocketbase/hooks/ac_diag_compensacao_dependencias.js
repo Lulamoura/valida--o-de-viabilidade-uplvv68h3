@@ -2,11 +2,12 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/diag-compensacao-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v2'
+    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v3'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
     var LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
     var DEP_QUERY_LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
     var ORIG_AUDIT_LOCK_KEY = 'ac_diag_compensacao_auditoria_lock'
+    var NATIVE_TRANSACTION_API = '$app.runInTransaction'
 
     var FIXED_IDS = {
       com_vinculos_externos: 'phzmobi8mfb34ha',
@@ -25,29 +26,32 @@ routerAdd(
       com_vinculos_externos: 9,
     }
 
-    var DIAGNOSTIC_WINDOW_START = '2026-08-11T20:38:39.900Z'
-    var DIAGNOSTIC_WINDOW_END = '2026-08-11T20:38:40.000Z'
-    var windowStartMs = new Date(DIAGNOSTIC_WINDOW_START).getTime()
-    var windowEndMs = new Date(DIAGNOSTIC_WINDOW_END).getTime()
-
     var EXPECTED_IDENTITY = {
       com_vinculos_externos: {
-        collection: 'com_vinculos_externos',
         id: FIXED_IDS.com_vinculos_externos,
-        expected_created_window_start: DIAGNOSTIC_WINDOW_START,
-        expected_created_window_end: DIAGNOSTIC_WINDOW_END,
+        created: '2026-08-11T20:38:39.951Z',
+        collection_name: 'com_contatos',
+        external_id: 'DIAG-TRANSPORT-FN-C1',
+        external_type: 'contact',
+        record_id: 'hfjq2q1olefske7',
+        sistema_origem: 'activecampaign',
       },
       com_eventos_integracao: {
-        collection: 'com_eventos_integracao',
         id: FIXED_IDS.com_eventos_integracao,
-        expected_created_window_start: DIAGNOSTIC_WINDOW_START,
-        expected_created_window_end: DIAGNOSTIC_WINDOW_END,
+        created: '2026-08-11T20:38:39.950Z',
+        evento_tipo: 'contact_create',
+        external_id: 'DIAG-TRANSPORT-FN-C1',
+        idempotency_key: 'e860fa5a9d8615c44a7db52b909b70b816f80b74123b96780e7bb309e53d34ec',
+        sistema_origem: 'activecampaign',
+        status: 'processed',
       },
       com_execucoes_sincronizacao: {
-        collection: 'com_execucoes_sincronizacao',
         id: FIXED_IDS.com_execucoes_sincronizacao,
-        expected_created_window_start: DIAGNOSTIC_WINDOW_START,
-        expected_created_window_end: DIAGNOSTIC_WINDOW_END,
+        created: '2026-08-11T20:38:39.948Z',
+        inicio: '2026-08-11T20:38:39.948Z',
+        fim: '2026-08-11T20:38:39.952Z',
+        sistema_origem: 'activecampaign',
+        status: 'completed',
       },
     }
 
@@ -163,11 +167,13 @@ routerAdd(
         lock_state: 'consumed',
         lock_key: LOCK_KEY,
         fixed_ids: FIXED_IDS,
+        client_controlled_ids: false,
         client_input_rejected: true,
         compensation_executed: true,
         deletion_executed: true,
         activecampaign_calls: 0,
         transactional_ready: TRANSACTIONAL_READY,
+        native_transaction_api: NATIVE_TRANSACTION_API,
         rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
         compensation_lock: 'consumed',
         dependency_query_lock: depQueryLockState,
@@ -223,57 +229,72 @@ routerAdd(
         var identityVerified = true
 
         if (vinculo) {
-          var vC = vinculo.getString('created')
-          var vMs = vC ? new Date(vC).getTime() : NaN
-          var vInWin = !isNaN(vMs) && vMs >= windowStartMs && vMs <= windowEndMs
+          var vExp = EXPECTED_IDENTITY.com_vinculos_externos
           capturedRecords.com_vinculos_externos = {
             id: vinculo.id,
-            sistema_origem: vinculo.getString('sistema_origem'),
-            external_type: vinculo.getString('external_type'),
-            external_id: vinculo.getString('external_id'),
+            created: vinculo.getString('created'),
             collection_name: vinculo.getString('collection_name'),
+            external_id: vinculo.getString('external_id'),
+            external_type: vinculo.getString('external_type'),
             record_id: vinculo.getString('record_id'),
-            created: vC,
-            updated: vinculo.getString('updated'),
-            created_in_window: vInWin,
+            sistema_origem: vinculo.getString('sistema_origem'),
           }
-          if (!vInWin) identityVerified = false
+          if (capturedRecords.com_vinculos_externos.created !== vExp.created)
+            identityVerified = false
+          if (capturedRecords.com_vinculos_externos.collection_name !== vExp.collection_name)
+            identityVerified = false
+          if (capturedRecords.com_vinculos_externos.external_id !== vExp.external_id)
+            identityVerified = false
+          if (capturedRecords.com_vinculos_externos.external_type !== vExp.external_type)
+            identityVerified = false
+          if (capturedRecords.com_vinculos_externos.record_id !== vExp.record_id)
+            identityVerified = false
+          if (capturedRecords.com_vinculos_externos.sistema_origem !== vExp.sistema_origem)
+            identityVerified = false
         }
         if (evento) {
-          var eC = evento.getString('created')
-          var eMs = eC ? new Date(eC).getTime() : NaN
-          var eInWin = !isNaN(eMs) && eMs >= windowStartMs && eMs <= windowEndMs
+          var eExp = EXPECTED_IDENTITY.com_eventos_integracao
           capturedRecords.com_eventos_integracao = {
             id: evento.id,
-            sistema_origem: evento.getString('sistema_origem'),
+            created: evento.getString('created'),
             evento_tipo: evento.getString('evento_tipo'),
             external_id: evento.getString('external_id'),
             idempotency_key: evento.getString('idempotency_key'),
-            payload: evento.getString('payload'),
+            sistema_origem: evento.getString('sistema_origem'),
             status: evento.getString('status'),
-            created: eC,
-            updated: evento.getString('updated'),
-            created_in_window: eInWin,
           }
-          if (!eInWin) identityVerified = false
+          if (capturedRecords.com_eventos_integracao.created !== eExp.created)
+            identityVerified = false
+          if (capturedRecords.com_eventos_integracao.evento_tipo !== eExp.evento_tipo)
+            identityVerified = false
+          if (capturedRecords.com_eventos_integracao.external_id !== eExp.external_id)
+            identityVerified = false
+          if (capturedRecords.com_eventos_integracao.idempotency_key !== eExp.idempotency_key)
+            identityVerified = false
+          if (capturedRecords.com_eventos_integracao.sistema_origem !== eExp.sistema_origem)
+            identityVerified = false
+          if (capturedRecords.com_eventos_integracao.status !== eExp.status)
+            identityVerified = false
         }
         if (execucao) {
-          var xC = execucao.getString('created')
-          var xMs = xC ? new Date(xC).getTime() : NaN
-          var xInWin = !isNaN(xMs) && xMs >= windowStartMs && xMs <= windowEndMs
+          var xExp = EXPECTED_IDENTITY.com_execucoes_sincronizacao
           capturedRecords.com_execucoes_sincronizacao = {
             id: execucao.id,
-            sistema_origem: execucao.getString('sistema_origem'),
-            status: execucao.getString('status'),
-            payload: execucao.getString('payload'),
-            erro: execucao.getString('erro'),
+            created: execucao.getString('created'),
             inicio: execucao.getString('inicio'),
             fim: execucao.getString('fim'),
-            created: xC,
-            updated: execucao.getString('updated'),
-            created_in_window: xInWin,
+            sistema_origem: execucao.getString('sistema_origem'),
+            status: execucao.getString('status'),
           }
-          if (!xInWin) identityVerified = false
+          if (capturedRecords.com_execucoes_sincronizacao.created !== xExp.created)
+            identityVerified = false
+          if (capturedRecords.com_execucoes_sincronizacao.inicio !== xExp.inicio)
+            identityVerified = false
+          if (capturedRecords.com_execucoes_sincronizacao.fim !== xExp.fim) identityVerified = false
+          if (capturedRecords.com_execucoes_sincronizacao.sistema_origem !== xExp.sistema_origem)
+            identityVerified = false
+          if (capturedRecords.com_execucoes_sincronizacao.status !== xExp.status)
+            identityVerified = false
         }
 
         var ocorrencias = txFind(
@@ -465,11 +486,13 @@ routerAdd(
         lock_state: 'armed',
         lock_key: LOCK_KEY,
         fixed_ids: FIXED_IDS,
+        client_controlled_ids: false,
         client_input_rejected: true,
         compensation_executed: false,
         deletion_executed: false,
         activecampaign_calls: 0,
         transactional_ready: TRANSACTIONAL_READY,
+        native_transaction_api: NATIVE_TRANSACTION_API,
         rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
         compensation_lock: 'armed',
         dependency_query_lock: depQueryLockState,
@@ -483,7 +506,9 @@ routerAdd(
         transaction_error: txError,
         captured_records_before_deletion: capturedRecords,
         message:
-          'Transaction failed — native rollback, all records restored. Rollback-by-manual-recreation is prohibited.',
+          'Transaction failed — native rollback via ' +
+          NATIVE_TRANSACTION_API +
+          ', all records restored. Rollback-by-manual-recreation is prohibited.',
       })
     }
 
@@ -495,11 +520,13 @@ routerAdd(
         lock_state: 'armed',
         lock_key: LOCK_KEY,
         fixed_ids: FIXED_IDS,
+        client_controlled_ids: false,
         client_input_rejected: true,
         compensation_executed: false,
         deletion_executed: false,
         activecampaign_calls: 0,
         transactional_ready: TRANSACTIONAL_READY,
+        native_transaction_api: NATIVE_TRANSACTION_API,
         rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
         compensation_lock: 'armed',
         dependency_query_lock: depQueryLockState,
@@ -526,11 +553,13 @@ routerAdd(
       lock_state: 'consumed',
       lock_key: LOCK_KEY,
       fixed_ids: FIXED_IDS,
+      client_controlled_ids: false,
       client_input_rejected: true,
       compensation_executed: true,
       deletion_executed: true,
       activecampaign_calls: 0,
       transactional_ready: TRANSACTIONAL_READY,
+      native_transaction_api: NATIVE_TRANSACTION_API,
       rollback_by_manual_recreation: ROLLBACK_BY_MANUAL_RECREATION,
       compensation_lock: 'consumed',
       dependency_query_lock: depQueryLockState,
@@ -546,7 +575,9 @@ routerAdd(
       post_validation: postValidation,
       captured_records_before_deletion: capturedRecords,
       message:
-        'Compensation executed — all three records deleted atomically inside native transaction with native rollback',
+        'Compensation executed — all three records deleted atomically inside ' +
+        NATIVE_TRANSACTION_API +
+        ' with native rollback',
     })
   },
   $apis.requireAuth(),

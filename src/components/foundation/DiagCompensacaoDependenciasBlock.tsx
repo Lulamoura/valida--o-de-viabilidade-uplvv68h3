@@ -25,8 +25,37 @@ interface CompEvidence {
 
 const SESSION_KEY = 'ac_diag_compensacao_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
-const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v2'
-const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v2'
+const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v3'
+const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v3'
+const NATIVE_TRANSACTION_API = '$app.runInTransaction'
+const EXPECTED_IDENTITY = {
+  com_vinculos_externos: {
+    id: FIXED_IDS.com_vinculos_externos,
+    created: '2026-08-11T20:38:39.951Z',
+    collection_name: 'com_contatos',
+    external_id: 'DIAG-TRANSPORT-FN-C1',
+    external_type: 'contact',
+    record_id: 'hfjq2q1olefske7',
+    sistema_origem: 'activecampaign',
+  },
+  com_eventos_integracao: {
+    id: FIXED_IDS.com_eventos_integracao,
+    created: '2026-08-11T20:38:39.950Z',
+    evento_tipo: 'contact_create',
+    external_id: 'DIAG-TRANSPORT-FN-C1',
+    idempotency_key: 'e860fa5a9d8615c44a7db52b909b70b816f80b74123b96780e7bb309e53d34ec',
+    sistema_origem: 'activecampaign',
+    status: 'processed',
+  },
+  com_execucoes_sincronizacao: {
+    id: FIXED_IDS.com_execucoes_sincronizacao,
+    created: '2026-08-11T20:38:39.948Z',
+    inicio: '2026-08-11T20:38:39.948Z',
+    fim: '2026-08-11T20:38:39.952Z',
+    sistema_origem: 'activecampaign',
+    status: 'completed',
+  },
+}
 const FIXED_IDS = {
   com_vinculos_externos: 'phzmobi8mfb34ha',
   com_eventos_integracao: 'pq4npvruaak9gpb',
@@ -203,6 +232,14 @@ export function DiagCompensacaoDependenciasBlock() {
             </Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">native_transaction_api:</span>
+            <code className="text-foreground">{NATIVE_TRANSACTION_API}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">client_controlled_ids:</span>
+            <Badge variant="outline">false</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">compensation_lock:</span>
             <Badge variant="secondary">{COMPENSATION_LOCK}</Badge>
           </div>
@@ -262,7 +299,77 @@ export function DiagCompensacaoDependenciasBlock() {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="h-3 w-3" />
-            All preconditions, deletions, and post-validations inside single native transaction
+            All preconditions, deletions, and post-validations inside single native transaction via{' '}
+            {NATIVE_TRANSACTION_API}
+          </div>
+        </div>
+
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+          <div className="text-xs font-medium text-muted-foreground mb-1">
+            Expected Identity (v3 — literal audited values, no invented fields)
+          </div>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+              <span className="text-muted-foreground">com_vinculos_externos:</span>
+              <code className="text-foreground">
+                created={EXPECTED_IDENTITY.com_vinculos_externos.created}
+              </code>
+              <code className="text-foreground">
+                collection_name={EXPECTED_IDENTITY.com_vinculos_externos.collection_name}
+              </code>
+              <code className="text-foreground">
+                external_id={EXPECTED_IDENTITY.com_vinculos_externos.external_id}
+              </code>
+              <code className="text-foreground">
+                external_type={EXPECTED_IDENTITY.com_vinculos_externos.external_type}
+              </code>
+              <code className="text-foreground">
+                record_id={EXPECTED_IDENTITY.com_vinculos_externos.record_id}
+              </code>
+              <code className="text-foreground">
+                sistema_origem={EXPECTED_IDENTITY.com_vinculos_externos.sistema_origem}
+              </code>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+              <span className="text-muted-foreground">com_eventos_integracao:</span>
+              <code className="text-foreground">
+                created={EXPECTED_IDENTITY.com_eventos_integracao.created}
+              </code>
+              <code className="text-foreground">
+                evento_tipo={EXPECTED_IDENTITY.com_eventos_integracao.evento_tipo}
+              </code>
+              <code className="text-foreground">
+                external_id={EXPECTED_IDENTITY.com_eventos_integracao.external_id}
+              </code>
+              <code className="text-foreground">
+                idempotency_key=
+                {EXPECTED_IDENTITY.com_eventos_integracao.idempotency_key.substring(0, 16)}…
+              </code>
+              <code className="text-foreground">
+                sistema_origem={EXPECTED_IDENTITY.com_eventos_integracao.sistema_origem}
+              </code>
+              <code className="text-foreground">
+                status={EXPECTED_IDENTITY.com_eventos_integracao.status}
+              </code>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+              <span className="text-muted-foreground">com_execucoes_sincronizacao:</span>
+              <code className="text-foreground">
+                created={EXPECTED_IDENTITY.com_execucoes_sincronizacao.created}
+              </code>
+              <code className="text-foreground">
+                inicio={EXPECTED_IDENTITY.com_execucoes_sincronizacao.inicio}
+              </code>
+              <code className="text-foreground">
+                fim={EXPECTED_IDENTITY.com_execucoes_sincronizacao.fim}
+              </code>
+              <code className="text-foreground">
+                sistema_origem={EXPECTED_IDENTITY.com_execucoes_sincronizacao.sistema_origem}
+              </code>
+              <code className="text-foreground">
+                status={EXPECTED_IDENTITY.com_execucoes_sincronizacao.status}
+              </code>
+            </div>
           </div>
         </div>
 
