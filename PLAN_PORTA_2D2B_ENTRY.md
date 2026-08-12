@@ -211,6 +211,8 @@ Todos os itens S1–S7 devem estar com status "Provado" antes de proceder. Qualq
 
 Contagens são capturadas: antes do round, após cada chamada individual, e ao final.
 
+> **Ver também:** Seção 7.7 — Tabela Consolidada de Monitoramento (contagens iniciais, deltas exatos, fórmulas de contagem final e bloco do parâmetro `ac_webhook_enabled`).
+
 ### 7.2 Fase A — Testes Negativos de Segurança (Zero Persistência)
 
 > Todos os testes negativos devem produzir **delta zero** em todas as coleções monitoradas.
@@ -267,6 +269,42 @@ Os testes B6 e B7 constituem a Fase C. O contrato esperado:
 | `com_snapshots_negocio`       | +1 (B4)                                               |
 | `com_ocorrencias_qualidade`   | +1 (B5)                                               |
 | `com_auditoria`               | +0 (criação server-side apenas, regra `create: null`) |
+
+> **Ver também:** Seção 7.7 — Tabela Consolidada de Monitoramento (visão única com contagem inicial, delta exato, fórmula de contagem final e fases responsáveis por cada delta).
+
+---
+
+## 7.7 Tabela Consolidada de Monitoramento (Adição Documental)
+
+> Esta seção consolida em uma única tabela, para cada coleção monitorada, a contagem inicial (a capturar antes do round — sem valor numérico inventado), o delta exato esperado para o round completo, a fórmula da contagem final (`inicial + delta`) e as fases/chamadas responsáveis pelo delta.
+
+| Coleção                       | Contagem Inicial          | Delta Exato Esperado (Round Completo) | Fórmula Contagem Final | Fases / Chamadas Responsáveis                                            |
+| ----------------------------- | ------------------------- | ------------------------------------- | ---------------------- | ------------------------------------------------------------------------ |
+| `com_contatos`                | a capturar antes do round | +1                                    | inicial + 1            | B1 (contact_create `TESTE-2D2B-FN-C1`)                                   |
+| `com_negocios`                | a capturar antes do round | +2                                    | inicial + 2            | B3 (deal_create `TESTE-2D2B-FN-D1`), B5 (deal_create `TESTE-2D2B-FN-D2`) |
+| `com_eventos_integracao`      | a capturar antes do round | +5                                    | inicial + 5            | B1, B3, B4, B5, B6 (compensador); B7 = 0 (idempotente)                   |
+| `com_execucoes_sincronizacao` | a capturar antes do round | +5                                    | inicial + 5            | B1, B3, B4, B5, B6                                                       |
+| `com_vinculos_externos`       | a capturar antes do round | +2                                    | inicial + 2            | B1 (vínculo contato), B3 (vínculo negócio)                               |
+| `com_snapshots_negocio`       | a capturar antes do round | +1                                    | inicial + 1            | B4 (deal_update `TESTE-2D2B-FN-D1`)                                      |
+| `com_ocorrencias_qualidade`   | a capturar antes do round | +1                                    | inicial + 1            | B5 (unmapped_stage `TESTE-2D2B-FN-D2`)                                   |
+| `com_auditoria`               | a capturar antes do round | +0                                    | inicial + 0            | Nenhuma (criação server-side apenas, regra `create: null`)               |
+
+> **Nota sobre `com_eventos_integracao`:** O delta total é +5 (B1, B3, B4, B5, B6 compensador). A repetição idempotente B7 produz delta 0 (nenhum novo evento compensador é criado).
+
+> **Nota sobre `com_auditoria`:** O delta esperado é 0 porque a regra de criação é `create: null` (server-side apenas). Nenhum registro de auditoria é criado pelas chamadas do round.
+
+### Bloco do Parâmetro `ac_webhook_enabled` (Registrado Separadamente)
+
+| Aspecto                             | Valor                                                                                     |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| Chave                               | `ac_webhook_enabled`                                                                      |
+| Contagem / Valor inicial esperado   | `false` (confirmado antes do round)                                                       |
+| Única transição autorizada (futuro) | `false → true → false`                                                                    |
+| Estado final obrigatório            | `false`                                                                                   |
+| Restauração automática após PARE    | Restaurar `ac_webhook_enabled = false` é a **única** ação corretiva automática permitida  |
+| Outros parâmetros ou locks          | Fora do escopo — proibidos (nenhuma outra chave de `com_parametros` é lida ou modificada) |
+
+> **Ver também:** Seção 8 — Parâmetro de Ativação (Correção 7) para o detalhamento completo do parâmetro `ac_webhook_enabled`.
 
 ---
 
@@ -507,19 +545,16 @@ A autorização para executar a Porta 2D.2B será redigida externamente apenas a
 ```json
 {
   "documentation_only": true,
-  "plan_corrected": true,
+  "consolidated_table_added": true,
   "files_modified": ["PLAN_PORTA_2D2B_ENTRY.md"],
+  "analysis_executed": false,
   "routes_executed": 0,
   "tests_executed": 0,
   "records_created": 0,
   "records_updated": 0,
   "records_deleted": 0,
   "parameters_modified": 0,
-  "locks_modified": 0,
-  "code_files_modified": 0,
   "activecampaign_calls": 0,
-  "external_calls": 0,
-  "porta_2d2b_started": false,
-  "porta_2e_started": false
+  "porta_2d2b_started": false
 }
 ```
