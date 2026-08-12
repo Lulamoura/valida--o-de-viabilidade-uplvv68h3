@@ -1,3 +1,58 @@
+# R13 Diagnóstico de Compensação — Auditoria Somente-Leitura
+
+## Relatório de Publicação
+
+### Versões Concretas
+
+| Item                  | Versão                                                |
+| --------------------- | ----------------------------------------------------- |
+| Backend hook          | `ac_diag_compensacao_auditoria`                       |
+| Backend route version | `R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v2`          |
+| Frontend bundle       | `R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v5` |
+
+### Rota Somente-Leitura
+
+```
+GET /backend/v1/integracao/ac/diag-compensacao-auditoria
+```
+
+### Confirmações
+
+| Campo                      | Valor   |
+| -------------------------- | ------- |
+| execution_enabled          | `true`  |
+| button_enabled             | `true`  |
+| executed                   | `false` |
+| deletion_executed          | `false` |
+| v7 lock state              | `armed` |
+| data writes                | `0`     |
+| ActiveCampaign calls       | `0`     |
+| external calls             | `0`     |
+| locks consumed             | `0`     |
+| locks modified             | `0`     |
+| client parameters accepted | `0`     |
+
+### Coleções e Filtros Fixos
+
+| Coleção                       | Filtro Fixo                            |
+| ----------------------------- | -------------------------------------- |
+| `com_eventos_integracao`      | `id = "pq4npvruaak9gpb"`               |
+| `com_execucoes_sincronizacao` | `id = "62otoics23ul0vy"`               |
+| `com_vinculos_externos`       | `external_id = 'DIAG-TRANSPORT-FN-C1'` |
+| `com_ocorrencias_qualidade`   | `execucao_id = "62otoics23ul0vy"`      |
+
+### v7 Preservação
+
+- Hook `pocketbase/hooks/ac_diag_compensacao_dependencias.js`: **não modificado**
+- Lock `ac_diag_compensacao_dependencias_lock` em `com_parametros`: **`armed`**
+- Registros deletados: **0**
+- Lock consumido: **não**
+
+### Código Completo do Handler Somente-Leitura
+
+Arquivo: `pocketbase/hooks/ac_diag_compensacao_auditoria.js`
+
+```javascript
 routerAdd(
   'GET',
   '/backend/v1/integracao/ac/diag-compensacao-auditoria',
@@ -193,3 +248,21 @@ routerAdd(
   },
   $apis.requireAuth(),
 )
+```
+
+### SHA-256
+
+SHA-256 dos arquivos publicados deve ser computado após o deploy pelo ambiente.
+
+### Proibições Cumpridas
+
+- [x] Auditoria não executada
+- [x] Compensação não executada
+- [x] Nenhum registro deletado
+- [x] Lock não consumido
+- [x] R14 não criado
+- [x] 2D.2B não iniciado
+- [x] Porta 2E não iniciada
+- [x] Dados reais não utilizados
+- [x] ActiveCampaign não chamado
+- [x] Parado após publicação e relatório

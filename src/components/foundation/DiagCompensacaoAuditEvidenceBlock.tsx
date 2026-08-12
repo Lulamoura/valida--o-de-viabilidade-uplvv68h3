@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Play, Loader2, Lock, Copy, Download, ShieldOff, FileSearch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import pb from '@/lib/pocketbase/client'
+import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 
 interface AuditEvidence {
   captured_from: 'HTTP_RESPONSE' | 'FETCH_ERROR'
@@ -16,13 +17,11 @@ interface AuditEvidence {
 
 const SESSION_KEY = 'ac_diag_compensacao_audit_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-auditoria'
-const AUDIT_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v1'
-const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-CONTROL-20260812-v4'
+const AUDIT_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v2'
+const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v5'
 const EXECUTION_ENABLED = true
 const BUTTON_ENABLED = true
-const AUTHENTICATED = true
 const READ_ONLY = true
-const SERVER_SIDE_LOCK = 'armed'
 
 function loadFromSession(): AuditEvidence | null {
   try {
@@ -45,9 +44,21 @@ function saveToSession(data: AuditEvidence) {
 }
 
 export function DiagCompensacaoAuditEvidenceBlock() {
+  const { isSuperAdmin, loading: saLoading } = useIsSuperAdmin()
   const [evidence, setEvidence] = useState<AuditEvidence | null>(null)
   const [executing, setExecuting] = useState(false)
   const executedRef = useRef(false)
+
+  useEffect(() => {
+    const saved = loadFromSession()
+    if (saved) {
+      setEvidence(saved)
+      executedRef.current = true
+    }
+  }, [])
+
+  if (saLoading) return null
+  if (!isSuperAdmin) return null
 
   const handleExecute = async () => {
     if (executedRef.current || executing || !EXECUTION_ENABLED || !BUTTON_ENABLED) return
@@ -150,22 +161,20 @@ export function DiagCompensacaoAuditEvidenceBlock() {
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">Route:</span>
-            <code className="text-foreground">{ROUTE_PATH}</code>
+            <code className="text-foreground">GET {ROUTE_PATH}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">Read Only:</span>
+            <Badge variant={READ_ONLY ? 'default' : 'destructive'}>{String(READ_ONLY)}</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">Client Parameters:</span>
+            <Badge variant="outline">0 (ignored)</Badge>
           </div>
         </div>
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">Estado da Auditoria</div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
-            <span className="text-muted-foreground">authenticated:</span>
-            <Badge variant={AUTHENTICATED ? 'default' : 'destructive'}>
-              {String(AUTHENTICATED)}
-            </Badge>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
-            <span className="text-muted-foreground">read_only:</span>
-            <Badge variant={READ_ONLY ? 'default' : 'destructive'}>{String(READ_ONLY)}</Badge>
-          </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">execution_enabled:</span>
             <Badge variant={EXECUTION_ENABLED ? 'default' : 'destructive'}>
@@ -173,8 +182,10 @@ export function DiagCompensacaoAuditEvidenceBlock() {
             </Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
-            <span className="text-muted-foreground">server_side_lock:</span>
-            <Badge variant="secondary">{SERVER_SIDE_LOCK}</Badge>
+            <span className="text-muted-foreground">button_enabled:</span>
+            <Badge variant={BUTTON_ENABLED ? 'default' : 'destructive'}>
+              {String(BUTTON_ENABLED)}
+            </Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">executed:</span>
@@ -187,10 +198,16 @@ export function DiagCompensacaoAuditEvidenceBlock() {
             <Badge variant="outline">false</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
-            <span className="text-muted-foreground">button_enabled:</span>
-            <Badge variant={BUTTON_ENABLED ? 'default' : 'destructive'}>
-              {String(BUTTON_ENABLED)}
-            </Badge>
+            <span className="text-muted-foreground">v7_lock_state:</span>
+            <Badge variant="secondary">armed</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">activecampaign_calls:</span>
+            <Badge variant="outline">0</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">data_writes:</span>
+            <Badge variant="outline">0</Badge>
           </div>
         </div>
 
@@ -207,13 +224,6 @@ export function DiagCompensacaoAuditEvidenceBlock() {
             )}
             Executar auditoria somente-leitura
           </Button>
-
-          {!BUTTON_ENABLED && (
-            <Badge variant="destructive" className="text-xs">
-              <ShieldOff className="h-3 w-3 mr-1" />
-              Botão desativado
-            </Badge>
-          )}
 
           {executedRef.current && (
             <Badge variant="secondary" className="text-xs">
@@ -270,8 +280,8 @@ export function DiagCompensacaoAuditEvidenceBlock() {
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">
               Nenhuma evidência de auditoria de compensação capturada. O botão "Executar auditoria
-              somente-leitura" está habilitado. A rota é {`GET ${ROUTE_PATH}`}, a auditoria ainda
-              não foi executada e o bloqueio do lado do servidor permanece {SERVER_SIDE_LOCK}.
+              somente-leitura" está habilitado. A rota é {`GET ${ROUTE_PATH}`}, estritamente
+              somente-leitura, não consome locks e não faz chamadas externas.
             </div>
             <div className="text-xs text-muted-foreground font-mono">
               Bundle: {FRONTEND_BUNDLE} | Route: GET {ROUTE_PATH}

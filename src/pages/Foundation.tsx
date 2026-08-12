@@ -9,6 +9,9 @@ import { UsuariosTab } from '@/components/foundation/UsuariosTab'
 import { VinculosTab } from '@/components/foundation/VinculosTab'
 import { IntegrationTestsTab } from '@/components/foundation/IntegrationTestsTab'
 import { DiagConsultaDependenciasBlock } from '@/components/foundation/DiagConsultaDependenciasBlock'
+import { DiagCompensacaoAuditEvidenceBlock } from '@/components/foundation/DiagCompensacaoAuditEvidenceBlock'
+import { DiagCompensacaoDependenciasBlock } from '@/components/foundation/DiagCompensacaoDependenciasBlock'
+import { DiagTransportEvidenceBlock } from '@/components/foundation/DiagTransportEvidenceBlock'
 
 export default function Foundation() {
   return (
@@ -56,9 +59,12 @@ export default function Foundation() {
         <TabsContent value="integracao">
           <div className="space-y-4">
             <IntegrationTestsTab />
+            <DiagTransportEvidenceBlock />
+            <DiagCompensacaoAuditEvidenceBlock />
+            <DiagCompensacaoDependenciasBlock />
             <DiagConsultaDependenciasBlock />
           </div>
-        </TabsContent>
+        </TabsContent>{' '}
       </Tabs>
     </div>
   )
