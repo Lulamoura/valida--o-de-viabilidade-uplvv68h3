@@ -17,7 +17,7 @@ interface AuditEvidence {
 const SESSION_KEY = 'ac_diag_compensacao_audit_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-auditoria'
 const AUDIT_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v1'
-const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v3'
+const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-CONTROL-20260812-v4'
 const EXECUTION_ENABLED = true
 const BUTTON_ENABLED = true
 const AUTHENTICATED = true
@@ -270,8 +270,8 @@ export function DiagCompensacaoAuditEvidenceBlock() {
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">
               Nenhuma evidência de auditoria de compensação capturada. O botão "Executar auditoria
-              somente-leitura" está desativado — a execução será disponibilizada em uma versão
-              futura.
+              somente-leitura" está habilitado. A rota é {`GET ${ROUTE_PATH}`}, a auditoria ainda
+              não foi executada e o bloqueio do lado do servidor permanece {SERVER_SIDE_LOCK}.
             </div>
             <div className="text-xs text-muted-foreground font-mono">
               Bundle: {FRONTEND_BUNDLE} | Route: GET {ROUTE_PATH}
