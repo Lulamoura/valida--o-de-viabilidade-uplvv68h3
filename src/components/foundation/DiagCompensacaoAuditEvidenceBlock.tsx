@@ -17,7 +17,7 @@ interface AuditEvidence {
 const SESSION_KEY = 'ac_diag_compensacao_audit_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-auditoria'
 const AUDIT_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v1'
-const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v2'
+const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v3'
 const EXECUTION_ENABLED = true
 const BUTTON_ENABLED = true
 const AUTHENTICATED = true
@@ -62,9 +62,8 @@ export function DiagCompensacaoAuditEvidenceBlock() {
 
     try {
       const res = await fetch(`${import.meta.env.VITE_POCKETBASE_URL}${ROUTE_PATH}`, {
-        method: 'POST',
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: pb.authStore.token || '',
         },
       })
@@ -275,7 +274,7 @@ export function DiagCompensacaoAuditEvidenceBlock() {
               futura.
             </div>
             <div className="text-xs text-muted-foreground font-mono">
-              Bundle: {FRONTEND_BUNDLE} | Route: POST {ROUTE_PATH}
+              Bundle: {FRONTEND_BUNDLE} | Route: GET {ROUTE_PATH}
             </div>
           </div>
         )}
