@@ -13,15 +13,31 @@ interface AuditEvidence {
   captured_at: string
   route: string
   raw_response: string
+  parsed?: {
+    query_succeeded?: boolean
+    target_identity_verified?: Record<string, boolean> | boolean
+    dependency_query_succeeded?: boolean
+    dependency_count?: number | null
+    counts?: Record<string, number> | null
+    lock_state_read_succeeded?: boolean
+    v7_lock?: { key: string; state: string | null; modified: boolean }
+    records_created?: number
+    records_updated?: number
+    records_deleted?: number
+    locks_modified?: number
+    activecampaign_calls?: number
+    external_calls?: number
+  } | null
 }
 
 const SESSION_KEY = 'ac_diag_compensacao_audit_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-auditoria'
-const AUDIT_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v2'
-const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v5'
+const AUDIT_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v3'
+const FRONTEND_BUNDLE = 'R13-DIAG-COMPENSACAO-AUDITORIA-FRONTEND-20260812-v3'
 const EXECUTION_ENABLED = true
 const BUTTON_ENABLED = true
 const READ_ONLY = true
+const NOT_VERIFIED = 'não verificado nesta sessão'
 
 function loadFromSession(): AuditEvidence | null {
   try {
@@ -40,6 +56,14 @@ function saveToSession(data: AuditEvidence) {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(data))
   } catch {
     /* ignore quota */
+  }
+}
+
+function tryParse(raw: string): AuditEvidence['parsed'] {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
   }
 }
 
@@ -87,6 +111,7 @@ export function DiagCompensacaoAuditEvidenceBlock() {
         captured_at: new Date().toISOString(),
         route: ROUTE_PATH,
         raw_response: rawText,
+        parsed: tryParse(rawText),
       }
 
       saveToSession(data)
@@ -105,6 +130,7 @@ export function DiagCompensacaoAuditEvidenceBlock() {
         captured_at: new Date().toISOString(),
         route: ROUTE_PATH,
         raw_response: errorMessage,
+        parsed: null,
       }
       saveToSession(data)
       setEvidence(data)
@@ -141,6 +167,19 @@ export function DiagCompensacaoAuditEvidenceBlock() {
     !!evidence && evidence.captured_from === 'HTTP_RESPONSE' && !!evidence.raw_response
 
   const buttonDisabled = !BUTTON_ENABLED || !EXECUTION_ENABLED || executedRef.current || executing
+
+  const hasEvidence = !!evidence && evidence.captured_from === 'HTTP_RESPONSE'
+  const p = evidence?.parsed
+
+  const v7LockStateDisplay =
+    hasEvidence && p?.v7_lock?.state != null ? p.v7_lock.state : NOT_VERIFIED
+  const dataWritesDisplay = hasEvidence
+    ? String((p?.records_created ?? 0) + (p?.records_updated ?? 0) + (p?.records_deleted ?? 0))
+    : NOT_VERIFIED
+  const deletionExecutedDisplay = hasEvidence ? String((p?.records_deleted ?? 0) > 0) : NOT_VERIFIED
+  const activeCampaignCallsDisplay = hasEvidence
+    ? String(p?.activecampaign_calls ?? 0)
+    : NOT_VERIFIED
 
   return (
     <Card>
@@ -195,19 +234,19 @@ export function DiagCompensacaoAuditEvidenceBlock() {
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">deletion_executed:</span>
-            <Badge variant="outline">false</Badge>
+            <Badge variant="outline">{deletionExecutedDisplay}</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">v7_lock_state:</span>
-            <Badge variant="secondary">armed</Badge>
+            <Badge variant="secondary">{v7LockStateDisplay}</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">activecampaign_calls:</span>
-            <Badge variant="outline">0</Badge>
+            <Badge variant="outline">{activeCampaignCallsDisplay}</Badge>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">data_writes:</span>
-            <Badge variant="outline">0</Badge>
+            <Badge variant="outline">{dataWritesDisplay}</Badge>
           </div>
         </div>
 
@@ -281,7 +320,9 @@ export function DiagCompensacaoAuditEvidenceBlock() {
             <div className="text-sm text-muted-foreground">
               Nenhuma evidência de auditoria de compensação capturada. O botão "Executar auditoria
               somente-leitura" está habilitado. A rota é {`GET ${ROUTE_PATH}`}, estritamente
-              somente-leitura, não consome locks e não faz chamadas externas.
+              somente-leitura, não consome locks e não faz chamadas externas. Os campos
+              v7_lock_state, data_writes, deletion_executed e activecampaign_calls mostram "
+              {NOT_VERIFIED}" até que a auditoria seja executada.
             </div>
             <div className="text-xs text-muted-foreground font-mono">
               Bundle: {FRONTEND_BUNDLE} | Route: GET {ROUTE_PATH}

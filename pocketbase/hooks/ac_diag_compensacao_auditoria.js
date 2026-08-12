@@ -2,27 +2,52 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/diag-compensacao-auditoria',
   (e) => {
-    var ROUTE_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v2'
+    var ROUTE_VERSION = 'R13-DIAG-COMPENSACAO-AUDITORIA-20260812-v3'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-auditoria'
 
     var FIXED_IDS = {
+      com_vinculos_externos: 'phzmobi8mfb34ha',
       com_eventos_integracao: 'pq4npvruaak9gpb',
       com_execucoes_sincronizacao: '62otoics23ul0vy',
     }
 
-    var FIXED_FILTERS = {
-      com_vinculos_externos: "external_id = 'DIAG-TRANSPORT-FN-C1'",
-      com_ocorrencias_qualidade: 'execucao_id = "62otoics23ul0vy"',
+    var EXPECTED_IDENTITY = {
+      com_vinculos_externos: {
+        id: 'phzmobi8mfb34ha',
+        created: '2026-08-11T20:38:39.951Z',
+        collection_name: 'com_contatos',
+        external_id: 'DIAG-TRANSPORT-FN-C1',
+        external_type: 'contact',
+        record_id: 'hfjq2q1olefske7',
+        sistema_origem: 'activecampaign',
+      },
+      com_eventos_integracao: {
+        id: 'pq4npvruaak9gpb',
+        created: '2026-08-11T20:38:39.950Z',
+        evento_tipo: 'contact_create',
+        external_id: 'DIAG-TRANSPORT-FN-C1',
+        idempotency_key: 'e860fa5a9d8615c44a7db52b909b70b816f80b74123b96780e7bb309e53d34ec',
+        sistema_origem: 'activecampaign',
+        status: 'processed',
+      },
+      com_execucoes_sincronizacao: {
+        id: '62otoics23ul0vy',
+        created: '2026-08-11T20:38:39.948Z',
+        inicio: '2026-08-11T20:38:39.948Z',
+        fim: '2026-08-11T20:38:39.952Z',
+        sistema_origem: 'activecampaign',
+        status: 'completed',
+      },
     }
 
+    var V7_LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
+
     var INVOLVED_COLLECTIONS = [
+      'com_vinculos_externos',
       'com_eventos_integracao',
       'com_execucoes_sincronizacao',
-      'com_vinculos_externos',
       'com_ocorrencias_qualidade',
     ]
-
-    var V7_LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
 
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')
@@ -47,93 +72,122 @@ routerAdd(
     }
     if (!isSA) return e.forbiddenError('Apenas superadministrador')
 
-    function safeFindById(collectionName, id) {
-      try {
-        return $app.findRecordById(collectionName, id)
-      } catch (_) {
-        return null
+    function verifyIdentity(record, expected, fields) {
+      var verified = true
+      var actual = {}
+      for (var i = 0; i < fields.length; i++) {
+        var f = fields[i]
+        if (f === 'id') {
+          actual[f] = record.id
+        } else {
+          actual[f] = record.getString(f)
+        }
+        if (actual[f] !== expected[f]) verified = false
       }
+      return { verified: verified, actual: actual }
     }
 
-    function safeFind(collectionName, filter) {
-      try {
-        return $app.findRecordsByFilter(collectionName, filter, 'created', 100, 0)
-      } catch (_) {
-        return []
+    var vinculoFields = [
+      'id',
+      'created',
+      'collection_name',
+      'external_id',
+      'external_type',
+      'record_id',
+      'sistema_origem',
+    ]
+    var eventoFields = [
+      'id',
+      'created',
+      'evento_tipo',
+      'external_id',
+      'idempotency_key',
+      'sistema_origem',
+      'status',
+    ]
+    var execucaoFields = ['id', 'created', 'inicio', 'fim', 'sistema_origem', 'status']
+
+    var queryError = null
+
+    var vinculo = null
+    var evento = null
+    var execucao = null
+    var ocorrencias = null
+    var counts = null
+    var lockRec = null
+    var v7LockState = null
+
+    try {
+      vinculo = $app.findRecordById('com_vinculos_externos', FIXED_IDS.com_vinculos_externos)
+      evento = $app.findRecordById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
+      execucao = $app.findRecordById(
+        'com_execucoes_sincronizacao',
+        FIXED_IDS.com_execucoes_sincronizacao,
+      )
+      ocorrencias = $app.findRecordsByFilter(
+        'com_ocorrencias_qualidade',
+        'execucao_id = "62otoics23ul0vy"',
+        'created',
+        100,
+        0,
+      )
+      counts = {
+        com_vinculos_externos: $app.countRecords('com_vinculos_externos'),
+        com_eventos_integracao: $app.countRecords('com_eventos_integracao'),
+        com_execucoes_sincronizacao: $app.countRecords('com_execucoes_sincronizacao'),
+        com_ocorrencias_qualidade: $app.countRecords('com_ocorrencias_qualidade'),
       }
+      lockRec = $app.findFirstRecordByData('com_parametros', 'chave', V7_LOCK_KEY)
+      v7LockState = lockRec.getString('valor')
+    } catch (err) {
+      queryError = String(err).substring(0, 500)
     }
 
-    function safeCount(n) {
-      try {
-        return $app.countRecords(n)
-      } catch (_) {
-        return -1
-      }
-    }
-
-    function readLockState(key) {
-      try {
-        var rec = $app.findFirstRecordByData('com_parametros', 'chave', key)
-        return rec.getString('valor')
-      } catch (_) {
-        return 'unknown'
-      }
-    }
-
-    var evento = safeFindById('com_eventos_integracao', FIXED_IDS.com_eventos_integracao)
-    var execucao = safeFindById(
-      'com_execucoes_sincronizacao',
-      FIXED_IDS.com_execucoes_sincronizacao,
-    )
-    var vinculos = safeFind('com_vinculos_externos', FIXED_FILTERS.com_vinculos_externos)
-    var ocorrencias = safeFind('com_ocorrencias_qualidade', FIXED_FILTERS.com_ocorrencias_qualidade)
-
-    var counts = {}
-    for (var i = 0; i < INVOLVED_COLLECTIONS.length; i++) {
-      counts[INVOLVED_COLLECTIONS[i]] = safeCount(INVOLVED_COLLECTIONS[i])
-    }
-
-    var eventoInventory = null
-    if (evento) {
-      eventoInventory = {
-        id: evento.id,
-        evento_tipo: evento.getString('evento_tipo'),
-        external_id: evento.getString('external_id'),
-        idempotency_key: evento.getString('idempotency_key'),
-        sistema_origem: evento.getString('sistema_origem'),
-        status: evento.getString('status'),
-        payload: evento.getString('payload'),
-        created: evento.getString('created'),
-      }
-    }
-
-    var execucaoInventory = null
-    if (execucao) {
-      execucaoInventory = {
-        id: execucao.id,
-        sistema_origem: execucao.getString('sistema_origem'),
-        status: execucao.getString('status'),
-        inicio: execucao.getString('inicio'),
-        fim: execucao.getString('fim'),
-        payload: execucao.getString('payload'),
-        erro: execucao.getString('erro'),
-        created: execucao.getString('created'),
-      }
-    }
-
-    var vinculosInventory = []
-    for (var j = 0; j < vinculos.length; j++) {
-      var vr = vinculos[j]
-      vinculosInventory.push({
-        id: vr.id,
-        sistema_origem: vr.getString('sistema_origem'),
-        external_type: vr.getString('external_type'),
-        external_id: vr.getString('external_id'),
-        collection_name: vr.getString('collection_name'),
-        record_id: vr.getString('record_id'),
-        created: vr.getString('created'),
+    if (queryError) {
+      return e.json(500, {
+        route_version: ROUTE_VERSION,
+        route: ROUTE_PATH,
+        method: 'GET',
+        read_only: true,
+        client_parameters_accepted: 0,
+        query_succeeded: false,
+        target_identity_verified: false,
+        dependency_query_succeeded: false,
+        dependency_count: null,
+        counts: null,
+        lock_state_read_succeeded: false,
+        v7_lock: {
+          key: V7_LOCK_KEY,
+          state: null,
+          modified: false,
+        },
+        error: queryError,
+        records_created: 0,
+        records_updated: 0,
+        records_deleted: 0,
+        locks_modified: 0,
+        activecampaign_calls: 0,
+        external_calls: 0,
+        message:
+          'Audit FAILED — a query, count, or lock read threw an error. No conclusion of zero dependencies or safety is emitted. No writes, deletions, or lock changes occurred.',
       })
     }
+
+    var vinculoIdentity = verifyIdentity(
+      vinculo,
+      EXPECTED_IDENTITY.com_vinculos_externos,
+      vinculoFields,
+    )
+    var eventoIdentity = verifyIdentity(
+      evento,
+      EXPECTED_IDENTITY.com_eventos_integracao,
+      eventoFields,
+    )
+    var execucaoIdentity = verifyIdentity(
+      execucao,
+      EXPECTED_IDENTITY.com_execucoes_sincronizacao,
+      execucaoFields,
+    )
 
     var ocorrenciasInventory = []
     for (var k = 0; k < ocorrencias.length; k++) {
@@ -149,32 +203,33 @@ routerAdd(
       })
     }
 
-    var v7LockState = readLockState(V7_LOCK_KEY)
-
     return e.json(200, {
       route_version: ROUTE_VERSION,
       route: ROUTE_PATH,
       method: 'GET',
       read_only: true,
       client_parameters_accepted: 0,
+      query_succeeded: true,
+      target_identity_verified: {
+        com_vinculos_externos: vinculoIdentity.verified,
+        com_eventos_integracao: eventoIdentity.verified,
+        com_execucoes_sincronizacao: execucaoIdentity.verified,
+      },
+      target_identity_details: {
+        com_vinculos_externos: vinculoIdentity.actual,
+        com_eventos_integracao: eventoIdentity.actual,
+        com_execucoes_sincronizacao: execucaoIdentity.actual,
+      },
+      expected_identity: EXPECTED_IDENTITY,
       fixed_ids: FIXED_IDS,
-      fixed_filters: FIXED_FILTERS,
       involved_collections: INVOLVED_COLLECTIONS,
-      inventory: {
-        com_eventos_integracao: eventoInventory,
-        com_execucoes_sincronizacao: execucaoInventory,
-        com_vinculos_externos: vinculosInventory,
-        com_ocorrencias_qualidade: ocorrenciasInventory,
-      },
-      dependencies: {
-        com_ocorrencias_qualidade_execucao_id: {
-          relation: 'com_ocorrencias_qualidade.execucao_id -> com_execucoes_sincronizacao.id',
-          target_execucao_id: FIXED_IDS.com_execucoes_sincronizacao,
-          count: ocorrencias.length,
-          items: ocorrenciasInventory,
-        },
-      },
+      dependency_query_succeeded: true,
+      dependency_filter: 'execucao_id = "62otoics23ul0vy"',
+      dependency_limit: 100,
+      dependency_count: ocorrencias.length,
+      dependency_items: ocorrenciasInventory,
       counts: counts,
+      lock_state_read_succeeded: true,
       v7_lock: {
         key: V7_LOCK_KEY,
         state: v7LockState,
@@ -183,12 +238,11 @@ routerAdd(
       records_created: 0,
       records_updated: 0,
       records_deleted: 0,
-      locks_consumed: 0,
       locks_modified: 0,
       activecampaign_calls: 0,
       external_calls: 0,
       message:
-        'Read-only audit completed. No records were created, updated, or deleted. No locks were consumed or modified. No external calls were made.',
+        'Read-only audit completed (v3). All queries succeeded. No records were created, updated, or deleted. No locks were modified or consumed. No external calls were made.',
     })
   },
   $apis.requireAuth(),
