@@ -2,7 +2,7 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/diag-compensacao-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v6'
+    var ROUTE_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v7'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
     var LOCK_KEY = 'ac_diag_compensacao_dependencias_lock'
     var DEP_QUERY_LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
@@ -41,6 +41,11 @@ routerAdd(
       saved_lock_variable: 'txLockRec',
       lock_missing_aborts: true,
       reference_filters_literal_and_complete: true,
+      invalid_record_id_filters_removed: true,
+      only_dependency_guard: 'com_ocorrencias_qualidade.execucao_id',
+      dependency_guard_expected_count: 0,
+      dependency_found_aborts_transaction: true,
+      invented_reference_fields_used: false,
     }
 
     var FIXED_IDS = {
@@ -97,29 +102,8 @@ routerAdd(
         filter: 'execucao_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
         expected_count: 0,
         api: 'txApp.findRecordsByFilter',
-        description: 'Zero quality occurrences referencing the target execucao record',
-      },
-      {
-        check_number: 2,
-        collection: 'com_vinculos_externos',
-        field: 'record_id',
-        filter: 'record_id = "' + FIXED_IDS.com_eventos_integracao + '"',
-        expected_additional_count: 0,
-        excludes_id: FIXED_IDS.com_vinculos_externos,
-        api: 'txApp.findRecordsByFilter',
         description:
-          'No additional external links referencing the target evento (excluding the fixed vinculo itself)',
-      },
-      {
-        check_number: 3,
-        collection: 'com_vinculos_externos',
-        field: 'record_id',
-        filter: 'record_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
-        expected_additional_count: 0,
-        excludes_id: FIXED_IDS.com_vinculos_externos,
-        api: 'txApp.findRecordsByFilter',
-        description:
-          'No additional external links referencing the target execucao (excluding the fixed vinculo itself)',
+          'Zero quality occurrences referencing the target execucao record — sole structural dependency guard',
       },
     ]
 
@@ -212,6 +196,11 @@ routerAdd(
         expected_identity: EXPECTED_IDENTITY,
         updated_field_present: false,
         uninvented_fields_removed: true,
+        invalid_record_id_filters_removed: true,
+        only_dependency_guard: 'com_ocorrencias_qualidade.execucao_id',
+        dependency_guard_expected_count: 0,
+        dependency_found_aborts_transaction: true,
+        invented_reference_fields_used: false,
         reference_absence_checks: REFERENCE_ABSENCE_CHECKS,
         deletion_order: DELETION_ORDER,
         record_lookup_api: RECORD_LOOKUP_API,
@@ -360,9 +349,13 @@ routerAdd(
             identityVerified = false
         }
 
-        var ocorrencias = txFind(
+        // Sole structural dependency guard — com_ocorrencias_qualidade.execucao_id
+        var ocorrencias = txApp.findRecordsByFilter(
           'com_ocorrencias_qualidade',
           'execucao_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
+          '',
+          1,
+          0,
         )
 
         countsBefore = {
@@ -370,24 +363,6 @@ routerAdd(
           com_execucoes_sincronizacao: txCount('com_execucoes_sincronizacao'),
           com_vinculos_externos: txCount('com_vinculos_externos'),
         }
-
-        var refsEvt = txFind(
-          'com_vinculos_externos',
-          'record_id = "' + FIXED_IDS.com_eventos_integracao + '"',
-        )
-        var refsExec = txFind(
-          'com_vinculos_externos',
-          'record_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
-        )
-        var addlEvt = 0,
-          addlExec = 0
-        for (var i = 0; i < refsEvt.length; i++) {
-          if (refsEvt[i].id !== FIXED_IDS.com_vinculos_externos) addlEvt++
-        }
-        for (var j = 0; j < refsExec.length; j++) {
-          if (refsExec[j].id !== FIXED_IDS.com_vinculos_externos) addlExec++
-        }
-        var addlRefs = addlEvt + addlExec
 
         var countsMatch =
           countsBefore.com_eventos_integracao === EXPECTED_COUNTS_BEFORE.com_eventos_integracao &&
@@ -423,8 +398,6 @@ routerAdd(
                 countsBefore.com_vinculos_externos === EXPECTED_COUNTS_BEFORE.com_vinculos_externos,
             },
           },
-          no_additional_references: addlRefs === 0,
-          additional_references_count: addlRefs,
           reference_checks_performed: [
             {
               collection: 'com_ocorrencias_qualidade',
@@ -434,26 +407,8 @@ routerAdd(
               expected_count: 0,
               passed: ocorrencias.length === 0,
               api: 'txApp.findRecordsByFilter',
-            },
-            {
-              collection: 'com_vinculos_externos',
-              field: 'record_id',
-              filter: 'record_id = "' + FIXED_IDS.com_eventos_integracao + '"',
-              actual_additional_count: addlEvt,
-              expected_additional_count: 0,
-              excludes_id: FIXED_IDS.com_vinculos_externos,
-              passed: addlEvt === 0,
-              api: 'txApp.findRecordsByFilter',
-            },
-            {
-              collection: 'com_vinculos_externos',
-              field: 'record_id',
-              filter: 'record_id = "' + FIXED_IDS.com_execucoes_sincronizacao + '"',
-              actual_additional_count: addlExec,
-              expected_additional_count: 0,
-              excludes_id: FIXED_IDS.com_vinculos_externos,
-              passed: addlExec === 0,
-              api: 'txApp.findRecordsByFilter',
+              description:
+                'Sole structural dependency guard — no occurrence records may reference the target execucao',
             },
           ],
         }
@@ -462,8 +417,7 @@ routerAdd(
           preconditions.all_ids_exist &&
           preconditions.identity_and_timestamps_verified &&
           preconditions.zero_ocorrencias &&
-          preconditions.counts_match &&
-          preconditions.no_additional_references
+          preconditions.counts_match
 
         if (!allMet) {
           throw new Error('Preconditions not met — native rollback triggered before any deletion')

@@ -25,8 +25,8 @@ interface CompEvidence {
 
 const SESSION_KEY = 'ac_diag_compensacao_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-compensacao-dependencias'
-const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v6'
-const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v6'
+const BACKEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-BACKEND-20260812-v7'
+const FRONTEND_VERSION = 'R13-2D2A-DIAG-COMPENSACAO-DEPENDENCIAS-FRONTEND-20260812-v7'
 const NATIVE_TRANSACTION_API = '$app.runInTransaction'
 const RECORD_LOOKUP_API = 'txApp.findRecordById'
 const RECORD_DELETE_API = 'txApp.delete'
@@ -79,6 +79,11 @@ const STRICT_ARMED_EQUALITY_REQUIRED = true
 const SAME_TRANSACTIONAL_LOCK_OBJECT_SAVED = true
 const SAVED_LOCK_VARIABLE = 'txLockRec'
 const LOCK_MISSING_ABORTS = true
+const INVALID_RECORD_ID_FILTERS_REMOVED = true
+const ONLY_DEPENDENCY_GUARD = 'com_ocorrencias_qualidade.execucao_id'
+const DEPENDENCY_GUARD_EXPECTED_COUNT = 0
+const DEPENDENCY_FOUND_ABORTS_TRANSACTION = true
+const INVENTED_REFERENCE_FIELDS_USED = false
 const EXPECTED_COUNTS_BEFORE = {
   com_eventos_integracao: 15,
   com_execucoes_sincronizacao: 11,
@@ -236,7 +241,8 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Estado da Compensação (v6 — strict lock guard, no fallback, same transactional object)
+            Estado da Compensação (v7 — invalid record_id filters removed, sole structural
+            dependency guard)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">transactional_ready:</span>
@@ -346,7 +352,57 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Precondition Counts (v6 — corrected per-collection mapping)
+            v7 — Invalid record_id Filters Removed
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">invalid_record_id_filters_removed:</span>
+            <Badge variant={INVALID_RECORD_ID_FILTERS_REMOVED ? 'default' : 'destructive'}>
+              {String(INVALID_RECORD_ID_FILTERS_REMOVED)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">only_dependency_guard:</span>
+            <code className="text-foreground">{ONLY_DEPENDENCY_GUARD}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">dependency_guard_expected_count:</span>
+            <Badge variant="outline">{String(DEPENDENCY_GUARD_EXPECTED_COUNT)}</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">dependency_found_aborts_transaction:</span>
+            <Badge variant={DEPENDENCY_FOUND_ABORTS_TRANSACTION ? 'default' : 'destructive'}>
+              {String(DEPENDENCY_FOUND_ABORTS_TRANSACTION)}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">invented_reference_fields_used:</span>
+            <Badge variant={INVENTED_REFERENCE_FIELDS_USED ? 'destructive' : 'default'}>
+              {String(INVENTED_REFERENCE_FIELDS_USED)}
+            </Badge>
+          </div>
+          <div className="text-xs text-muted-foreground italic">
+            Removed:{' '}
+            <code className="text-foreground">
+              com_vinculos_externos.record_id = "pq4npvruaak9gpb"
+            </code>{' '}
+            (textual coincidence, not structural) and{' '}
+            <code className="text-foreground">
+              com_vinculos_externos.record_id = "62otoics23ul0vy"
+            </code>{' '}
+            (textual coincidence, not structural).
+          </div>
+          <div className="text-xs text-muted-foreground italic">
+            Kept:{' '}
+            <code className="text-foreground">
+              com_ocorrencias_qualidade.execucao_id = "62otoics23ul0vy"
+            </code>{' '}
+            — sole legitimate structural relation.
+          </div>
+        </div>
+
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+          <div className="text-xs font-medium text-muted-foreground mb-1">
+            Precondition Counts (v7 — corrected per-collection mapping)
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">expected_before:</span>
@@ -385,7 +441,7 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Expected Identity (v6 — literal audited values, no invented fields)
+            Expected Identity (v7 — literal audited values, no invented fields)
           </div>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
@@ -454,7 +510,8 @@ export function DiagCompensacaoDependenciasBlock() {
 
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="text-xs font-medium text-muted-foreground mb-1">
-            Structural Pseudocode (v6 — strict lock guard, no fallback, same transactional object)
+            Structural Pseudocode (v7 — invalid filters removed, sole dependency guard, same
+            transactional object)
           </div>
           <pre className="text-xs font-mono whitespace-pre-wrap break-all text-muted-foreground">
             {`$app.runInTransaction(function(txApp) {
@@ -473,10 +530,13 @@ export function DiagCompensacaoDependenciasBlock() {
 
   // 4. Identity comparison — throw on divergence
 
-  // 5. Reference-absence checks via txApp.findRecordsByFilter
-  ocorrencias = txApp.findRecordsByFilter('com_ocorrencias_qualidade', filter)
-  refsEvt = txApp.findRecordsByFilter('com_vinculos_externos', filter)
-  refsExec = txApp.findRecordsByFilter('com_vinculos_externos', filter)
+  // 5. SOLE structural dependency guard via txApp.findRecordsByFilter
+  //    (v7: removed two inadequate com_vinculos_externos.record_id filters)
+  ocorrencias = txApp.findRecordsByFilter(
+    'com_ocorrencias_qualidade',
+    'execucao_id = "62otoics23ul0vy"', '', 1, 0
+  )
+  // Any result → throw → native rollback (never used to delete occurrences)
 
   // 6. If preconditions not met → throw → native rollback
 
