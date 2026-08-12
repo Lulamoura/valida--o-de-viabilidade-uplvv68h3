@@ -16,8 +16,11 @@ interface DependencyEvidence {
 
 const SESSION_KEY = 'ac_diag_consulta_dependencias_evidence'
 const ROUTE_PATH = '/backend/v1/integracao/ac/diag-consulta-dependencias'
-const BACKEND_VERSION = 'R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1'
-const FRONTEND_VERSION = 'R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1'
+const BACKEND_VERSION = 'R13-2D2A-DIAG-CONSULTA-DEPENDENCIAS-BACKEND-20260812-v2'
+const FRONTEND_VERSION = 'R13-2D2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v2'
+const CLASSIFICATION_WINDOW_START = '2026-08-11T20:38:39.900Z'
+const CLASSIFICATION_WINDOW_END = '2026-08-11T20:38:40.000Z'
+const DIAGNOSTIC_REFERENCE_TS = '2026-08-11T20:38:39.922Z'
 const READ_ONLY = true
 const BUTTON_ENABLED = true
 
@@ -152,6 +155,18 @@ export function DiagConsultaDependenciasBlock() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
             <span className="text-muted-foreground">Fixed Filter:</span>
             <code className="text-foreground">execucao_id = "62otoics23ul0vy"</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">Window Start:</span>
+            <code className="text-foreground">{CLASSIFICATION_WINDOW_START}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">Window End:</span>
+            <code className="text-foreground">{CLASSIFICATION_WINDOW_END}</code>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
+            <span className="text-muted-foreground">Diag Reference:</span>
+            <code className="text-foreground">{DIAGNOSTIC_REFERENCE_TS}</code>
           </div>
         </div>
 

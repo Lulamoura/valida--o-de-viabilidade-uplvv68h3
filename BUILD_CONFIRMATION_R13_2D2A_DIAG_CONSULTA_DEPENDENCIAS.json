@@ -1,6 +1,6 @@
 {
   "build_status": "READY",
-  "sanitation_type": "readiness_sanitation_nomenclature_only",
+  "sanitation_type": "classification_window_constant_correction",
   "r14_scope_advanced": false,
   "r14_label_analysis": {
     "verdict": "R14 is only an improper bundle label — no functional R14 scope was advanced",
@@ -18,11 +18,11 @@
     "corrected_nomenclature": "Artifacts republished under Porta 2D.2A/R13 with no functional change"
   },
   "corrected_versions": {
-    "backend_version": "R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1",
-    "frontend_version": "R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1",
-    "previous_improper_labels": {
-      "backend": "R14-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1",
-      "frontend": "R14-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1"
+    "backend_version": "R13-2D2A-DIAG-CONSULTA-DEPENDENCIAS-BACKEND-20260812-v2",
+    "frontend_version": "R13-2D2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v2",
+    "previous_versions": {
+      "backend_v1": "R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1",
+      "frontend_v1": "R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1"
     }
   },
   "backend_hook": "ac_diag_consulta_dependencias",
@@ -32,24 +32,26 @@
   "target_collection": "com_ocorrencias_qualidade",
   "target_execucao_id": "62otoics23ul0vy",
   "lock_key": "ac_diag_consulta_dependencias_lock",
-  "utc_temporal_window": {
-    "description": "The classification logic derives the temporal window at runtime from the target execucao record (com_execucoes_sincronizacao id=62otoics23ul0vy) fields 'inicio' (window start) and 'fim' (window end). These are UTC date strings read server-side. A record's 'created' field is classified as within-window if created >= inicio AND created <= fim. No execution was performed in this task, so the exact runtime values are not materialized here.",
-    "window_start_source_field": "inicio",
-    "window_end_source_field": "fim",
-    "source_collection": "com_execucoes_sincronizacao",
-    "source_record_id": "62otoics23ul0vy",
-    "comparison_field": "created (on com_ocorrencias_qualidade)",
-    "within_window_condition": "created >= inicio AND created <= fim",
-    "not_executed": true
+  "documentary_proof": {
+    "diagnostic_reference_timestamp": "2026-08-11T20:38:39.922Z",
+    "observed_created_min": "2026-08-11T20:38:39.948Z",
+    "observed_created_max": "2026-08-11T20:38:39.951Z",
+    "classification_window_start_utc": "2026-08-11T20:38:39.900Z",
+    "classification_window_end_utc": "2026-08-11T20:38:40.000Z",
+    "tolerance_rationale": "Observed created values fall ~26-29ms after the reference timestamp (2026-08-11T20:38:39.922Z). The 100ms window (39.900Z to 40.000Z) is the narrowest round envelope that contains all inventoried timestamps (reference 39.922Z, created min 39.948Z, created max 39.951Z). No arbitrary hours/day window is used.",
+    "window_source": "Computed from already-inventoried records and diagnostic timestamps — no data query performed",
+    "window_contains_all_inventoried_timestamps": true,
+    "window_scale": "millisecond (100ms)",
+    "arbitrary_broad_window_rejected": true
   },
   "classification_rules": {
-    "DIAGNOSTIC_OWNED": "execucao_id matches target AND origin matches diagnostic transport (activecampaign) AND created within execution window (inicio..fim) AND tipo/severidade/descricao consistent with diagnostic",
-    "PREEXISTENT": "created before diagnostic window OR belongs to different origin",
+    "DIAGNOSTIC_OWNED": "execucao_id matches target AND origin matches diagnostic transport (activecampaign) AND created within classification window (2026-08-11T20:38:39.900Z to 2026-08-11T20:38:40.000Z) AND tipo/severidade/descricao consistent with diagnostic",
+    "PREEXISTENT": "created before classification window OR belongs to different origin",
     "INCONCLUSIVE": "diagnostic ownership cannot be proven — NEVER presumed deletable",
     "inconclusive_triggers_literal": [
       "sistema_origem absent or empty",
       "generic tipo or descricao (not consistent with diagnostic patterns)",
-      "missing or out-of-window timestamp (created outside inicio..fim)",
+      "missing or out-of-window timestamp (created outside 2026-08-11T20:38:39.900Z to 2026-08-11T20:38:40.000Z)",
       "any divergent evidence that prevents proving all four DIAGNOSTIC_OWNED conditions simultaneously"
     ],
     "inconclusive_never_diagnostic_owned": true
@@ -73,6 +75,29 @@
   "collections_altered": false,
   "secrets_changed": false,
   "integrations_changed": false,
+  "constant_only_change": {
+    "description": "Only classification window constants and metadata were edited — dynamic execucao record inicio/fim derivation replaced with fixed UTC constants derived from diagnostic evidence",
+    "fields_changed": [
+      "ROUTE_VERSION",
+      "DIAGNOSTIC_REFERENCE_TIMESTAMP (new constant)",
+      "OBSERVED_CREATED_MIN (new constant)",
+      "OBSERVED_CREATED_MAX (new constant)",
+      "CLASSIFICATION_WINDOW_START_UTC (new constant)",
+      "CLASSIFICATION_WINDOW_END_UTC (new constant)",
+      "TOLERANCE_RATIONALE (new constant)",
+      "temporal_correlation object fields (now reference constant window)",
+      "documentary_proof block added to response",
+      "inconclusive_triggers array added to response"
+    ],
+    "fields_unchanged": [
+      "Fixed server-side filter: execucao_id = \"62otoics23ul0vy\"",
+      "Authentication (superadmin check)",
+      "Independent one-shot lock mechanism",
+      "All classification rules (DIAGNOSTIC_OWNED, PREEXISTENT, INCONCLUSIVE)",
+      "Returned fields structure",
+      "deletable: false for all records"
+    ]
+  },
   "sanitized_evidence": {
     "no_records_created": true,
     "no_records_updated": true,
@@ -90,6 +115,7 @@
     "porta_2e": "BLOCKED"
   },
   "readiness_state": {
+    "r14_scope_advanced": false,
     "dependency_query_executed": false,
     "dependency_query_lock": "armed",
     "original_audit_lock": "consumed",

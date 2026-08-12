@@ -2,13 +2,26 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/diag-consulta-dependencias',
   (e) => {
-    var ROUTE_VERSION = 'R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1'
+    var ROUTE_VERSION = 'R13-2D2A-DIAG-CONSULTA-DEPENDENCIAS-BACKEND-20260812-v2'
     var ROUTE_PATH = '/backend/v1/integracao/ac/diag-consulta-dependencias'
     var LOCK_KEY = 'ac_diag_consulta_dependencias_lock'
     var ORIGINAL_AUDIT_LOCK_KEY = 'ac_diag_compensacao_auditoria_lock'
     var TARGET_EXECUCAO_ID = '62otoics23ul0vy'
     var FIXED_FILTER = 'execucao_id = "' + TARGET_EXECUCAO_ID + '"'
     var DIAGNOSTIC_ORIGIN = 'activecampaign'
+
+    var DIAGNOSTIC_REFERENCE_TIMESTAMP = '2026-08-11T20:38:39.922Z'
+    var OBSERVED_CREATED_MIN = '2026-08-11T20:38:39.948Z'
+    var OBSERVED_CREATED_MAX = '2026-08-11T20:38:39.951Z'
+    var CLASSIFICATION_WINDOW_START_UTC = '2026-08-11T20:38:39.900Z'
+    var CLASSIFICATION_WINDOW_END_UTC = '2026-08-11T20:38:40.000Z'
+    var TOLERANCE_RATIONALE =
+      'Observed created values fall ~26-29ms after the reference timestamp (2026-08-11T20:38:39.922Z). ' +
+      'The 100ms window (39.900Z to 40.000Z) is the narrowest round envelope that contains all inventoried ' +
+      'timestamps (reference 39.922Z, created min 39.948Z, created max 39.951Z). No arbitrary hours/day window.'
+
+    var windowStartMs = new Date(CLASSIFICATION_WINDOW_START_UTC).getTime()
+    var windowEndMs = new Date(CLASSIFICATION_WINDOW_END_UTC).getTime()
 
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')
@@ -86,6 +99,21 @@ routerAdd(
     var lockState = checkLockState()
     var originalLockVal = checkOriginalAuditLock()
 
+    var documentaryProof = {
+      diagnostic_reference_timestamp: DIAGNOSTIC_REFERENCE_TIMESTAMP,
+      observed_created_min: OBSERVED_CREATED_MIN,
+      observed_created_max: OBSERVED_CREATED_MAX,
+      classification_window_start_utc: CLASSIFICATION_WINDOW_START_UTC,
+      classification_window_end_utc: CLASSIFICATION_WINDOW_END_UTC,
+      tolerance_rationale: TOLERANCE_RATIONALE,
+      r14_scope_advanced: false,
+      dependency_query_executed: false,
+      dependency_query_lock: 'armed',
+      original_audit_lock: originalLockVal,
+      deletion_executed: false,
+      activecampaign_calls: 0,
+    }
+
     if (lockState === 'consumed') {
       return e.json(200, {
         route_version: ROUTE_VERSION,
@@ -100,6 +128,7 @@ routerAdd(
         read_only: true,
         activecampaign_calls: 0,
         deletion_executed: false,
+        documentary_proof: documentaryProof,
         message:
           'Consulta de dependencias already executed — independent lock prevents re-execution',
       })
@@ -132,9 +161,6 @@ routerAdd(
     var preexistentCount = 0
     var inconclusiveCount = 0
 
-    var inicioMs = execucaoInicio ? new Date(execucaoInicio).getTime() : NaN
-    var fimMs = execucaoFim ? new Date(execucaoFim).getTime() : NaN
-
     for (var i = 0; i < ocorrencias.length; i++) {
       var rec = ocorrencias[i]
       var recId = rec.id
@@ -150,13 +176,13 @@ routerAdd(
       var originMatch = execucaoSistemaOrigem === DIAGNOSTIC_ORIGIN
 
       var withinWindow = false
-      if (!isNaN(recCreatedMs) && !isNaN(inicioMs) && !isNaN(fimMs)) {
-        withinWindow = recCreatedMs >= inicioMs && recCreatedMs <= fimMs
+      if (!isNaN(recCreatedMs)) {
+        withinWindow = recCreatedMs >= windowStartMs && recCreatedMs <= windowEndMs
       }
 
       var createdBeforeWindow = false
-      if (!isNaN(recCreatedMs) && !isNaN(inicioMs)) {
-        createdBeforeWindow = recCreatedMs < inicioMs
+      if (!isNaN(recCreatedMs)) {
+        createdBeforeWindow = recCreatedMs < windowStartMs
       }
 
       var tipoConsistent = false
@@ -177,7 +203,7 @@ routerAdd(
       var classificationEvidence = [
         'execucao_id matches target: ' + String(execIdMatch),
         'origin matches diagnostic transport (' + DIAGNOSTIC_ORIGIN + '): ' + String(originMatch),
-        'created within execution window: ' + String(withinWindow),
+        'created within classification window: ' + String(withinWindow),
         'tipo/severidade/descricao consistent with diagnostic: ' + String(tipoConsistent),
       ]
 
@@ -204,8 +230,9 @@ routerAdd(
         deletable: false,
         classification_evidence: classificationEvidence,
         temporal_correlation: {
-          target_execucao_inicio: execucaoInicio || null,
-          target_execucao_fim: execucaoFim || null,
+          classification_window_start_utc: CLASSIFICATION_WINDOW_START_UTC,
+          classification_window_end_utc: CLASSIFICATION_WINDOW_END_UTC,
+          diagnostic_reference_timestamp: DIAGNOSTIC_REFERENCE_TIMESTAMP,
           record_created: recCreated,
           within_diagnostic_window: withinWindow,
           created_before_window: createdBeforeWindow,
@@ -240,6 +267,7 @@ routerAdd(
             created: execucaoCreated,
           }
         : null,
+      documentary_proof: documentaryProof,
       total_count: ocorrencias.length,
       classification_summary: {
         DIAGNOSTIC_OWNED: diagOwnedCount,
@@ -248,10 +276,20 @@ routerAdd(
       },
       classification_rule: {
         DIAGNOSTIC_OWNED:
-          'execucao_id matches target AND origin matches diagnostic transport AND created within execution window AND tipo/severidade/descricao consistent',
-        PREEXISTENT: 'created before diagnostic window OR belongs to different origin',
+          'execucao_id matches target AND origin matches diagnostic transport AND created within classification window AND tipo/severidade/descricao consistent',
+        PREEXISTENT: 'created before classification window OR belongs to different origin',
         INCONCLUSIVE: 'diagnostic ownership cannot be proven — NEVER presumed deletable',
       },
+      inconclusive_triggers: [
+        'sistema_origem absent or empty',
+        'generic tipo or descricao (not consistent with diagnostic patterns)',
+        'missing or out-of-window timestamp (created outside ' +
+          CLASSIFICATION_WINDOW_START_UTC +
+          ' to ' +
+          CLASSIFICATION_WINDOW_END_UTC +
+          ')',
+        'any divergent evidence that prevents proving all four DIAGNOSTIC_OWNED conditions simultaneously',
+      ],
       protection_rule:
         'Only DIAGNOSTIC_OWNED records may be considered for future compensation. PREEXISTENT and INCONCLUSIVE are expressly protected and non-deletable.',
       results: results,

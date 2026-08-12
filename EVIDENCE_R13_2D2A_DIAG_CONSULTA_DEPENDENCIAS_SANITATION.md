@@ -1,90 +1,92 @@
-# Porta 2D.2A — Readiness Sanitation (Saneamento de Prontidão)
+# Porta 2D.2A — Classification Window Constant Correction
 
-## Diagnóstico de Consulta de Dependências — Correção de Nomenclatura
+## Diagnóstico de Consulta de Dependências — Correção da Janela de Classificação
 
 **Data:** 2026-08-12  
-**Tipo:** Somente documentação e correção de metadados/nomenclatura  
+**Tipo:** Correção de constantes (somente janela de classificação e metadados)  
 **Execução:** Zero — nenhuma rota chamada, nenhum botão clicado, nenhum lock consumido
 
 ---
 
-## 1. Análise do Rótulo "R14"
+## 1. Prova Documental da Janela (Sem Consulta de Dados)
 
-### Veredito: "R14" é apenas um rótulo impróprio — nenhum escopo funcional R14 foi avançado
+### Timestamps Inventariados (já documentados em R13/Round 13)
 
-**Evidência documental (sem execução):**
+| Campo                            | Valor UTC                  | Origem                                                  |
+| -------------------------------- | -------------------------- | ------------------------------------------------------- |
+| `diagnostic_reference_timestamp` | `2026-08-11T20:38:39.922Z` | Timestamp de referência do diagnóstico (diag-transport) |
+| `observed_created_min`           | `2026-08-11T20:38:39.948Z` | Menor `created` observado nos registros inventariados   |
+| `observed_created_max`           | `2026-08-11T20:38:39.951Z` | Maior `created` observado nos registros inventariados   |
 
-1. **Hook `ac_diag_consulta_dependencias.js`**: É uma consulta somente-leitura contra `com_ocorrencias_qualidade` com filtro fixo `execucao_id = "62otoics23ul0vy"`. Não contém lógica de criação, atualização ou exclusão de registros.
-2. **Nenhuma migração nova** foi criada sob R14 — a próxima migração disponível permanece 0059.
-3. **Nenhuma alteração de coleção, RBAC, webhook, runner, segredos ou integrações** foi introduzida.
-4. **O lock** (`ac_diag_consulta_dependencias_lock`) é independente e somente-leitura — não realiza compensação, não exclui registros, não faz chamadas ActiveCampaign.
-5. **A consulta de dependências** pertence à fase diagnóstica 2D.2A/R13 — mesma fase que `diag-transport` e `diag-compensacao-auditoria`.
+### Janela de Classificação Corrigida
 
-### Artefatos revisados
+| Campo                             | Valor UTC                  |
+| --------------------------------- | -------------------------- |
+| `classification_window_start_utc` | `2026-08-11T20:38:39.900Z` |
+| `classification_window_end_utc`   | `2026-08-11T20:38:40.000Z` |
 
-- `pocketbase/hooks/ac_diag_consulta_dependencias.js`
-- `src/components/foundation/DiagConsultaDependenciasBlock.tsx`
+### Justificativa da Tolerância (`tolerance_rationale`)
 
----
+Os valores `created` observados caem ~26–29ms após o timestamp de referência (`2026-08-11T20:38:39.922Z`):
 
-## 2. Correção de Nomenclatura
+- Referência: `39.922Z`
+- Created min: `39.948Z` → +26ms após referência
+- Created max: `39.951Z` → +29ms após referência
 
-Os mesmos artefatos foram republicados **sem nenhuma alteração funcional**, sob versões pertencentes a Porta 2D.2A/R13:
-
-| Artefato          | Rótulo Anterior (impróprio)                           | Rótulo Corrigido                                            |
-| ----------------- | ----------------------------------------------------- | ----------------------------------------------------------- |
-| Backend (hook)    | `R14-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1`          | `R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1`          |
-| Frontend (bundle) | `R14-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1` | `R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1` |
-
-**Nenhuma alteração funcional foi feita:**
-
-- Lógica: inalterada
-- Filtro fixo server-side: `execucao_id = "62otoics23ul0vy"` — inalterado
-- Lock: `ac_diag_consulta_dependencias_lock` — permanece `armed`
-- Webhook, runner, RBAC, migrações, coleções, segredos, integrações: inalterados
+A janela de 100ms (`39.900Z` a `40.000Z`) é o menor envelope arredondado que contém todos os timestamps inventariados (referência `39.922Z`, created min `39.948Z`, created max `39.951Z`). Nenhuma janela arbitrária de horas/dias é utilizada.
 
 ---
 
-## 3. Janela Temporal UTC
+## 2. Correção Somente de Constantes
 
-A lógica de classificação deriva a janela temporal em runtime a partir do registro alvo de execução (`com_execucoes_sincronizacao`, id=`62otoics23ul0vy`):
+### O que foi alterado
 
-- **Início da janela:** campo `inicio` do registro de execução (string de data UTC)
-- **Fim da janela:** campo `fim` do registro de execução (string de data UTC)
-- **Campo comparado:** `created` (em `com_ocorrencias_qualidade`)
-- **Condição dentro-da-janela:** `created >= inicio AND created <= fim`
-- **Antes da janela:** `created < inicio`
+Apenas as constantes da janela de classificação e metadados foram editados em `ac_diag_consulta_dependencias.js`:
 
-Como nenhuma execução foi permitida nesta tarefa, os valores exatos de runtime não são materializados aqui. A janela é definida server-side a partir do registro de execução alvo.
+- `ROUTE_VERSION` → `R13-2D2A-DIAG-CONSULTA-DEPENDENCIAS-BACKEND-20260812-v2`
+- Novas constantes adicionadas: `DIAGNOSTIC_REFERENCE_TIMESTAMP`, `OBSERVED_CREATED_MIN`, `OBSERVED_CREATED_MAX`, `CLASSIFICATION_WINDOW_START_UTC`, `CLASSIFICATION_WINDOW_END_UTC`, `TOLERANCE_RATIONALE`
+- Derivação dinâmica da janela a partir dos campos `inicio`/`fim` do registro de execução foi substituída por constantes fixas UTC
+- Objeto `temporal_correlation` nos resultados agora referencia a janela constante
+- Bloco `documentary_proof` adicionado à resposta JSON
+- Array `inconclusive_triggers` adicionado à resposta JSON
+
+### O que NÃO foi alterado
+
+- Filtro fixo server-side: `execucao_id = "62otoics23ul0vy"` em `com_ocorrencias_qualidade` — inalterado
+- Campos retornados — estrutura inalterada
+- Autenticação (verificação de superadministrador) — inalterada
+- Lock independente one-shot (`ac_diag_consulta_dependencias_lock`) — permanece `armed`
+- Todas as regras de classificação (DIAGNOSTIC_OWNED, PREEXISTENT, INCONCLUSIVE) — inalteradas
+- Webhook, runner, RBAC, migrações, coleções, segredos, integrações — inalterados
 
 ---
 
-## 4. Regras de Classificação (Literais)
+## 3. Regras de Classificação (Literais — Inalteradas)
 
 ### DIAGNOSTIC_OWNED
 
-`execucao_id` corresponde ao alvo AND origem corresponde ao transporte diagnóstico (activecampaign) AND `created` dentro da janela de execução (inicio..fim) AND tipo/severidade/descricao consistentes com o diagnóstico.
+`execucao_id` corresponde ao alvo AND origem corresponde ao transporte diagnóstico (activecampaign) AND `created` dentro da janela de classificação (`2026-08-11T20:38:39.900Z` a `2026-08-11T20:38:40.000Z`) AND tipo/severidade/descricao consistentes com o diagnóstico.
 
 ### PREEXISTENT
 
-`created` antes da janela diagnóstica OU pertence a origem diferente.
+`created` antes da janela de classificação OU pertence a origem diferente.
 
 ### INCONCLUSIVE
 
 Propriedade diagnóstica não pode ser comprovada — NUNCA presumida como deletável.
 
-### Gatilhos de INCONCLUSIVE (literais)
+### Gatilhos de INCONCLUSIVE (Literais)
 
 Qualquer um dos seguintes resulta em `INCONCLUSIVE` — nunca `DIAGNOSTIC_OWNED`:
 
 - `sistema_origem` ausente ou vazio
 - `tipo` ou `descricao` genéricos (não consistentes com padrões diagnósticos)
-- Timestamp ausente ou fora da janela (`created` fora de `inicio..fim`)
+- Timestamp ausente ou fora da janela (`created` fora de `2026-08-11T20:38:39.900Z` a `2026-08-11T20:38:40.000Z`)
 - Qualquer evidência divergente que impeça comprovar todas as quatro condições de `DIAGNOSTIC_OWNED` simultaneamente
 
 ---
 
-## 5. Confirmação de Proteção
+## 4. Confirmação de Proteção
 
 - A classificação **não autoriza nenhuma exclusão**
 - O campo `deletable` é `false` para TODOS os registros na resposta
@@ -94,10 +96,22 @@ Qualquer um dos seguintes resulta em `INCONCLUSIVE` — nunca `DIAGNOSTIC_OWNED`
 
 ---
 
+## 5. Versões Republicadas (Porta 2D.2A/R13 — sem R14)
+
+| Artefato          | Versão v1 (anterior)                                        | Versão v2 (corrigida)                                      |
+| ----------------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| Backend (hook)    | `R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-20260812-v1`          | `R13-2D2A-DIAG-CONSULTA-DEPENDENCIAS-BACKEND-20260812-v2`  |
+| Frontend (bundle) | `R13/2D.2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v1` | `R13-2D2A-DIAG-CONSULTA-DEPENDENCIAS-FRONTEND-20260812-v2` |
+
+`r14_scope_advanced` = `false` — nenhum escopo funcional R14 foi avançado.
+
+---
+
 ## 6. Estado de Prontidão (JSON Literal)
 
 ```json
 {
+  "r14_scope_advanced": false,
   "dependency_query_executed": false,
   "dependency_query_lock": "armed",
   "original_audit_lock": "consumed",
