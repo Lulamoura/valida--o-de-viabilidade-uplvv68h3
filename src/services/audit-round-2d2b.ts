@@ -2,6 +2,7 @@ import pb from '@/lib/pocketbase/client'
 
 export interface AuditParamData {
   exists: boolean
+  readError?: boolean
   id: string | null
   valor: string | null
   ativo: boolean | null
@@ -23,14 +24,21 @@ export interface AuditEvidenceItem {
 export interface AuditEvidenceCollection {
   count: number
   items: AuditEvidenceItem[]
-  error?: string
+  truncated?: boolean
+}
+
+export interface EvidenceCorrelation {
+  [key: string]: unknown
 }
 
 export interface EvidenceMappingStep {
-  found: boolean
-  evidence: string[]
+  found: boolean | null
+  not_reconstructable: boolean
   description: string
+  evidence: string[]
+  correlation?: EvidenceCorrelation
   note?: string
+  anomaly_detected?: boolean
 }
 
 export interface AuditGap {
@@ -47,6 +55,31 @@ export interface ReadError {
   collection: string
   operation: string
   error: string
+}
+
+export interface LogicalOperatorsVerification {
+  inspected_file: string
+  verified: boolean
+  findings: Array<{ call: string; check: string; verified: boolean }>
+  summary: string
+}
+
+export interface StaticAnalysis {
+  write_primitives_absent: boolean
+  write_primitives_check: string
+  external_http_calls_absent: boolean
+  external_http_calls_check: string
+  readparam_logic: string
+  logical_operators_verified: boolean
+  logical_operators_summary: string
+  search_case_insensitive_removed: boolean
+  search_case_insensitive_check: string
+  pagination_implemented: boolean
+  pagination_check: string
+  correlation_implemented: boolean
+  correlation_check: string
+  sanitized_evidence: boolean
+  sanitization_check: string
 }
 
 export type AuditClassification =
@@ -80,8 +113,12 @@ export interface AuditRound2D2BResponse {
   read_errors: ReadError[]
   monitored_collections: string[]
   search_pattern: string
-  search_case_insensitive: boolean
+  search_variants: string[]
+  search_case_insensitive: false
+  search_case_note: string
   expected_correlation_keys: string[]
+  logical_operators_verification: LogicalOperatorsVerification
+  static_analysis: StaticAnalysis
   deployment_target: string
   production_promoted: boolean
 }
