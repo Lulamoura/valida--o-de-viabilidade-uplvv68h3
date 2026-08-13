@@ -64,7 +64,8 @@ export interface LogicalOperatorsVerification {
   summary: string
 }
 
-export interface StaticAnalysis {
+export interface DeclaredCodeProperties {
+  nature: string
   write_primitives_absent: boolean
   write_primitives_check: string
   external_http_calls_absent: boolean
@@ -118,10 +119,15 @@ export interface AuditRound2D2BResponse {
   search_case_note: string
   expected_correlation_keys: string[]
   logical_operators_verification: LogicalOperatorsVerification
-  static_analysis: StaticAnalysis
+  declared_code_properties: DeclaredCodeProperties
   deployment_target: string
   production_promoted: boolean
 }
 
-export const auditRound2D2B = (): Promise<AuditRound2D2BResponse> =>
-  pb.send('/backend/v1/integracao/ac/audit-round-2d2b', { method: 'GET' })
+export async function auditRound2D2B(): Promise<AuditRound2D2BResponse> {
+  const response = await pb.send<AuditRound2D2BResponse>(
+    '/backend/v1/integracao/ac/audit-round-2d2b',
+    { method: 'GET' },
+  )
+  return response
+}

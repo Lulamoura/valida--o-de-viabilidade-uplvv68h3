@@ -46,11 +46,16 @@ routerAdd(
     }
 
     function readParam(key) {
-      if (!$app.hasTable('com_parametros')) {
+      var paramCol
+      try {
+        paramCol = $app.findCollectionByNameOrId('com_parametros')
+      } catch (colErr) {
         readErrors.push({
           collection: 'com_parametros',
-          operation: 'readParam.hasTable',
-          error: 'Collection com_parametros does not exist',
+          operation: 'readParam.findCollection',
+          error:
+            'Collection com_parametros not accessible (findCollectionByNameOrId): ' +
+            String(colErr).substring(0, 150),
         })
         return {
           exists: false,
@@ -399,25 +404,15 @@ routerAdd(
     var c1Err = false
     var c1Found = false
     var c1Ev_ = []
-    if (b3Bid) {
-      var c1A = safeFindAll(
-        'com_auditoria',
-        "collection_name = 'com_negocios' && acao = 'update' && record_id = '" + b3Bid + "'",
+    if (b3Id) {
+      var c1Rb = safeFindAll(
+        'com_eventos_integracao',
+        extIdFilter(b3Id) + " && evento_tipo = 'rollback'",
       )
-      if (c1A.error) c1Err = true
-      for (var ci = 0; ci < c1A.records.length; ci++) {
-        var oa = (c1A.records[ci].getString('origem_alteracao') || '').toLowerCase()
-        var jut = (c1A.records[ci].getString('justificativa') || '').toLowerCase()
-        if (
-          oa.indexOf('rollback') !== -1 ||
-          oa.indexOf('restored') !== -1 ||
-          jut.indexOf('rollback') !== -1 ||
-          jut.indexOf('restored') !== -1
-        ) {
-          c1Found = true
-          c1Ev_.push('com_auditoria:' + tid(c1A.records[ci].id))
-          break
-        }
+      if (c1Rb.error) c1Err = true
+      if (c1Rb.records.length > 0) {
+        c1Found = true
+        c1Ev_.push('com_eventos_integracao:' + tid(c1Rb.records[0].id))
       }
     }
 
@@ -560,12 +555,14 @@ routerAdd(
         found: c1Err ? null : c1Found,
         not_reconstructable: c1Err || !c1Found,
         description:
-          'Rollback from snapshot — only found when specific persisted rollback audit record exists with unambiguous action and correlation',
+          'Rollback from snapshot — defaults to found:null, not_reconstructable:true. Only set found:true when a specific persisted rollback event (evento_tipo=rollback) with unambiguous correlation key exists in com_eventos_integracao. com_auditoria is NOT used because the plan expects delta +0 there (audit_negocios.js uses onRecordUpdateRequest, which does not fire on server-side $app.save). Generic audit records are neither expected nor used as proof of rollback.',
         evidence: c1Ev_,
         correlation: {
-          business_id_resolved: !!b3Bid,
-          rollback_audit_found: c1Found,
+          correlation_key_resolved: !!b3Id,
+          rollback_event_found: c1Found,
           read_error: c1Err,
+          auditoria_not_used: true,
+          auditoria_expected_delta: 0,
         },
       },
       C2_repeticao_idempotente: {
@@ -658,7 +655,7 @@ routerAdd(
       {
         gap: 'C1_rollback_specificity',
         description:
-          'C1 rollback only confirmed by a specific persisted audit record with unambiguous rollback action and correlation to business TESTE-2D2B-FN-D1. Generic audit records or snapshot existence do not prove rollback occurred.',
+          'C1 rollback defaults to not_reconstructable. Only confirmed when a specific persisted rollback event (evento_tipo=rollback) with unambiguous correlation to TESTE-2D2B-FN-D1 exists in com_eventos_integracao. com_auditoria is NOT used (plan expects delta +0 — audit_negocios.js uses onRecordUpdateRequest, does not fire on server-side saves). Generic audit records, snapshot existence, or negocio updates alone do not prove rollback occurred.',
       },
     ]
 
@@ -737,7 +734,9 @@ routerAdd(
         summary:
           'All 16 call checks in ac_run_round_2d2b.js use correct logical operators. Strict equality (===) and AND (&&) are used consistently. No missing operators found.',
       },
-      static_analysis: {
+      declared_code_properties: {
+        nature:
+          'CODE_DECLARATIONS_NOT_INDEPENDENT_PROOF — These are developer declarations about the code, not independently verified runtime proof.',
         write_primitives_absent: true,
         write_primitives_check:
           'No $app.save(), $app.delete(), new Record(), or raw INSERT/UPDATE/DELETE statements found.',
@@ -745,7 +744,7 @@ routerAdd(
         external_http_calls_check:
           'No $http.send(), $http.stream(), fetch(), or any outbound HTTP call found.',
         readparam_logic:
-          'readParam uses findRecordsByFilter (returns empty array when not found) instead of findFirstRecordByData (throws when not found). Not-found returns exists:false, readError:false without adding to read_errors. Real errors are caught and added to read_errors with readError:true. No catch converts an error into valid data.',
+          'readParam uses findCollectionByNameOrId to verify collection existence (replacing unsupported $app.hasTable). Collection-not-found is distinct from read-error. Uses findRecordsByFilter (returns empty array when not found). Not-found returns exists:false, readError:false. Real errors are caught and added to read_errors with readError:true. No catch converts an error into valid data.',
         logical_operators_verified: true,
         logical_operators_summary:
           'All 16 call checks in ac_run_round_2d2b.js verified correct. No missing operators.',
@@ -754,10 +753,10 @@ routerAdd(
           'search_case_insensitive is set to false. Both uppercase and lowercase variants searched explicitly. No unproven claim remains.',
         pagination_implemented: true,
         pagination_check:
-          'paginateFind iterates with PAGE_SIZE=200 up to MAX_RECORDS=2000. Truncated results are marked and added to read_errors, forcing ESTADO_INDETERMINADO.',
+          'paginateFind implements real pagination: PAGE_SIZE=200 up to MAX_RECORDS=2000, truncated results marked and pushed to read_errors forcing ESTADO_INDETERMINADO. safeFindAll (directed/correlation queries) uses a FIXED limit of 100 — NOT complete pagination. If a directed query returns exactly 100 records, truncation is detected and pushed to read_errors, forcing ESTADO_INDETERMINADO.',
         correlation_implemented: true,
         correlation_check:
-          'Each B step requires correlated evidence across multiple collections. C1 requires specific rollback audit record. No inference from partial or generic records.',
+          'Each B step requires correlated evidence across multiple collections. C1 requires a specific persisted rollback event (evento_tipo=rollback in com_eventos_integracao) with unambiguous correlation — NOT generic com_auditoria records (plan expects delta +0). No inference from partial or generic records.',
         sanitized_evidence: true,
         sanitization_check:
           'Evidence exposes only truncated IDs, timestamps, status fields, correlation keys. No payloads, emails, phones, tokens, signatures, or authorization headers exposed.',
