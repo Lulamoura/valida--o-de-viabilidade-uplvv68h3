@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T20:13:58.213Z",
+  "generatedAt": "2026-08-13T20:36:33.415Z",
   "collections": [
     {
       "name": "users",
@@ -1474,6 +1474,245 @@
       "indexes": [
         "CREATE INDEX idx_com_ocorrencias_qualidade_execucao ON com_ocorrencias_qualidade (execucao_id)",
         "CREATE INDEX idx_com_ocorrencias_qualidade_severidade ON com_ocorrencias_qualidade (severidade)"
+      ]
+    },
+    {
+      "name": "com_execucoes_porta_2d2b",
+      "type": "base",
+      "apiRules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "runner_version",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "correlation_key",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "estado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "started_at",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "finished_at",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "counts_before",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "counts_after",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "flag_before",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "flag_final",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prova_zero_chamadas_externas",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "versao_commit",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "decisao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_execucoes_porta_2d2b_id ON com_execucoes_porta_2d2b (id)",
+        "CREATE INDEX idx_com_execucoes_porta_2d2b_correlation_key ON com_execucoes_porta_2d2b (correlation_key)"
+      ]
+    },
+    {
+      "name": "com_etapas_porta_2d2b",
+      "type": "base",
+      "apiRules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "execucao_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_execucoes_porta_2d2b"
+        },
+        {
+          "name": "ordem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "metodo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "rota_sanitizada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "started_at",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "finished_at",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "http_status_real",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "http_status_esperado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resultado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "counts_antes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "counts_depois",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deltas",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ids_correlacao_sanitizados",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sha256_corpo_bruto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resposta_sanitizada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "erro_real",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_etapas_porta_2d2b_id ON com_etapas_porta_2d2b (id)",
+        "CREATE INDEX idx_com_etapas_porta_2d2b_execucao_id ON com_etapas_porta_2d2b (execucao_id)",
+        "CREATE INDEX idx_com_etapas_porta_2d2b_ordem ON com_etapas_porta_2d2b (ordem)",
+        "CREATE UNIQUE INDEX `idx_com_etapas_porta_2d2b_execucao_ordem` ON `com_etapas_porta_2d2b` (execucao_id, ordem)"
       ]
     }
   ]

@@ -20,22 +20,19 @@ import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 import pb from '@/lib/pocketbase/client'
 
 /**
- * Porta 2D.2B — Consulta de Evidência Persistida.
+ * Porta 2D.2B — Consulta de Evidência Persistida (v0.0.136).
  *
- * Componente somente-leitura que consulta a rota
- *   GET /backend/v1/integracao/ac/evidence-porta-2d2b/:execId
- * para recuperar a evidência persistida (execução + 16 etapas) de uma
- * rodada do runner 2D.2B previamente instrumentada.
- *
- * - Nenhuma chamada automática (zero useEffect/onMount).
- * - Renderizado somente quando isSuperAdmin === true e loading === false.
- * - Persistência client-side em localStorage (chave por execId) para
- *   sobreviver a reload.
- * - Sem retry/polling. Botão bloqueado durante a requisição.
+ * CORREÇÃO 13:
+ *  - Zero chamadas automáticas, retry e polling (mantido).
+ *  - Gate loading=false e isSuperAdmin=true (mantido).
+ *  - Captura status HTTP real e raw body real na consulta (via fetch nativo),
+ *    sem fixar 200 no sucesso.
+ *  - Não afirma "JSON canônico" se a resposta falhar na validação estrutural.
+ *  - localStorage guarda somente resposta sanitizada, nunca token/header.
  */
 
 const ROUTE_PREFIX = '/backend/v1/integracao/ac/evidence-porta-2d2b'
-const FRONTEND_VERSION = 'R2-EVIDENCE-2D2B-QUERY-FRONTEND-20260813-v1-0.0.135'
+const FRONTEND_VERSION = 'R2-EVIDENCE-2D2B-QUERY-FRONTEND-20260813-v2-0.0.136'
 
 interface EvidenceStep {
   id: string
@@ -83,15 +80,19 @@ interface CanonicalEvidenceResponse {
   route_version: string
   read_only: boolean
   writes_performed: number
+  writes_note?: string
+  round_writes?: number
   external_calls: number
   queried_at: string
+  schema_version_expected?: string
   execution: EvidenceExecution | null
   steps: EvidenceStep[]
+  canonical_map?: Record<string, unknown>
   classification: string
   classification_justification: string
   total_steps_expected: number
   total_steps_persisted: number
-  anomalies: unknown[]
+  anomalies: Array<{ type: string; step?: string; description: string }>
   read_errors: Array<{ collection: string; operation: string; error: string }>
   reconstruction_note: string
 }
@@ -101,7 +102,9 @@ interface QueryState {
   queried_at: string
   http_status: number
   ok: boolean
+  structurally_valid: boolean
   canonical: CanonicalEvidenceResponse | null
+  raw_body: string
   error_message: string | null
 }
 
@@ -111,7 +114,9 @@ function emptyQuery(): QueryState {
     queried_at: '',
     http_status: 0,
     ok: false,
+    structurally_valid: false,
     canonical: null,
+    raw_body: '',
     error_message: null,
   }
 }
@@ -133,6 +138,12 @@ function loadFromStorage(execId: string): QueryState | null {
   }
 }
 
+/**
+ * Salva somente a resposta sanitizada. Nunca persiste token, Authorization
+ * ou headers. O QueryState aqui contém apenas http_status, ok, canonical
+ * (resposta sanitizada pelo backend), raw_body (corpo sanitizado pelo backend)
+ * e error_message (mensagem sanitizada).
+ */
 function saveToStorage(execId: string, data: QueryState) {
   if (!execId) return
   try {
@@ -164,6 +175,35 @@ function estadoVariant(estado: string): 'default' | 'destructive' | 'secondary' 
   return 'outline'
 }
 
+/**
+ * Validação estrutural mínima: a resposta precisa ter os campos canônicos
+ * essenciais. Não afirma "JSON canônico" se falhar.
+ */
+function isStructurallyValid(parsed: unknown): parsed is CanonicalEvidenceResponse {
+  if (!parsed || typeof parsed !== 'object') return false
+  const o = parsed as Record<string, unknown>
+  return (
+    typeof o.route === 'string' &&
+    typeof o.route_version === 'string' &&
+    typeof o.read_only === 'boolean' &&
+    typeof o.classification === 'string' &&
+    typeof o.total_steps_expected === 'number' &&
+    Array.isArray(o.steps) &&
+    Array.isArray(o.anomalies) &&
+    Array.isArray(o.read_errors)
+  )
+}
+
+/** Sanitiza erro de rede: expõe apenas message, sem tokens/headers. */
+function sanitizeError(err: unknown): { message: string; status: number } {
+  const message = err instanceof Error ? err.message : 'Erro desconhecido'
+  let status = 0
+  if (err && typeof err === 'object' && 'status' in err) {
+    status = (err as { status?: number }).status ?? 0
+  }
+  return { message, status }
+}
+
 export function Porta2D2BEvidenceQueryBlock() {
   const { isSuperAdmin, loading } = useIsSuperAdmin()
   const [execIdInput, setExecIdInput] = useState('')
@@ -182,77 +222,95 @@ export function Porta2D2BEvidenceQueryBlock() {
 
     const queried_at = new Date().toISOString()
 
+    // CORREÇÃO 13: fetch nativo para capturar status HTTP real e raw body real.
+    // Nunca fixa 200. Não persiste token/header no localStorage.
+    const base = (import.meta.env.VITE_POCKETBASE_URL ?? '').replace(/\/$/, '')
+    const url = `${base}${ROUTE_PREFIX}/${encodeURIComponent(execId)}`
+    const token = pb.authStore.token || ''
+
     try {
-      const response = await pb.send(`${ROUTE_PREFIX}/${encodeURIComponent(execId)}`, {
+      const response = await fetch(url, {
         method: 'GET',
+        headers: {
+          Authorization: token,
+        },
       })
-      const canonical = response as CanonicalEvidenceResponse
+      const rawBody = await response.text()
+      const httpStatus = response.status
+      const ok = httpStatus >= 200 && httpStatus < 300
+
+      let parsed: unknown = undefined
+      try {
+        parsed = rawBody ? JSON.parse(rawBody) : undefined
+      } catch {
+        parsed = undefined
+      }
+
+      const valid = isStructurallyValid(parsed)
+      const canonical: CanonicalEvidenceResponse | null = valid
+        ? (parsed as CanonicalEvidenceResponse)
+        : null
+
       const next: QueryState = {
         executed: true,
         queried_at,
-        http_status: 200,
-        ok: true,
+        http_status: httpStatus,
+        ok,
+        structurally_valid: valid,
         canonical,
-        error_message: null,
+        raw_body: rawBody,
+        error_message: ok
+          ? valid
+            ? null
+            : 'Resposta recebida mas falhou na validação estrutural — não é JSON canônico'
+          : 'Resposta não-2xx capturada',
       }
       saveToStorage(execId, next)
       setActiveExecId(execId)
       setQuery(next)
-      toast.success('Evidência persistida consultada com sucesso')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido'
-      const status =
-        err && typeof err === 'object' && 'status' in err
-          ? ((err as { status?: number }).status ?? 0)
-          : 0
-      let canonical: CanonicalEvidenceResponse | null = null
-      if (
-        err &&
-        typeof err === 'object' &&
-        'response' in err &&
-        (err as { response?: { message?: unknown } }).response
-      ) {
-        const resp = (err as { response?: { message?: unknown } }).response
-        if (resp && typeof resp.message === 'object') {
-          canonical = resp.message as CanonicalEvidenceResponse
-        }
+      if (ok && valid) {
+        toast.success('Evidência persistida consultada com sucesso')
+      } else if (ok && !valid) {
+        toast.error('Resposta recebida mas invalidada estruturalmente')
+      } else if (httpStatus === 404) {
+        toast.error('Execução não encontrada (404)')
+      } else {
+        toast.error(`Consulta retornou HTTP ${httpStatus}`)
       }
+    } catch (err) {
+      const { message, status } = sanitizeError(err)
       const next: QueryState = {
         executed: true,
         queried_at,
         http_status: status,
         ok: false,
-        canonical,
+        structurally_valid: false,
+        canonical: null,
+        raw_body: message,
         error_message: message,
       }
       saveToStorage(execId, next)
       setActiveExecId(execId)
       setQuery(next)
-      if (status === 404) {
-        toast.error('Execução não encontrada (404)')
-      } else {
-        toast.error(`Consulta falhou (HTTP ${status || 'n/a'})`)
-      }
+      toast.error(`Consulta falhou (HTTP ${status || 'n/a'})`)
     } finally {
       setQuerying(false)
     }
   }, [execIdInput, querying])
 
   const handleCopy = useCallback(async () => {
-    if (!query.canonical) return
+    if (!query.raw_body) return
     try {
-      await navigator.clipboard.writeText(JSON.stringify(query.canonical, null, 2))
-      toast.success('JSON canônico copiado')
+      await navigator.clipboard.writeText(query.raw_body)
+      toast.success('Resposta copiada')
     } catch {
-      toast.error('Falha ao copiar JSON')
+      toast.error('Falha ao copiar')
     }
-  }, [query.canonical])
+  }, [query.raw_body])
 
   const handleDownload = useCallback(() => {
-    if (!query.canonical) return
-    const blob = new Blob([JSON.stringify(query.canonical, null, 2)], {
-      type: 'application/json',
-    })
+    if (!query.raw_body) return
+    const blob = new Blob([query.raw_body], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -261,7 +319,7 @@ export function Porta2D2BEvidenceQueryBlock() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }, [query.canonical, activeExecId])
+  }, [query.raw_body, activeExecId])
 
   const handleClear = useCallback(() => {
     if (activeExecId) {
@@ -299,8 +357,9 @@ export function Porta2D2BEvidenceQueryBlock() {
               GET /backend/v1/integracao/ac/evidence-porta-2d2b/:execId
             </code>
             . Nenhuma chamada automática — a consulta ocorre somente após clique humano no botão.
-            Sem retry, polling ou chamada em segundo plano. O resultado é persistido client-side em{' '}
-            <code className="text-xs">localStorage</code> para sobreviver a reload.
+            Sem retry, polling ou chamada em segundo plano. Status HTTP real e corpo bruto real são
+            capturados (sem fixar 200). localStorage guarda somente resposta sanitizada, nunca
+            token/header.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -383,6 +442,24 @@ export function Porta2D2BEvidenceQueryBlock() {
           {/* Resultado canônico */}
           {hasResult && query.canonical ? (
             <div className="space-y-4">
+              {/* HTTP status real + validação estrutural */}
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <div className="text-xs font-medium text-muted-foreground mb-1">
+                  Status HTTP real e validação estrutural
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                  <Badge variant={query.ok ? 'default' : 'destructive'}>
+                    HTTP {query.http_status > 0 ? query.http_status : 'n/a'}
+                  </Badge>
+                  <Badge variant={query.structurally_valid ? 'default' : 'destructive'}>
+                    {query.structurally_valid
+                      ? 'JSON canônico válido'
+                      : 'validação estrutural falhou'}
+                  </Badge>
+                  <span className="text-muted-foreground">queried_at: {query.queried_at}</span>
+                </div>
+              </div>
+
               {/* Resumo da execução */}
               <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
                 <div className="text-xs font-medium text-muted-foreground mb-1">
@@ -446,10 +523,17 @@ export function Porta2D2BEvidenceQueryBlock() {
                     </Badge>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">queried_at:</span>
-                    <code className="text-foreground">{query.queried_at}</code>
+                    <span className="text-muted-foreground">versao_commit:</span>
+                    <code className="text-foreground">
+                      {query.canonical.execution?.versao_commit ?? 'n/a'}
+                    </code>
                   </div>
                 </div>
+                {query.canonical.writes_note && (
+                  <div className="text-xs text-muted-foreground italic mt-1">
+                    {query.canonical.writes_note}
+                  </div>
+                )}
               </div>
 
               {/* Justificativa da classificação */}
@@ -464,6 +548,26 @@ export function Porta2D2BEvidenceQueryBlock() {
                   {query.canonical.reconstruction_note}
                 </div>
               </div>
+
+              {/* Anomalies reais */}
+              {query.canonical.anomalies && query.canonical.anomalies.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                  <div className="text-xs text-amber-800 dark:text-amber-300">
+                    <div className="font-medium">
+                      Anomalias detectadas ({query.canonical.anomalies.length})
+                    </div>
+                    <ul className="list-disc ml-4 mt-1">
+                      {query.canonical.anomalies.slice(0, 20).map((a, idx) => (
+                        <li key={idx} className="font-mono break-all">
+                          {a.step ? `[${a.step}] ` : ''}
+                          {a.type}: {a.description}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
 
               {/* Read errors */}
               {query.canonical.read_errors && query.canonical.read_errors.length > 0 && (
@@ -549,11 +653,11 @@ export function Porta2D2BEvidenceQueryBlock() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button onClick={handleCopy} variant="outline" size="sm">
                   <Copy className="h-4 w-4 mr-1" />
-                  Copiar JSON canônico
+                  Copiar resposta
                 </Button>
                 <Button onClick={handleDownload} variant="outline" size="sm">
                   <Download className="h-4 w-4 mr-1" />
-                  Baixar JSON canônico
+                  Baixar resposta
                 </Button>
                 <Button onClick={handleClear} variant="ghost" size="sm">
                   <Eye className="h-4 w-4 mr-1" />
@@ -561,13 +665,13 @@ export function Porta2D2BEvidenceQueryBlock() {
                 </Button>
               </div>
 
-              {/* JSON canônico completo */}
+              {/* Corpo bruto real da resposta */}
               <div className="rounded-lg border bg-muted/50 p-3">
                 <div className="text-xs font-medium text-muted-foreground mb-2">
-                  JSON Canônico Completo
+                  Corpo bruto real da resposta (response.text)
                 </div>
                 <pre className="max-h-[600px] overflow-auto text-xs font-mono whitespace-pre-wrap break-all">
-                  {JSON.stringify(query.canonical, null, 2)}
+                  {query.raw_body}
                 </pre>
               </div>
             </div>
