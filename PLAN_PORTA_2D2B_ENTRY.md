@@ -6,7 +6,7 @@
 
 Este é um documento de planejamento exclusivamente. Nenhuma rota, teste, query, webhook, chamada externa ou alteração de qualquer arquivo — exceto este próprio — foi executada. O escopo futuro descrito é um teste local, assinado, completo e controlado do endpoint de webhook existente, usando exclusivamente amostras sintéticas `[TESTE]`, sem registro de webhook no ActiveCampaign, sem tráfego originado pelo ActiveCampaign e sem chamadas a serviços externos.
 
-**Estágio de análise estática: COMPLETO.** Todos os itens S1–S10 estão provados. S11 (delta de `com_auditoria`) tem o delta direto provado como 0, condicionado à inexistência de hook indireto aplicável; o inventário do projeto confirma a existência de `audit_negocios`, pelo que S11 permanece parcialmente provado (delta direto 0 confirmado; delta total condicionado ao comportamento do hook indireto).
+**Estágio de análise estática: COMPLETO.** Todos os itens S1–S11 estão provados. S11 (delta de `com_auditoria`) tem o delta total provado como 0, fundamentado no fato de que o hook `audit_negocios.js` utiliza `onRecordUpdateRequest`, que não dispara em `$app.save()` server-side realizado por `ac_webhook.js` ou `ac_rollback.js`.
 
 ---
 
@@ -192,26 +192,26 @@ O round é dividido em quatro fases sequenciais:
 
 ## 6. Estágio de Análise Estática — COMPLETO
 
-Todos os itens S1–S10 estão provados. S11 tem o delta direto provado como 0, mas permanece condicionado ao comportamento do hook indireto `audit_negocios`.
+Todos os itens S1–S11 estão provados.
 
-| #   | Item a Provar                                                                                                                                                                                                                 | Fonte                                        | Status                                                                                                                                                                                                                                                                                                                                                  |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1  | API criptográfica usada (`$security.hs256`): recebe string; resultado hex; comportamento documentado e consistente entre webhook e rollback                                                                                   | Código de `ac_webhook.js` e `ac_rollback.js` | **Provado**                                                                                                                                                                                                                                                                                                                                             |
-| S2  | Índice UNIQUE em `idempotency_key` em `com_eventos_integracao`                                                                                                                                                                | `schema.json` e migração 0044                | **Provado** — `idx_com_eventos_integracao_idempotency` (UNIQUE) confirmado no schema                                                                                                                                                                                                                                                                    |
-| S3  | Estados válidos de eventos (`received`, `processed`, `error`) e execuções (`processing`, `completed`, `error`)                                                                                                                | Código de `ac_webhook.js`                    | **Provado**                                                                                                                                                                                                                                                                                                                                             |
-| S4  | Formato e campos do snapshot em `com_snapshots_negocio` (`negocio_id`, `snapshot`, `origem`)                                                                                                                                  | `schema.json` e migração 0045                | **Provado** — campos confirmados no schema                                                                                                                                                                                                                                                                                                              |
-| S5  | Contrato literal do endpoint webhook (`POST /backend/v1/integracao/ac/webhook`)                                                                                                                                               | Código de `ac_webhook.js`                    | **Provado**                                                                                                                                                                                                                                                                                                                                             |
-| S6  | Contrato literal do endpoint rollback (`POST /backend/v1/integracao/ac/rollback`)                                                                                                                                             | Código de `ac_rollback.js`                   | **Provado**                                                                                                                                                                                                                                                                                                                                             |
-| S7  | Campos estruturais de `com_vinculos_externos` (`sistema_origem`, `external_type`, `external_id`, `collection_name`, `record_id`) distinguindo contato (`external_type = 'contact'`) de negócio (`external_type = 'business'`) | `schema.json` e migração 0042                | **Provado** — campos confirmados no schema                                                                                                                                                                                                                                                                                                              |
-| S8  | B5 (`deal_create` com stage sem mapeamento) cria um vínculo em `com_vinculos_externos` — caminho de código em `ac_webhook.js` para novos negócios cria vínculo                                                                | Código de `ac_webhook.js`                    | **Provado** — o caminho `!nRec` cria `new Record(vCol2)` e salva o vínculo                                                                                                                                                                                                                                                                              |
-| S9  | C1 (rollback) NÃO cria um registro em `com_execucoes_sincronizacao` — análise do caminho de código em `ac_rollback.js`                                                                                                        | Código de `ac_rollback.js`                   | **Provado** — o endpoint de rollback não cria registro em `com_execucoes_sincronizacao`                                                                                                                                                                                                                                                                 |
-| S10 | O endpoint de rollback (`ac_rollback.js`) implementa idempotência para C2 (repetição produz delta 0) via chave determinística sem `Date.now()`                                                                                | Código de `ac_rollback.js`                   | **Provado** — idempotency_key usa `$security.sha256(sistemaOrigem + '\|rollback\|' + entityType + '\|' + externalId + '\|' + txRecordId + '\|' + snapshotId)` — determinística, sem `Date.now()`                                                                                                                                                        |
-| S11 | Delta de `com_auditoria` durante o round — análise de todos os caminhos de código em `ac_webhook.js` e `ac_rollback.js` para criação server-side de registros de auditoria                                                    | Código de `ac_webhook.js` e `ac_rollback.js` | **Parcialmente provado** — delta direto 0 confirmado (nenhum dos dois endpoints cria registros em `com_auditoria`). No entanto, o hook indireto `audit_negocios` existe no inventário do projeto e pode disparar em `$app.save()` de registros `com_negocios` durante B3, B4, B5 e C1. O delta total depende do comportamento do hook `audit_negocios`. |
+| #   | Item a Provar                                                                                                                                                                                                                 | Fonte                                                             | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1  | API criptográfica usada (`$security.hs256`): recebe string; resultado hex; comportamento documentado e consistente entre webhook e rollback                                                                                   | Código de `ac_webhook.js` e `ac_rollback.js`                      | **Provado**                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| S2  | Índice UNIQUE em `idempotency_key` em `com_eventos_integracao`                                                                                                                                                                | `schema.json` e migração 0044                                     | **Provado** — `idx_com_eventos_integracao_idempotency` (UNIQUE) confirmado no schema                                                                                                                                                                                                                                                                                                                                                                   |
+| S3  | Estados válidos de eventos (`received`, `processed`, `error`) e execuções (`processing`, `completed`, `error`)                                                                                                                | Código de `ac_webhook.js`                                         | **Provado**                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| S4  | Formato e campos do snapshot em `com_snapshots_negocio` (`negocio_id`, `snapshot`, `origem`)                                                                                                                                  | `schema.json` e migração 0045                                     | **Provado** — campos confirmados no schema                                                                                                                                                                                                                                                                                                                                                                                                             |
+| S5  | Contrato literal do endpoint webhook (`POST /backend/v1/integracao/ac/webhook`)                                                                                                                                               | Código de `ac_webhook.js`                                         | **Provado**                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| S6  | Contrato literal do endpoint rollback (`POST /backend/v1/integracao/ac/rollback`)                                                                                                                                             | Código de `ac_rollback.js`                                        | **Provado**                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| S7  | Campos estruturais de `com_vinculos_externos` (`sistema_origem`, `external_type`, `external_id`, `collection_name`, `record_id`) distinguindo contato (`external_type = 'contact'`) de negócio (`external_type = 'business'`) | `schema.json` e migração 0042                                     | **Provado** — campos confirmados no schema                                                                                                                                                                                                                                                                                                                                                                                                             |
+| S8  | B5 (`deal_create` com stage sem mapeamento) cria um vínculo em `com_vinculos_externos` — caminho de código em `ac_webhook.js` para novos negócios cria vínculo                                                                | Código de `ac_webhook.js`                                         | **Provado** — o caminho `!nRec` cria `new Record(vCol2)` e salva o vínculo                                                                                                                                                                                                                                                                                                                                                                             |
+| S9  | C1 (rollback) NÃO cria um registro em `com_execucoes_sincronizacao` — análise do caminho de código em `ac_rollback.js`                                                                                                        | Código de `ac_rollback.js`                                        | **Provado** — o endpoint de rollback não cria registro em `com_execucoes_sincronizacao`                                                                                                                                                                                                                                                                                                                                                                |
+| S10 | O endpoint de rollback (`ac_rollback.js`) implementa idempotência para C2 (repetição produz delta 0) via chave determinística sem `Date.now()`                                                                                | Código de `ac_rollback.js`                                        | **Provado** — idempotency_key usa `$security.sha256(sistemaOrigem + '\|rollback\|' + entityType + '\|' + externalId + '\|' + txRecordId + '\|' + snapshotId)` — determinística, sem `Date.now()`                                                                                                                                                                                                                                                       |
+| S11 | Delta de `com_auditoria` durante o round — análise de todos os caminhos de código em `ac_webhook.js` e `ac_rollback.js` para criação server-side de registros de auditoria                                                    | Código de `ac_webhook.js`, `ac_rollback.js` e `audit_negocios.js` | **Provado** — delta total = 0. O delta direto dos dois endpoints é 0 (nenhum cria registros em `com_auditoria`). O hook indireto `audit_negocios.js` utiliza `onRecordUpdateRequest`, que é um hook de requisição HTTP e **não** dispara em `$app.save()` server-side. Portanto, os saves de `com_negocios` realizados por `ac_webhook.js` (B3, B4, B5) e `ac_rollback.js` (C1) não disparam `audit_negocios`, e o delta total de `com_auditoria` é 0. |
 
 ### Resultado do Estágio de Análise Estática
 
-- S1–S10: **Provados.**
-- S11: Delta direto dos dois endpoints = **0** (provado). Delta total condicionado ao hook indireto `audit_negocios` (existente no inventário). Se `audit_negocios` for um hook de modelo (`onRecordCreate`/`onRecordUpdate` ou `onRecordAfterCreateSuccess`/`onRecordAfterUpdateSuccess`), ele dispara em `$app.save()` server-side e o delta total pode ser >0. Se for um hook de requisição HTTP (`onRecordCreateRequest`/`onRecordUpdateRequest`), não dispara em saves server-side e o delta total é 0.
+- S1–S11: **Provados.**
+- S11: Delta total de `com_auditoria` = **0** (provado). O hook `audit_negocios.js` utiliza `onRecordUpdateRequest` (hook de requisição HTTP), que não dispara em `$app.save()` server-side. Os saves de `com_negocios` em B3, B4, B5 (via `ac_webhook.js`) e C1 (via `ac_rollback.js`) não acionam o hook de auditoria. Delta direto dos endpoints = 0; delta indireto = 0; delta total = 0.
 
 ---
 
@@ -238,18 +238,18 @@ Contagens são capturadas: antes do round, após cada chamada individual, e ao f
 
 > Todos os testes negativos devem produzir **delta zero** em todas as coleções monitoradas.
 
-| #   | Método | Rota                                | Headers                                                                                      | Categoria do Payload                                        | HTTP Esperado | Delta por Coleção |
-| --- | ------ | ----------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------- | ----------------- |
-| A1  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`                                                             | `{}` (endpoint desabilitado)                                | 503           | 0 em todas        |
-| A2  | GET    | `/backend/v1/integracao/ac/webhook` | (nenhum)                                                                                     | (nenhum corpo)                                              | 405           | 0 em todas        |
-| A3  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: text/plain`                                                                   | `{}`                                                        | 400           | 0 em todas        |
-| A4  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | `{}` (corpo vazio sem tipo/id externo)                      | 400           | 0 em todas        |
-| A5  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`                                 | JSON malformado `not-json{`                                 | 400           | 0 em todas        |
-| A6  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | Payload > 256KB                                             | 400           | 0 em todas        |
-| A7  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json` (sem `X-AC-Signature`)                                      | Payload de contato sintético `[TESTE]` com timestamp válido | 401           | 0 em todas        |
-| A8  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: invalido`                                 | Payload de contato sintético `[TESTE]` com timestamp válido | 401           | 0 em todas        |
+| #   | Método | Rota                                | Headers                                                                                      | Categoria do Payload                                                                | HTTP Esperado | Delta por Coleção |
+| --- | ------ | ----------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------- | ----------------- |
+| A1  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`                                                             | `{}` (endpoint desabilitado)                                                        | 503           | 0 em todas        |
+| A2  | GET    | `/backend/v1/integracao/ac/webhook` | (nenhum)                                                                                     | (nenhum corpo)                                                                      | 405           | 0 em todas        |
+| A3  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: text/plain`                                                                   | `{}`                                                                                | 400           | 0 em todas        |
+| A4  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | `{"timestamp":"<timestamp_válido>"}` (sem `type`/`event`/`action` e sem ID externo) | 400           | 0 em todas        |
+| A5  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`                                 | JSON malformado `not-json{`                                                         | 400           | 0 em todas        |
+| A6  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | Payload > 256KB                                                                     | 400           | 0 em todas        |
+| A7  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json` (sem `X-AC-Signature`)                                      | Payload de contato sintético `[TESTE]` com timestamp válido                         | 401           | 0 em todas        |
+| A8  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: invalido`                                 | Payload de contato sintético `[TESTE]` com timestamp válido                         | 401           | 0 em todas        |
 
-> **A4:** Assinatura válida e timestamp válido garantem que a única razão de falha seja "Evento sem tipo ou id externo identificavel" (HTTP 400), e não ausência de assinatura ou timestamp inválido.
+> **A4:** O payload é um corpo JSON sintético contendo apenas um timestamp válido (ex.: `{"timestamp":"2026-08-13T01:00:00.000Z"}`), sem campos `type`, `event` ou `action`, e sem nenhum ID externo (sem `contact.id`, `organization.id` ou `deal.id`). A assinatura HMAC é calculada sobre os bytes exatos desse corpo. Assinatura válida e timestamp válido garantem que a única razão de falha seja "Evento sem tipo ou id externo identificavel" (HTTP 400), e não ausência de assinatura ou timestamp inválido.
 >
 > **A6:** O body limit de 256KB é aplicado via `$apis.bodyLimit(262144)` como middleware da rota. Assinatura válida e timestamp válido garantem que a única razão de falha seja o tamanho do corpo (HTTP 400).
 
@@ -269,6 +269,8 @@ Contagens são capturadas: antes do round, após cada chamada individual, e ao f
 
 ### 7.4 Fase C — Rollback e Repetição Idempotente
 
+> **Requisito do plano:** As chamadas C1 e C2 devem incluir o header `Content-Type: application/json`. Este é um requisito de nível de plano para garantir entrega consistente do corpo JSON. O hook `ac_rollback.js` não contém validação explícita de `Content-Type` — a exigência é documentada aqui como requisito do plano, não como validação do hook.
+
 | #   | Método | Rota                                 | Headers                                                                                      | Categoria do Payload                        | HTTP Esperado | Delta por Coleção                                    |
 | --- | ------ | ------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------- | ---------------------------------------------------- |
 | C1  | POST   | `/backend/v1/integracao/ac/rollback` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | Rollback de `TESTE-2D2B-FN-D1` (`business`) | 200           | eventos +1 (compensador); execuções +0; snapshots +0 |
@@ -285,7 +287,7 @@ Contagens são capturadas: antes do round, após cada chamada individual, e ao f
 | Cria execução?                   | **Não** (provado em S9 — o endpoint de rollback não cria registro em `com_execucoes_sincronizacao`).                                                                                                     |
 | Cria snapshot?                   | **Não.**                                                                                                                                                                                                 |
 | Cria evento compensador          | **Sim** (+1 em `com_eventos_integracao`) com `evento_tipo = "rollback"`, `status = "rollback_executed"`.                                                                                                 |
-| Cria registro em `com_auditoria` | **Não diretamente.** O delta direto do endpoint é 0. Se o hook indireto `audit_negocios` disparar em `$app.save()` server-side, pode haver registro indireto (ver S11).                                  |
+| Cria registro em `com_auditoria` | **Não.** Delta direto = 0 (provado em S11). Delta indireto = 0 (provado em S11 — `audit_negocios.js` usa `onRecordUpdateRequest`, que não dispara em `$app.save()` server-side). Delta total = 0.        |
 | Deleção física                   | **Nenhuma.** Registros são restaurados, não deletados.                                                                                                                                                   |
 | Chave de idempotência            | Determinística: `$security.sha256(sistemaOrigem + '\|rollback\|' + entityType + '\|' + externalId + '\|' + txRecordId + '\|' + snapshotId)` — sem `Date.now()`.                                          |
 
@@ -308,16 +310,16 @@ Contagens são capturadas: antes do round, após cada chamada individual, e ao f
 
 ### 7.6 Deltas Finais Totais
 
-| Coleção                       | Delta Total Esperado                                                                                           |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `com_contatos`                | +1                                                                                                             |
-| `com_negocios`                | +2                                                                                                             |
-| `com_eventos_integracao`      | +5 (B1, B3, B4, B5, C1 compensador; B2=0, C2=0)                                                                |
-| `com_execucoes_sincronizacao` | +4 (B1, B3, B4, B5; C1=0 — provado em S9)                                                                      |
-| `com_vinculos_externos`       | +3 (B1, B3, B5 — provado em S8)                                                                                |
-| `com_snapshots_negocio`       | +1 (B4)                                                                                                        |
-| `com_ocorrencias_qualidade`   | +1 (B5)                                                                                                        |
-| `com_auditoria`               | Delta direto dos endpoints: 0 (provado). Delta total condicionado ao hook indireto `audit_negocios` (ver S11). |
+| Coleção                       | Delta Total Esperado |
+| ----------------------------- | -------------------- |
+| `com_contatos`                | +1                   |
+| `com_negocios`                | +2                   |
+| `com_eventos_integracao`      | +5                   |
+| `com_execucoes_sincronizacao` | +4                   |
+| `com_vinculos_externos`       | +3                   |
+| `com_snapshots_negocio`       | +1                   |
+| `com_ocorrencias_qualidade`   | +1                   |
+| `com_auditoria`               | +0                   |
 
 > **Nota sobre `com_eventos_integracao`:** O delta total é +5. Derivação linha a linha: B1 (+1), B2 (+0 — duplicata), B3 (+1), B4 (+1), B5 (+1), C1 (+1 — compensador), C2 (+0 — idempotente). Valor único — não existe +6.
 
@@ -325,7 +327,7 @@ Contagens são capturadas: antes do round, após cada chamada individual, e ao f
 
 > **Nota sobre `com_vinculos_externos`:** O delta é +3 (provado em S8 — o caminho de criação de novo negócio em `ac_webhook.js` cria vínculo). Derivação: B1 (+1 — vínculo contato), B3 (+1 — vínculo negócio), B5 (+1 — vínculo negócio).
 
-> **Nota sobre `com_auditoria`:** O delta **direto** dos dois endpoints (`ac_webhook.js` e `ac_rollback.js`) é **0** — nenhum dos dois cria registros em `com_auditoria` diretamente. O hook indireto `audit_negocios` existe no inventário do projeto e pode disparar em `$app.save()` de registros `com_negocios` durante B3, B4, B5 e C1. O delta total depende do tipo de hook (modelo vs. requisição HTTP). Se for um hook de requisição HTTP, o delta total é 0. Se for um hook de modelo, o delta total pode ser >0.
+> **Nota sobre `com_auditoria`:** O delta total é **+0** (provado em S11). O delta direto dos endpoints `ac_webhook.js` e `ac_rollback.js` é 0 — nenhum dos dois cria registros em `com_auditoria` diretamente. O hook indireto `audit_negocios.js` utiliza `onRecordUpdateRequest`, que é um hook de requisição HTTP e **não** dispara em `$app.save()` server-side. Portanto, os saves de `com_negocios` realizados por `ac_webhook.js` (B3, B4, B5) e `ac_rollback.js` (C1) não acionam o hook de auditoria. Delta direto = 0; delta indireto = 0; delta total = 0.
 
 ---
 
@@ -333,20 +335,20 @@ Contagens são capturadas: antes do round, após cada chamada individual, e ao f
 
 > Esta seção consolida em uma única tabela, para cada coleção monitorada, a contagem inicial (a capturar antes do round — sem valor numérico inventado), o delta exato esperado para o round completo, a fórmula da contagem final (`inicial + delta`) e as fases/chamadas responsáveis pelo delta.
 
-| Coleção                       | Contagem Inicial          | Delta Exato Esperado (Round Completo)                                         | Fórmula Contagem Final              | Fases / Chamadas Responsáveis                                            |
-| ----------------------------- | ------------------------- | ----------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------ |
-| `com_contatos`                | a capturar antes do round | +1                                                                            | inicial + 1                         | B1 (contact_create `TESTE-2D2B-FN-C1`)                                   |
-| `com_negocios`                | a capturar antes do round | +2                                                                            | inicial + 2                         | B3 (deal_create `TESTE-2D2B-FN-D1`), B5 (deal_create `TESTE-2D2B-FN-D2`) |
-| `com_eventos_integracao`      | a capturar antes do round | +5                                                                            | inicial + 5                         | B1, B3, B4, B5, C1 (compensador); B2=0, C2=0 (idempotentes)              |
-| `com_execucoes_sincronizacao` | a capturar antes do round | +4 (provado em S9 — C1 não cria execução)                                     | inicial + 4                         | B1, B3, B4, B5; C1=0, C2=0                                               |
-| `com_vinculos_externos`       | a capturar antes do round | +3 (provado em S8 — B5 cria vínculo)                                          | inicial + 3                         | B1 (vínculo contato), B3 (vínculo negócio), B5 (vínculo negócio)         |
-| `com_snapshots_negocio`       | a capturar antes do round | +1                                                                            | inicial + 1                         | B4 (deal_update `TESTE-2D2B-FN-D1`)                                      |
-| `com_ocorrencias_qualidade`   | a capturar antes do round | +1                                                                            | inicial + 1                         | B5 (unmapped_stage `TESTE-2D2B-FN-D2`)                                   |
-| `com_auditoria`               | a capturar antes do round | Delta direto: 0 (provado). Delta total: condicionado ao hook `audit_negocios` | inicial + 0 (ou >0 se hook dispara) | Delta direto: nenhum. Indireto: `audit_negocios` em B3, B4, B5, C1       |
+| Coleção                       | Contagem Inicial          | Delta Exato Esperado (Round Completo) | Fórmula Contagem Final | Fases / Chamadas Responsáveis                                                                                                   |
+| ----------------------------- | ------------------------- | ------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `com_contatos`                | a capturar antes do round | +1                                    | inicial + 1            | B1 (contact_create `TESTE-2D2B-FN-C1`)                                                                                          |
+| `com_negocios`                | a capturar antes do round | +2                                    | inicial + 2            | B3 (deal_create `TESTE-2D2B-FN-D1`), B5 (deal_create `TESTE-2D2B-FN-D2`)                                                        |
+| `com_eventos_integracao`      | a capturar antes do round | +5                                    | inicial + 5            | B1, B3, B4, B5, C1 (compensador); B2=0, C2=0 (idempotentes)                                                                     |
+| `com_execucoes_sincronizacao` | a capturar antes do round | +4 (provado em S9)                    | inicial + 4            | B1, B3, B4, B5; C1=0, C2=0                                                                                                      |
+| `com_vinculos_externos`       | a capturar antes do round | +3 (provado em S8)                    | inicial + 3            | B1 (vínculo contato), B3 (vínculo negócio), B5 (vínculo negócio)                                                                |
+| `com_snapshots_negocio`       | a capturar antes do round | +1                                    | inicial + 1            | B4 (deal_update `TESTE-2D2B-FN-D1`)                                                                                             |
+| `com_ocorrencias_qualidade`   | a capturar antes do round | +1                                    | inicial + 1            | B5 (unmapped_stage `TESTE-2D2B-FN-D2`)                                                                                          |
+| `com_auditoria`               | a capturar antes do round | +0 (provado em S11)                   | inicial + 0            | Nenhuma — delta direto = 0; delta indireto = 0 (`audit_negocios` usa `onRecordUpdateRequest`, não dispara em saves server-side) |
 
 > **Nota sobre `com_eventos_integracao`:** O delta total é +5. Derivação: B1 (+1), B2 (+0), B3 (+1), B4 (+1), B5 (+1), C1 (+1), C2 (+0). Valor único — não existe +6.
 
-> **Nota sobre `com_auditoria`:** O delta **direto** dos endpoints é 0 (provado). O inventário do projeto confirma a existência do hook `audit_negocios`. Se `audit_negocios` for um hook de modelo (`onRecordCreate`/`onRecordUpdate` ou variantes `AfterSuccess`), ele dispara em `$app.save()` server-side e o delta total pode ser >0. Se for um hook de requisição HTTP (`onRecordCreateRequest`/`onRecordUpdateRequest`), não dispara em saves server-side e o delta total é 0. O delta exato será confirmado no momento da execução.
+> **Nota sobre `com_auditoria`:** O delta total é **+0** (provado em S11). O hook `audit_negocios.js` utiliza `onRecordUpdateRequest` (hook de requisição HTTP), que não dispara em `$app.save()` server-side. Os saves de `com_negocios` em B3, B4, B5 (via `ac_webhook.js`) e C1 (via `ac_rollback.js`) não acionam o hook de auditoria. Delta direto = 0; delta indireto = 0; delta total = 0.
 
 ### Bloco do Parâmetro `ac_webhook_enabled` (Registrado Separadamente)
 
@@ -442,11 +444,13 @@ O endpoint `POST /backend/v1/integracao/ac/rollback` exige, **simultaneamente**,
 1. **Flag habilitada:** `ac_webhook_enabled = true` em `com_parametros` (lê-se `valor === 'true' && ativo === true`).
 2. **Autenticação:** Usuário autenticado (`e.auth.id` presente).
 3. **Superadministrador:** O usuário deve ter `perfil_id.slug = 'superadministrador'` (via `perfil_id` direto ou via binding em `com_usuarios_equipes` com `ativo = true`).
-4. **Content-Type e body limit:** O body limit de 256KB é aplicado via `$apis.bodyLimit(262144)` + verificação de `Content-Length`.
+4. **Body limit:** O body limit de 256KB é aplicado via `$apis.bodyLimit(262144)` + verificação de `Content-Length`.
 5. **Raw body:** Corpo bruto obtido via `toString(e.request.body)`.
 6. **Assinatura HMAC válida:** Header `X-AC-Signature` presente, formato hex 64 chars, normalizado para lowercase, comparado em tempo constante com `$security.hs256(rawBody, webhookSecret)`.
 7. **Timestamp válido:** Campo `timestamp` ou `ts` no body, dentro da janela de 5 minutos.
 8. **`entity_type = business`:** O campo `entity_type` no body deve ser exatamente `"business"`.
+
+> **Nota sobre `Content-Type`:** O plano exige que as chamadas C1 e C2 incluam o header `Content-Type: application/json` como requisito de nível de plano. O hook `ac_rollback.js` **não** contém validação explícita de `Content-Type` — esta exigência é documentada como requisito do plano para garantir entrega consistente do corpo JSON, não como validação do hook.
 
 Se qualquer um destes pré-requisitos falhar, a requisição é rejeitada **antes** de qualquer persistência.
 
@@ -456,12 +460,12 @@ Se qualquer um destes pré-requisitos falhar, a requisição é rejeitada **ante
 - ❌ Não usar `record_id` isolado para inferir o tipo de registro.
 - ❌ Não reutilizar ou reativar a compensação R13 v8.
 
-### Contrato de Rollback — Provado (S6, S9, S10)
+### Contrato de Rollback — Provado (S6, S9, S10, S11)
 
-| Execução      | HTTP Esperado | Body Esperado                                                                                                                            | Comportamento                                                                                                                                                 |
-| ------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1 (primeira) | 200           | `{ success: true, idempotent: false, rolled_back: [{ collection: "com_negocios", record_id: <id>, action: "restored_from_snapshot" }] }` | Negócio restaurado do snapshot mais recente dentro de transação atômica. Evento compensador criado. Sem execução, sem snapshot adicional, sem deleção física. |
-| C2 (replay)   | 200           | `{ success: true, rolled_back: [], idempotent: true }`                                                                                   | Negócio não alterado. Nenhum novo evento compensador. Delta 0.                                                                                                |
+| Execução      | HTTP Esperado | Body Esperado                                                                                                                            | Comportamento                                                                                                                                                                |
+| ------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1 (primeira) | 200           | `{ success: true, idempotent: false, rolled_back: [{ collection: "com_negocios", record_id: <id>, action: "restored_from_snapshot" }] }` | Negócio restaurado do snapshot mais recente dentro de transação atômica. Evento compensador criado. Sem execução, sem snapshot adicional, sem deleção física, sem auditoria. |
+| C2 (replay)   | 200           | `{ success: true, rolled_back: [], idempotent: true }`                                                                                   | Negócio não alterado. Nenhum novo evento compensador. Delta 0.                                                                                                               |
 
 > O contrato idempotente é **único e inequívoco**: C2 retorna HTTP 200 com `{ success: true, rolled_back: [], idempotent: true }` e delta 0. A idempotência é garantida pela chave determinística (provado em S10).
 
@@ -478,11 +482,11 @@ C1 restaura os seguintes campos do snapshot, **por presença de propriedade** no
 
 A restauração usa `Object.prototype.hasOwnProperty.call(snapData, field)` para cada campo, garantindo que zeros e strings vazias sejam preservados.
 
-### O que C1 NÃO faz (Provado — S6, S9)
+### O que C1 NÃO faz (Provado — S6, S9, S11)
 
 - ❌ Não cria registro em `com_execucoes_sincronizacao` (provado em S9).
 - ❌ Não cria snapshot adicional em `com_snapshots_negocio`.
-- ❌ Não cria registro direto em `com_auditoria` (delta direto 0).
+- ❌ Não cria registro em `com_auditoria` — delta direto = 0; delta indireto = 0 (provado em S11 — `audit_negocios.js` usa `onRecordUpdateRequest`, não dispara em saves server-side); delta total = 0.
 - ❌ Não realiza deleção física de nenhum registro.
 - ❌ Não altera `com_vinculos_externos`.
 
@@ -499,7 +503,7 @@ A restauração usa `Object.prototype.hasOwnProperty.call(snapData, field)` para
 
 ### GO (Todos devem ser verdadeiros e prováveis objetivamente)
 
-1. ✅ Estágio de análise estática (S1–S10) totalmente provado.
+1. ✅ Estágio de análise estática (S1–S11) totalmente provado.
 2. ✅ `$security.hs256()` comportamento provado (S1) — opera sobre `toString(e.request.body)`, resultado comparado em tempo constante.
 3. ✅ `ac_webhook_enabled` inicial é `false`.
 4. ✅ Todos os 8 testes negativos (Fase A) produzem delta zero e retornam o HTTP esperado.
@@ -514,7 +518,7 @@ A restauração usa `Object.prototype.hasOwnProperty.call(snapData, field)` para
 13. ✅ S8 provado: delta de `com_vinculos_externos` confirmado em +3.
 14. ✅ S9 provado: delta de `com_execucoes_sincronizacao` confirmado em +4.
 15. ✅ S10 provado: idempotência de C2 confirmada via chave determinística.
-16. ⚠️ S11 parcialmente provado: delta direto 0 confirmado; delta total condicionado ao hook indireto `audit_negocios`. O delta exato de `com_auditoria` deve ser confirmado no momento da execução.
+16. ✅ S11 provado: delta total de `com_auditoria` confirmado em +0 — `audit_negocios.js` usa `onRecordUpdateRequest` (hook de requisição HTTP), que não dispara em `$app.save()` server-side.
 
 ### NO-GO (Qualquer um dispara PARE)
 
@@ -534,8 +538,9 @@ A restauração usa `Object.prototype.hasOwnProperty.call(snapData, field)` para
 14. ❌ C1 não restaurar `titulo`, `valor`, `etapa`, `resultado` por presença de propriedade.
 15. ❌ C1 criar registro em `com_execucoes_sincronizacao` (delta deve ser 0).
 16. ❌ C1 criar snapshot adicional ou realizar deleção física.
-17. ❌ Qualquer dado real criado ou alterado.
-18. ❌ Divergência nos contratos C1/C2 em relação ao documentado.
+17. ❌ C1 criar registro em `com_auditoria` (delta deve ser 0).
+18. ❌ Qualquer dado real criado ou alterado.
+19. ❌ Divergência nos contratos C1/C2 em relação ao documentado.
 
 ---
 
@@ -612,26 +617,28 @@ A autorização para executar a Porta 2D.2B será redigida externamente apenas a
 
 ## 15. Relatório de Correções Item por Item
 
-| #   | Correção                                                                                                                                                                                                                                           | Status      |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| 1   | **Total e fases corrigidos:** 8 negativos (A1–A8), 5 funcionais (B1–B5), 2 rollback (C1–C2), 1 probe (D1) = **16 chamadas**. B6/B7 renomeados para C1/C2 em todas as tabelas, referências e relatório final.                                       | ✅ Aplicada |
-| 2   | **Ordem de execução corrigida:** confirmar flag=false; A1→503; habilitar true; A2–A8, B1–B5, C1–C2; restaurar false; D1→503.                                                                                                                       | ✅ Aplicada |
-| 3   | **`com_eventos_integracao` delta unificado:** valor único +5 (B1, B3, B4, B5, C1 compensador; B2=0, C2=0). Eliminado o valor +6 de todas as seções. Derivação linha a linha incluída.                                                              | ✅ Aplicada |
-| 4   | **B5 vs `com_vinculos_externos` resolvido e provado (S8):** delta +3 (B1, B3, B5). S8 provado — o caminho `!nRec` em `ac_webhook.js` cria vínculo via `new Record(vCol2)` + `$app.save(vRec2)`.                                                    | ✅ Aplicada |
-| 5   | **C1 execução resolvido e provado (S9):** C1 não cria execução (delta +4 para `com_execucoes_sincronizacao`). S9 provado — o endpoint de rollback não cria registro em `com_execucoes_sincronizacao`.                                              | ✅ Aplicada |
-| 6   | **C2 contrato único e provado (S10):** HTTP 200 com `{ success: true, rolled_back: [], idempotent: true }` e delta 0. S10 provado — idempotency_key determinística sem `Date.now()`.                                                               | ✅ Aplicada |
-| 7   | **Coluna Headers adicionada:** B1–B5 e C1–C2 incluem coluna Headers com `Content-Type`, `X-AC-Signature: <válido>` e `timestamp: <válido no corpo>`, sem expor secrets.                                                                            | ✅ Aplicada |
-| 8   | **`com_auditoria` delta documentado (S11 parcialmente provado):** delta direto dos endpoints = 0 (provado). Hook indireto `audit_negocios` existe no inventário. Delta total condicionado ao tipo de hook.                                         | ✅ Aplicada |
-| 9   | **A4 e A6 corrigidos:** ambos requerem assinatura válida E timestamp válido no corpo, garantindo que cada teste falha pelo motivo específico (A4: sem tipo/id externo; A6: corpo > 256KB).                                                         | ✅ Aplicada |
-| 10  | **S1–S10 como pré-requisitos provados:** S1–S10 provados. S11 parcialmente provado (delta direto 0; hook indireto existe).                                                                                                                         | ✅ Aplicada |
-| 11  | **Consistência geral:** todas as tabelas, GO/NO-GO, referências e relatório final atualizados para eliminar contradições.                                                                                                                          | ✅ Aplicada |
-| 12  | **HMAC documentado e provado (S1):** assinatura sobre `toString(e.request.body)` (raw body), sem canonicalização. `$security.hs256(rawBody, webhookSecret)`. Timestamp obrigatório, dentro de 5 minutos. Comparação em tempo constante.            | ✅ Aplicada |
-| 13  | **Rollback documentado e provado (S6):** alvos identificados por correlation keys e relações estruturais. Pré-requisitos simultâneos: superadmin + HMAC + timestamp + `entity_type=business`. Contrato único para C1 e C2. R13 v8 não reutilizado. | ✅ Aplicada |
-| 14  | **Prompt futuro removido:** seção "Autorização futura ainda não concedida" sem texto executável.                                                                                                                                                   | ✅ Aplicada |
-| 15  | **C1 restauração documentada:** `titulo`, `valor`, `etapa`, `resultado` restaurados por presença de propriedade (`hasOwnProperty`), preservando zeros e strings vazias.                                                                            | ✅ Aplicada |
-| 16  | **Body limit documentado:** `$apis.bodyLimit(262144)` aplicado como middleware em ambos os endpoints (webhook e rollback).                                                                                                                         | ✅ Aplicada |
-| 17  | **C1 contrato final:** HTTP 200 com `success: true`, `idempotent: false`, `rolled_back` com exatamente 1 item contendo `collection`, `record_id`, `action: "restored_from_snapshot"`.                                                              | ✅ Aplicada |
-| 18  | **Registro final:** bloco JSON exato registrado abaixo. Único arquivo alterado: `PLAN_PORTA_2D2B_ENTRY.md`.                                                                                                                                        | ✅ Aplicada |
+| #   | Correção                                                                                                                                                                                                                                                                | Status      |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| 1   | **Total e fases corrigidos:** 8 negativos (A1–A8), 5 funcionais (B1–B5), 2 rollback (C1–C2), 1 probe (D1) = **16 chamadas**. B6/B7 renomeados para C1/C2 em todas as tabelas, referências e relatório final.                                                            | ✅ Aplicada |
+| 2   | **Ordem de execução corrigida:** confirmar flag=false; A1→503; habilitar true; A2–A8, B1–B5, C1–C2; restaurar false; D1→503.                                                                                                                                            | ✅ Aplicada |
+| 3   | **`com_eventos_integracao` delta unificado:** valor único +5 (B1, B3, B4, B5, C1 compensador; B2=0, C2=0). Eliminado o valor +6 de todas as seções. Derivação linha a linha incluída.                                                                                   | ✅ Aplicada |
+| 4   | **B5 vs `com_vinculos_externos` resolvido e provado (S8):** delta +3 (B1, B3, B5). S8 provado — o caminho `!nRec` em `ac_webhook.js` cria vínculo via `new Record(vCol2)` + `$app.save(vRec2)`.                                                                         | ✅ Aplicada |
+| 5   | **C1 execução resolvido e provado (S9):** C1 não cria execução (delta +4 para `com_execucoes_sincronizacao`). S9 provado — o endpoint de rollback não cria registro em `com_execucoes_sincronizacao`.                                                                   | ✅ Aplicada |
+| 6   | **C2 contrato único e provado (S10):** HTTP 200 com `{ success: true, rolled_back: [], idempotent: true }` e delta 0. S10 provado — idempotency_key determinística sem `Date.now()`.                                                                                    | ✅ Aplicada |
+| 7   | **Coluna Headers adicionada:** B1–B5 e C1–C2 incluem coluna Headers com `Content-Type`, `X-AC-Signature: <válido>` e `timestamp: <válido no corpo>`, sem expor secrets.                                                                                                 | ✅ Aplicada |
+| 8   | **`com_auditoria` delta provado (S11):** delta total = 0. O hook `audit_negocios.js` utiliza `onRecordUpdateRequest` (hook de requisição HTTP), que não dispara em `$app.save()` server-side. Delta direto = 0; delta indireto = 0; delta total = 0.                    | ✅ Aplicada |
+| 9   | **A4 e A6 corrigidos:** ambos requerem assinatura válida E timestamp válido no corpo, garantindo que cada teste falha pelo motivo específico (A4: sem tipo/id externo; A6: corpo > 256KB). A4 payload substituído por corpo JSON sintético com apenas timestamp válido. | ✅ Aplicada |
+| 10  | **S1–S11 como pré-requisitos provados:** S1–S11 todos provados com deltas únicos e definitivos.                                                                                                                                                                         | ✅ Aplicada |
+| 11  | **Consistência geral:** todas as tabelas, GO/NO-GO, referências e relatório final atualizados para eliminar contradições.                                                                                                                                               | ✅ Aplicada |
+| 12  | **HMAC documentado e provado (S1):** assinatura sobre `toString(e.request.body)` (raw body), sem canonicalização. `$security.hs256(rawBody, webhookSecret)`. Timestamp obrigatório, dentro de 5 minutos. Comparação em tempo constante.                                 | ✅ Aplicada |
+| 13  | **Rollback documentado e provado (S6):** alvos identificados por correlation keys e relações estruturais. Pré-requisitos simultâneos: superadmin + HMAC + timestamp + `entity_type=business`. Contrato único para C1 e C2. R13 v8 não reutilizado.                      | ✅ Aplicada |
+| 14  | **Prompt futuro removido:** seção "Autorização futura ainda não concedida" sem texto executável.                                                                                                                                                                        | ✅ Aplicada |
+| 15  | **C1 restauração documentada:** `titulo`, `valor`, `etapa`, `resultado` restaurados por presença de propriedade (`hasOwnProperty`), preservando zeros e strings vazias.                                                                                                 | ✅ Aplicada |
+| 16  | **Body limit documentado:** `$apis.bodyLimit(262144)` aplicado como middleware em ambos os endpoints (webhook e rollback).                                                                                                                                              | ✅ Aplicada |
+| 17  | **C1 contrato final:** HTTP 200 com `success: true`, `idempotent: false`, `rolled_back` com exatamente 1 item contendo `collection`, `record_id`, `action: "restored_from_snapshot"`.                                                                                   | ✅ Aplicada |
+| 18  | **`Content-Type` em C1/C2 documentado como requisito do plano:** o plano exige `Content-Type: application/json` nas chamadas C1/C2. O hook `ac_rollback.js` não contém validação explícita de `Content-Type`.                                                           | ✅ Aplicada |
+| 19  | **S11 marcado como PROVADO:** delta total `com_auditoria = +0`. Removidas todas as expressões condicionais ("parcialmente provado", "condicionado", "pode ser >0", "a confirmar na execução") e fórmulas alternativas.                                                  | ✅ Aplicada |
+| 20  | **Registro final:** bloco JSON exato registrado abaixo. Único arquivo alterado: `PLAN_PORTA_2D2B_ENTRY.md`.                                                                                                                                                             | ✅ Aplicada |
 
 ---
 
@@ -641,7 +648,7 @@ A autorização para executar a Porta 2D.2B será redigida externamente apenas a
 
 **Nenhuma rota executada. Nenhum teste executado. Nenhuma query executada. Nenhum webhook executado. Nenhuma chamada externa feita. Nenhum dado alterado. Nenhum lock modificado. Nenhum código alterado. Nenhum hook alterado. Nenhum frontend alterado. Nenhum backend alterado. Nenhum schema alterado. Nenhuma migração alterada. Nenhuma configuração alterada. Nenhuma credencial exposta.**
 
-**Estágio de análise estática: COMPLETO (S1–S10 provados; S11 parcialmente provado — delta direto 0, hook indireto `audit_negocios` existe).**
+**Estágio de análise estática: COMPLETO (S1–S11 provados).**
 
 **Porta 2D.2B: NÃO INICIADA.**
 **Porta 2E: NÃO INICIADA.**
@@ -653,8 +660,20 @@ A autorização para executar a Porta 2D.2B será redigida externamente apenas a
   "files_modified": ["PLAN_PORTA_2D2B_ENTRY.md"],
   "analysis_executed": false,
   "static_analysis_completed": true,
-  "static_analysis_items_proven": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10"],
-  "static_analysis_items_partially_proven": ["S11"],
+  "static_analysis_items_proven": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7",
+    "S8",
+    "S9",
+    "S10",
+    "S11"
+  ],
+  "static_analysis_items_partially_proven": [],
   "routes_executed": 0,
   "tests_executed": 0,
   "records_created": 0,
@@ -663,6 +682,8 @@ A autorização para executar a Porta 2D.2B será redigida externamente apenas a
   "parameters_modified": 0,
   "activecampaign_calls": 0,
   "porta_2d2b_started": false,
-  "porta_2d2b_authorized": false
+  "porta_2d2b_authorized": false,
+  "com_auditoria_delta": 0,
+  "s11_proven": true
 }
 ```
