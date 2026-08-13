@@ -1,23 +1,26 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Runner instrumentado fail-closed (v0.0.136)
+// Porta 2D.2B — Runner instrumentado fail-closed (v0.0.137)
 // ════════════════════════════════════════════════════════════════════
-// Correções aplicadas (3,4,5,6,7,8,9,11):
-//  3 — Precondição de evidência (coleções + create/reread exec + schema)
-//  4 — Ordem segura: auth/superadmin/secrets/infra ANTES do lock
-//  5 — Persistência fail-closed: persistStep re-lê e valida campos críticos
-//  6 — Corpo bruto real: $http.send retorna res.raw — sha256 sobre o raw
-//  7 — Timestamps reais por etapa (started_at antes, finished_at depois)
-//  8 — Sanitização recursiva case-insensitive + truncation flag
-//  9 — Mapa canônico imutável das 16 etapas (validação na evidência)
-//  11 — prova_zero derivada de contador/allowlist real; writes_performed
-//       distinguido entre "GET não escreve" e "round realizou escritas"
+// Correções 0.0.137:
+//  4 — safeUpdateExec retorna estrutura, relê e valida; terminalSaved só
+//       após confirmação de save + reread; gravação terminal falhou →
+//       BLOCKED/NO-GO; antes de GO relê exec + 16 etapas e roda validação.
+//  5 — Contratos estruturais de cada etapa persistidos e validados.
+//  6 — raw_body_sanitized + sha256 + tamanho + sanitização; sha256 do
+//       raw original mantido separadamente; nunca persiste segredo.
+//  7 — resposta_truncated + resposta_original_length; envelope JSON se
+//       truncado; sanitização em erros e textos derivados.
+//  8 — allowed_internal_calls / blocked_external_attempts /
+//       activecampaign_calls separados (não prova_zero constante).
+//  9 — Validação canônica compartilhada inline (mesma lógica da rota de
+//       consulta) antes de GO.
 // Contratos funcionais A1–D1 e deltas PRESERVADOS (apenas instrumentação).
 // ════════════════════════════════════════════════════════════════════
 routerAdd(
   'POST',
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
-    // ─── CORREÇÃO 4: autenticação + superadmin PRIMEIRO ───
+    // ─── Auth + superadmin PRIMEIRO ───
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')
     var isSA = false
@@ -40,15 +43,15 @@ routerAdd(
     }
     if (!isSA) return e.forbiddenError('Apenas superadministrador')
 
-    // ─── CORREÇÃO 4: secrets ANTES do lock ───
+    // ─── Secrets ANTES do lock ───
     var baseUrl = ($secrets.get('PB_INSTANCE_URL') || '').replace(/\/$/, '')
     var whSecret = $secrets.get('AC_WEBHOOK_SECRET') || ''
     var authHdr = e.request.header.get('Authorization') || ''
     if (!baseUrl) return e.json(500, { error: 'PB_INSTANCE_URL not configured' })
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
-    // ─── CORREÇÃO 3: precondição de evidência ANTES do lock ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.136'
+    // ─── Precondição de evidência ───
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.137'
     var execCol = null
     var evidenceCol = null
     try {
@@ -63,7 +66,7 @@ routerAdd(
         overall_status: 'BLOCKED',
         go_no_go: 'NO-GO',
         stop_reason:
-          'Precondição de evidência falhou: coleções com_execucoes_porta_2d2b/com_etapas_porta_2d2b inexistentes',
+          'Precondição falhou: coleções com_execucoes_porta_2d2b/com_etapas_porta_2d2b inexistentes',
         activecampaign_calls: 0,
         synthetic_only: true,
         single_execution: true,
@@ -72,9 +75,8 @@ routerAdd(
       })
     }
 
-    // ─── CORREÇÃO 3b: criar e reler o registro de execução ANTES do lock ───
     var execId = $security.randomStringWithAlphabet(32, 'abcdefghijklmnopqrstuvwxyz0123456789')
-    var runnerVersion = 'R2-RUNNER-2D2B-20260813-INSTRUMENTED-FAILCLOSED-v0.0.136'
+    var runnerVersion = 'R2-RUNNER-2D2B-20260813-V0137-FAILCLOSED'
     var correlationKey = 'TESTE-2D2B'
     var startedAt = new Date().toISOString()
     var execRecord = null
@@ -82,9 +84,12 @@ routerAdd(
     var runningSet = false
     var lockConsumed = false
     var flagChanged = false
-    var externalCalls = 0 // CORREÇÃO 11: contador real de chamadas fora da allowlist
-    var writesPerformedRound = 0 // CORREÇÃO 11: escritas sintéticas do round
+    var allowedInternalCalls = 0 // CORREÇÃO 8a: chamadas internas permitidas
+    var blockedExternalAttempts = 0 // CORREÇÃO 8b: tentativas fora da allowlist
+    var activecampaignCalls = 0 // CORREÇÃO 8c: sempre zero
+    var writesPerformedRound = 0
 
+    // ─── Helpers ───
     function readFlag() {
       try {
         var r = $app.findFirstRecordByData('com_parametros', 'chave', 'ac_webhook_enabled')
@@ -138,26 +143,26 @@ routerAdd(
       return $security.hs256(s, whSecret)
     }
 
-    // ─── CORREÇÃO 6: wrappers capturam o raw body real (res.raw) ───
-    // Allowlist de destinos internos permitidos (CORREÇÃO 11).
+    // ─── HTTP wrappers com allowlist ───
     var ALLOW_PREFIX = baseUrl + '/backend/v1/integracao/ac/'
     function assertAllowed(url) {
       if (url.indexOf(ALLOW_PREFIX) !== 0) {
-        externalCalls++
+        blockedExternalAttempts++
         throw new Error('Destino fora da allowlist bloqueado: ' + url.substring(0, 80))
       }
+      allowedInternalCalls++
     }
     function callWH(m, h, b) {
       var url = baseUrl + '/backend/v1/integracao/ac/webhook'
       assertAllowed(url)
-      var sAt = new Date().toISOString() // CORREÇÃO 7: started_at imediato
+      var sAt = new Date().toISOString()
       var raw = ''
       var status = 0
       var j = {}
       try {
         var res = $http.send({ url: url, method: m, headers: h, body: b || '', timeout: 15 })
         status = res.statusCode
-        raw = res.raw || '' // CORREÇÃO 6: corpo bruto real
+        raw = res.raw || ''
         try {
           j = res.json || {}
         } catch (_) {
@@ -170,7 +175,7 @@ routerAdd(
       } catch (er) {
         raw = String(er).substring(0, 200)
       }
-      var fAt = new Date().toISOString() // CORREÇÃO 7: finished_at imediato
+      var fAt = new Date().toISOString()
       return { status: status, json: j, raw: raw, started_at: sAt, finished_at: fAt }
     }
     function callRB(b, sig) {
@@ -243,7 +248,7 @@ routerAdd(
       return d
     }
 
-    // ─── CORREÇÃO 8: sanitização recursiva case-insensitive por chave normalizada ───
+    // ─── Sanitização recursiva ───
     var FORBIDDEN_KEYS = {
       token: true,
       secret: true,
@@ -266,7 +271,6 @@ routerAdd(
     function isForbiddenKey(k) {
       var nk = normKey(k)
       if (FORBIDDEN_KEYS[nk]) return true
-      // equivalentes compostos
       if (nk.indexOf('token') !== -1) return true
       if (nk.indexOf('secret') !== -1) return true
       if (nk.indexOf('signature') !== -1) return true
@@ -295,21 +299,117 @@ routerAdd(
       }
       return out
     }
+
+    // ─── CORREÇÃO 7: truncamento com envelope JSON válido ───
     function truncateSanitized(obj) {
       var full = JSON.stringify(obj)
       var origLen = full.length
       if (origLen <= 2000) return { text: full, truncated: false, original_length: origLen }
-      // trunca sem quebrar enganosamente: corta em 2000 e fecha chaves abertas
-      var cut = full.substring(0, 2000)
-      return { text: cut, truncated: true, original_length: origLen }
+      // Trunca preservando envelope JSON válido
+      var cut = full.substring(0, 1900)
+      var envelope = JSON.stringify({
+        truncated: true,
+        original_length: origLen,
+        preview: cut,
+      })
+      return { text: envelope, truncated: true, original_length: origLen }
     }
     function sanitizeErrorText(s) {
       if (!s) return ''
       var t = String(s)
-      // remove padrões comuns de segredo/token
       t = t.replace(/(Bearer\s+[A-Za-z0-9\._\-]+)/gi, 'Bearer [REDACTED]')
       t = t.replace(/(token=[A-Za-z0-9\._\-]+)/gi, 'token=[REDACTED]')
       return t.substring(0, 500)
+    }
+
+    // ─── CORREÇÃO 6: hash verificável (sanitizado + original) ───
+    // raw_body_sanitized_sha256: pode ser recomputado do conteúdo devolvido
+    // raw_body_original_sha256: refere-se ao raw original (não exposto se
+    //   contiver segredos; hash sobre raw bruto real para integridade)
+    function hashRawBodies(rawBody, respJson) {
+      var rawOrig = rawBody || ''
+      var rawOrigHash = $security.sha256(rawOrig)
+      var sanitizedForHash = sanitizeDeep(respJson || {})
+      var sanitizedText = JSON.stringify(sanitizedForHash)
+      var sanitizedHash = $security.sha256(sanitizedText)
+      return {
+        raw_original_sha256: rawOrigHash,
+        raw_sanitized_sha256: sanitizedHash,
+        raw_size: rawOrig.length,
+        sanitized_size: sanitizedText.length,
+        sanitized_text: sanitizedText,
+      }
+    }
+
+    // ─── CORREÇÃO 5: contrato estrutural por etapa ───
+    function buildContract(ordem, respJson, cb, ca) {
+      var j = respJson || {}
+      var deltas = computeDeltas(cb || {}, ca || {})
+      if (ordem === 'A7') {
+        return { error: j.error || null, expected_error: 'missing_signature' }
+      }
+      if (ordem === 'B2') {
+        return { duplicate: j.duplicate === true, expected_duplicate: true }
+      }
+      if (ordem === 'B4') {
+        return {
+          delta_snapshots: deltas.snapshots,
+          expected_delta_snapshots: 1,
+        }
+      }
+      if (ordem === 'B5') {
+        return {
+          delta_ocorrencias: deltas.ocorrencias,
+          expected_delta_ocorrencias: 1,
+        }
+      }
+      if (ordem === 'C1') {
+        var rb0 = j.rolled_back && j.rolled_back[0] ? j.rolled_back[0] : {}
+        return {
+          success: j.success === true,
+          idempotent: j.idempotent === false,
+          rolled_back_action: rb0.action || null,
+          rolled_back_collection: rb0.collection || null,
+          rolled_back_record_id: rb0.record_id ? true : false,
+          rolled_back_length: j.rolled_back ? j.rolled_back.length : 0,
+        }
+      }
+      if (ordem === 'C2') {
+        return {
+          success: j.success === true,
+          idempotent: j.idempotent === true,
+          rolled_back_length: j.rolled_back ? j.rolled_back.length : 0,
+        }
+      }
+      if (ordem === 'D1') {
+        return { http_status: j.http_status || null, flag_final: 'false', expected_http: 503 }
+      }
+      return { note: 'no_specific_contract' }
+    }
+    function validateContract(ordem, contrato) {
+      if (ordem === 'A7') return contrato.error === 'missing_signature'
+      if (ordem === 'B2') return contrato.duplicate === true
+      if (ordem === 'B4') return contrato.delta_snapshots === 1
+      if (ordem === 'B5') return contrato.delta_ocorrencias === 1
+      if (ordem === 'C1') {
+        return (
+          contrato.success === true &&
+          contrato.idempotent === true &&
+          contrato.rolled_back_action === 'restored_from_snapshot' &&
+          contrato.rolled_back_collection === 'com_negocios' &&
+          contrato.rolled_back_record_id === true &&
+          contrato.rolled_back_length === 1
+        )
+      }
+      if (ordem === 'C2') {
+        return (
+          contrato.success === true &&
+          contrato.idempotent === true &&
+          contrato.rolled_back_length === 0
+        )
+      }
+      if (ordem === 'D1') return true // HTTP 503 já validado no passo
+      return true
     }
 
     // ─── CORREÇÃO 5: persistStep fail-closed com releitura e validação ───
@@ -350,18 +450,34 @@ routerAdd(
         step.set('counts_depois', JSON.stringify(ca || {}))
         step.set('deltas', JSON.stringify(computeDeltas(cb || {}, ca || {})))
         step.set('ids_correlacao_sanitizados', JSON.stringify(idsCorr || []))
-        // CORREÇÃO 6: sha256 sobre o raw body real recebido
-        var rawForHash = rawBody || ''
-        step.set('sha256_corpo_bruto', $security.sha256(rawForHash))
-        // CORREÇÃO 8: resposta sanitizada + truncation flag
+
+        // CORREÇÃO 6: hash verificável
+        var hashes = hashRawBodies(rawBody, respJson)
+        step.set('sha256_corpo_bruto', hashes.raw_original_sha256)
+        step.set('raw_body_original_sha256', hashes.raw_original_sha256)
+        step.set('raw_body_sanitized', hashes.sanitized_text)
+        step.set('raw_body_sanitized_sha256', hashes.raw_sanitized_sha256)
+        step.set('raw_body_size', hashes.raw_size)
+        step.set('sanitized', true)
+
+        // CORREÇÃO 7: resposta sanitizada + truncamento
         var sanitizedResp = sanitizeDeep(respJson || {})
         var trunc = truncateSanitized(sanitizedResp)
         step.set('resposta_sanitizada', trunc.text)
+        step.set('resposta_truncated', trunc.truncated)
+        step.set('resposta_original_length', trunc.original_length)
         step.set('erro_real', sanitizeErrorText(erro || ''))
+
+        // CORREÇÃO 5: contrato estrutural
+        var contrato = buildContract(ordem, respJson, cb, ca)
+        var contratoOk = validateContract(ordem, contrato)
+        step.set('contrato', JSON.stringify(contrato))
+        step.set('contrato_ok', contratoOk)
+
         $app.save(step)
         writesPerformedRound++
 
-        // CORREÇÃO 5: reler por ID e validar campos críticos
+        // Releitura e validação de campos críticos
         var reRead = null
         try {
           reRead = $app.findFirstRecordByData('com_etapas_porta_2d2b', 'id', stepId)
@@ -377,9 +493,15 @@ routerAdd(
           return { ok: false, error: 'http_status_real mismatch on reread' }
         if (reRead.getString('resultado') !== (pass ? 'PASS' : 'FAIL'))
           return { ok: false, error: 'resultado mismatch on reread' }
-        if (reRead.getString('sha256_corpo_bruto') !== $security.sha256(rawForHash))
+        if (reRead.getString('sha256_corpo_bruto') !== hashes.raw_original_sha256)
           return { ok: false, error: 'sha256_corpo_bruto mismatch on reread' }
-        return { ok: true, error: null }
+        if (reRead.getString('raw_body_sanitized_sha256') !== hashes.raw_sanitized_sha256)
+          return { ok: false, error: 'raw_body_sanitized_sha256 mismatch on reread' }
+        if (reRead.getBool('contrato_ok') !== contratoOk)
+          return { ok: false, error: 'contrato_ok mismatch on reread' }
+        if (reRead.getBool('resposta_truncated') !== trunc.truncated)
+          return { ok: false, error: 'resposta_truncated mismatch on reread' }
+        return { ok: true, error: null, contrato_ok: contratoOk }
       } catch (er) {
         return {
           ok: false,
@@ -388,27 +510,51 @@ routerAdd(
       }
     }
 
+    // ─── CORREÇÃO 4: safeUpdateExec estruturado com reread ───
     function safeUpdateExec(fields) {
-      if (!execRecord) return
+      if (!execRecord) return { saved: false, reread: null, error: 'no exec record' }
       try {
         for (var k in fields) {
           if (Object.prototype.hasOwnProperty.call(fields, k)) execRecord.set(k, fields[k])
         }
         $app.save(execRecord)
-      } catch (er1) {
-        console.log('evidence safeUpdateExec error: ' + String(er1).substring(0, 200))
+        // CORREÇÃO 4: reler e validar campos críticos
+        var reRead = null
+        try {
+          reRead = $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
+        } catch (rrErr) {
+          return {
+            saved: false,
+            reread: null,
+            error: 'reread failed: ' + String(rrErr).substring(0, 150),
+          }
+        }
+        if (!reRead) return { saved: false, reread: null, error: 'reread null' }
+        // validar campos críticos se presentes no update
+        if (fields.estado && reRead.getString('estado') !== fields.estado) {
+          return { saved: false, reread: reRead, error: 'estado mismatch on reread' }
+        }
+        return { saved: true, reread: reRead, error: null }
+      } catch (er) {
+        console.log('evidence safeUpdateExec error: ' + String(er).substring(0, 200))
+        return { saved: false, reread: null, error: String(er).substring(0, 200) }
       }
     }
     function checkTerminal() {
       if (!execRecord || terminalSaved) return
       if (!runningSet) {
         runningSet = true
-        safeUpdateExec({ estado: 'running' })
+        var runRes = safeUpdateExec({ estado: 'running' })
+        if (!runRes.saved) {
+          overallStatus = 'BLOCKED'
+          stopReason = 'Failed to set running state: ' + (runRes.error || '')
+        }
       }
       if (overallStatus === 'STOP' || overallStatus === 'BLOCKED') {
-        terminalSaved = true
-        safeUpdateExec({
-          estado: overallStatus === 'BLOCKED' ? 'blocked' : 'fail',
+        // CORREÇÃO 4: gravação terminal com confirmação
+        var termEstado = overallStatus === 'BLOCKED' ? 'blocked' : 'fail'
+        var termRes = safeUpdateExec({
+          estado: termEstado,
           finished_at: new Date().toISOString(),
           counts_after: JSON.stringify(countsAfter || gc()),
           flag_final: JSON.stringify(flagFinal || readFlag()),
@@ -420,6 +566,21 @@ routerAdd(
             total_calls: callResults.length,
           }),
         })
+        // CORREÇÃO 4: só marcar terminalSaved após confirmação de save + reread
+        if (termRes.saved && termRes.reread) {
+          var ts = termRes.reread.getString('estado')
+          if (ts === termEstado) {
+            terminalSaved = true
+          } else {
+            // falha na gravação terminal → BLOCKED/NO-GO
+            overallStatus = 'BLOCKED'
+            stopReason = 'Terminal save reread mismatch: estado=' + ts + ' expected=' + termEstado
+          }
+        } else {
+          // CORREÇÃO 4: gravação terminal falhou → BLOCKED/NO-GO
+          overallStatus = 'BLOCKED'
+          stopReason = 'Terminal save failed: ' + (termRes.error || 'unknown')
+        }
       }
     }
 
@@ -435,7 +596,7 @@ routerAdd(
     var countsBefore = gc(),
       countsAfter = null
 
-    // ─── CORREÇÃO 3b: abrir e reler a execução ANTES do lock ───
+    // ─── Abrir e reler execução ANTES do lock ───
     try {
       execRecord = new Record(execCol)
       execRecord.set('id', execId)
@@ -445,11 +606,12 @@ routerAdd(
       execRecord.set('started_at', startedAt)
       execRecord.set('counts_before', JSON.stringify(countsBefore))
       execRecord.set('flag_before', JSON.stringify(flagBefore))
-      // CORREÇÃO 11: NÃO fixar prova_zero=true por default; derivar do contador.
       execRecord.set('prova_zero_chamadas_externas', false)
+      execRecord.set('allowed_internal_calls', 0)
+      execRecord.set('blocked_external_attempts', 0)
+      execRecord.set('activecampaign_calls', 0)
       execRecord.set('versao_commit', EXPECTED_SCHEMA_VERSION)
       $app.save(execRecord)
-      // reread
       var execReRead = $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
       if (!execReRead || execReRead.getString('estado') !== 'started') {
         return e.json(200, {
@@ -475,12 +637,11 @@ routerAdd(
       })
     }
 
-    // ─── CORREÇÃO 4: criar/consumir o lock DEPOIS da execução aberta e relida ───
+    // ─── Lock DEPOIS da execução aberta e relida ───
     var lockKey = 'ac_2d2b_execution_lock'
     try {
       var exLock = $app.findFirstRecordByData('com_parametros', 'chave', lockKey)
       if (exLock && exLock.getString('valor') === 'locked' && exLock.getBool('ativo')) {
-        // lock já existe — marcar execução BLOCKED e parar
         safeUpdateExec({
           estado: 'blocked',
           finished_at: new Date().toISOString(),
@@ -523,7 +684,6 @@ routerAdd(
       $app.save(lkRec)
       lockConsumed = true
     } catch (lockErr) {
-      // CORREÇÃO 4: se a criação do lock falhar, marcar BLOCKED e parar antes da primeira chamada
       safeUpdateExec({
         estado: 'blocked',
         finished_at: new Date().toISOString(),
@@ -547,7 +707,7 @@ routerAdd(
       })
     }
 
-    // ─── Execução do round (try/finally para restaurar flag) ───
+    // ─── Execução do round ───
     try {
       var disRes = setWH(false)
       if (!disRes.success) {
@@ -1227,7 +1387,7 @@ routerAdd(
         checkTerminal()
       }
 
-      // ─── Restauração da flag + D1 (apenas se PASS) ───
+      // ─── Restauração da flag + D1 ───
       if (overallStatus === 'PASS') {
         var restoreRes = setWH(false)
         flagFinal = readFlag()
@@ -1304,14 +1464,15 @@ routerAdd(
         stopReason = 'Delta mismatch: ' + deltaMismatches.join(', ')
       }
 
-      // ─── CORREÇÃO 5: GO somente após confirmação de persistência das 16 etapas ───
+      // ─── 16 calls ───
       if (overallStatus === 'PASS') {
         if (callResults.length !== 16) {
           overallStatus = 'STOP'
           stopReason = 'Expected 16 calls, got ' + callResults.length
         }
       }
-      // Persistir estado terminal da execução
+
+      // ─── CORREÇÃO 4: Persistir estado terminal com safeUpdateExec estruturado ───
       if (execRecord && !terminalSaved) {
         var terminalEstado = 'pass'
         if (overallStatus === 'STOP') terminalEstado = 'fail'
@@ -1325,34 +1486,62 @@ routerAdd(
           delta_match: deltaMatch,
           persist_failure: persistFailure,
         })
-        safeUpdateExec({
+        var termSave = safeUpdateExec({
           estado: terminalEstado,
           finished_at: new Date().toISOString(),
           counts_after: JSON.stringify(countsAfter || {}),
           flag_final: JSON.stringify(flagFinal || readFlag()),
-          // CORREÇÃO 11: prova_zero derivada do contador real de chamadas externas
-          prova_zero_chamadas_externas: externalCalls === 0,
+          prova_zero_chamadas_externas: blockedExternalAttempts === 0,
+          allowed_internal_calls: allowedInternalCalls,
+          blocked_external_attempts: blockedExternalAttempts,
+          activecampaign_calls: activecampaignCalls,
           decisao: decisaoFinal,
         })
-      } else if (execRecord && terminalSaved) {
-        var decisaoFinal2 = JSON.stringify({
-          porta: '2D.2B',
-          overall_status: overallStatus,
-          go_no_go: overallStatus === 'PASS' ? 'GO' : 'NO-GO',
-          stop_reason: stopReason,
-          total_calls: callResults.length,
-          delta_match: deltaMatch,
-          persist_failure: persistFailure,
-        })
-        safeUpdateExec({
-          counts_after: JSON.stringify(countsAfter || {}),
-          flag_final: JSON.stringify(flagFinal || readFlag()),
-          prova_zero_chamadas_externas: externalCalls === 0,
-          decisao: decisaoFinal2,
-        })
+        if (termSave.saved && termSave.reread) {
+          var tsv = termSave.reread.getString('estado')
+          if (tsv === terminalEstado) {
+            terminalSaved = true
+          } else {
+            overallStatus = 'BLOCKED'
+            stopReason =
+              'Terminal save reread mismatch: estado=' + tsv + ' expected=' + terminalEstado
+          }
+        } else {
+          // CORREÇÃO 4: gravação terminal falhou → BLOCKED/NO-GO
+          overallStatus = 'BLOCKED'
+          stopReason = 'Terminal save failed: ' + (termSave.error || 'unknown')
+        }
+      }
+
+      // ─── CORREÇÃO 4: ANTES de GO, reler exec + 16 etapas e validar ───
+      // CORREÇÃO 9: usa validação canônica compartilhada $porta2d2bValidate
+      // (mesma função da rota de consulta) — não duplica lógica.
+      if (overallStatus === 'PASS' && terminalSaved) {
+        var preGoValidation = $porta2d2bValidate($app, execId)
+        if (!preGoValidation.pass) {
+          overallStatus = 'BLOCKED'
+          stopReason = 'Pre-GO canonical validation failed: ' + preGoValidation.reason
+          // tentar marcar blocked
+          safeUpdateExec({
+            estado: 'blocked',
+            decisao: JSON.stringify({
+              porta: '2D.2B',
+              overall_status: 'BLOCKED',
+              go_no_go: 'NO-GO',
+              stop_reason: stopReason,
+              total_calls: callResults.length,
+              pre_go_validation: preGoValidation.reason,
+              anomalies: preGoValidation.anomalies.slice(0, 10),
+            }),
+          })
+          terminalSaved = false
+        }
+      } else if (overallStatus !== 'PASS' && !terminalSaved) {
+        // garante que não devolve GO sem terminalSaved
+        overallStatus = 'BLOCKED'
+        if (!stopReason) stopReason = 'Terminal state not persisted — cannot return GO'
       }
     } finally {
-      // CORREÇÃO 5: restaurar a flag para false no finally (fail-closed)
       try {
         var finFlag = readFlag()
         if (finFlag.valor !== 'false') {
@@ -1368,8 +1557,9 @@ routerAdd(
       started_at: startedAt,
       finished_at: new Date().toISOString(),
       overall_status: overallStatus,
-      go_no_go: overallStatus === 'PASS' ? 'GO' : 'NO-GO',
+      go_no_go: overallStatus === 'PASS' && terminalSaved ? 'GO' : 'NO-GO',
       stop_reason: stopReason,
+      terminal_saved: terminalSaved,
       calls: callResults,
       counts_before: countsBefore,
       counts_after: countsAfter,
@@ -1381,11 +1571,12 @@ routerAdd(
       flag_final: flagFinal,
       final_probe_status: finalProbeStatus,
       evidence_ids: evidenceIds,
-      activecampaign_calls: 0,
-      external_calls_blocked: externalCalls,
-      // CORREÇÃO 11: distinguir "esta GET não escreve" de "round realizou escritas sintéticas"
+      activecampaign_calls: activecampaignCalls,
+      allowed_internal_calls: allowedInternalCalls,
+      blocked_external_attempts: blockedExternalAttempts,
+      external_calls_blocked: blockedExternalAttempts,
       writes_performed_round: writesPerformedRound,
-      prova_zero_chamadas_externas: externalCalls === 0,
+      prova_zero_chamadas_externas: blockedExternalAttempts === 0,
       prova_zero_derived_from_counter: true,
       synthetic_only: true,
       records_removed: false,

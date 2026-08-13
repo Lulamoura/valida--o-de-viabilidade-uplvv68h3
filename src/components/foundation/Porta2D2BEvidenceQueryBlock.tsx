@@ -20,19 +20,22 @@ import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 import pb from '@/lib/pocketbase/client'
 
 /**
- * Porta 2D.2B — Consulta de Evidência Persistida (v0.0.136).
+ * Porta 2D.2B — Consulta de Evidência Persistida (v0.0.137).
  *
- * CORREÇÃO 13:
- *  - Zero chamadas automáticas, retry e polling (mantido).
- *  - Gate loading=false e isSuperAdmin=true (mantido).
- *  - Captura status HTTP real e raw body real na consulta (via fetch nativo),
- *    sem fixar 200 no sucesso.
- *  - Não afirma "JSON canônico" se a resposta falhar na validação estrutural.
- *  - localStorage guarda somente resposta sanitizada, nunca token/header.
+ * CORREÇÃO 10 (v0.0.137):
+ *  - Não guarda raw_body completo indiscriminadamente no localStorage.
+ *    Persiste somente o objeto validado e sanitizado (canonical). O raw
+ *    body fica disponível apenas na sessão atual (estado React) para
+ *    exibição/cópia/download, nunca em localStorage.
+ *  - Mantido: zero chamadas automáticas, retry e polling.
+ *  - Mantido: gate loading=false e isSuperAdmin=true.
+ *  - Mantido: captura status HTTP real e raw body real (fetch nativo),
+ *    sem fixar 200; não afirma "JSON canônico" se falhar validação
+ *    estrutural.
  */
 
 const ROUTE_PREFIX = '/backend/v1/integracao/ac/evidence-porta-2d2b'
-const FRONTEND_VERSION = 'R2-EVIDENCE-2D2B-QUERY-FRONTEND-20260813-v2-0.0.136'
+const FRONTEND_VERSION = 'R2-EVIDENCE-2D2B-QUERY-FRONTEND-20260813-v2-0.0.137'
 
 interface EvidenceStep {
   id: string
@@ -51,6 +54,18 @@ interface EvidenceStep {
   deltas: string
   ids_correlacao_sanitizados: string
   sha256_corpo_bruto: string
+  // CORREÇÃO 6 (v0.0.137): hashes verificáveis
+  raw_body_original_sha256?: string
+  raw_body_sanitized?: string
+  raw_body_sanitized_sha256?: string
+  raw_body_size?: number
+  sanitized?: boolean
+  // CORREÇÃO 7 (v0.0.137): truncamento e sanitização
+  resposta_truncated?: boolean
+  resposta_original_length?: number
+  // CORREÇÃO 5 (v0.0.137): contrato estrutural
+  contrato?: string
+  contrato_ok?: boolean
   resposta_sanitizada: string
   erro_real: string
   created: string
@@ -69,10 +84,30 @@ interface EvidenceExecution {
   flag_before: string
   flag_final: string
   prova_zero_chamadas_externas: boolean
+  // CORREÇÃO 8 (v0.0.137): counters semanticamente corretos
+  allowed_internal_calls?: number
+  blocked_external_attempts?: number
+  activecampaign_calls?: number
   versao_commit: string
   decisao: string
   created: string
   updated: string
+}
+
+interface ExternalCallsQualified {
+  activecampaign_calls: number
+  blocked_external_attempts: number
+  allowed_internal_calls: number
+  note: string
+}
+
+interface HashDeclaration {
+  raw_body_original_sha256: string
+  raw_body_sanitized_sha256: string
+  raw_body_size: string
+  sanitized: string
+  recomputable: string
+  refers_to_original: string
 }
 
 interface CanonicalEvidenceResponse {
@@ -82,7 +117,13 @@ interface CanonicalEvidenceResponse {
   writes_performed: number
   writes_note?: string
   round_writes?: number
-  external_calls: number
+  // CORREÇÃO 9 (v0.0.137): external_calls qualificado (não constante)
+  external_calls?: number
+  external_calls_qualified?: ExternalCallsQualified
+  // CORREÇÃO 6 (v0.0.137): declaração de hashes verificáveis
+  hash_declaration?: HashDeclaration
+  // CORREÇÃO 5 (v0.0.137): contratos esperados por etapa
+  expected_contracts?: Record<string, unknown>
   queried_at: string
   schema_version_expected?: string
   execution: EvidenceExecution | null
@@ -92,8 +133,10 @@ interface CanonicalEvidenceResponse {
   classification_justification: string
   total_steps_expected: number
   total_steps_persisted: number
-  anomalies: Array<{ type: string; step?: string; description: string }>
-  read_errors: Array<{ collection: string; operation: string; error: string }>
+  anomalies: Array<{ type: string; step?: string; description?: string }>
+  // read_errors agora opcional (v0.0.137 não retorna mais array constante)
+  read_errors?: Array<{ collection: string; operation: string; error: string }>
+  validation_shared_with_runner?: boolean
   reconstruction_note: string
 }
 
@@ -104,8 +147,26 @@ interface QueryState {
   ok: boolean
   structurally_valid: boolean
   canonical: CanonicalEvidenceResponse | null
+  // raw_body é guardado somente na sessão atual (estado React), nunca
+  // em localStorage. Permite exibição/cópia/download na sessão sem
+  // persistir conteúdo bruto indiscriminadamente.
   raw_body: string
   error_message: string | null
+}
+
+/**
+ * Objeto persistível no localStorage: somente o objeto validado e
+ * sanitizado (canonical) + metadados mínimos. Nunca inclui raw_body.
+ */
+interface PersistedQueryState {
+  executed: boolean
+  queried_at: string
+  http_status: number
+  ok: boolean
+  structurally_valid: boolean
+  canonical: CanonicalEvidenceResponse | null
+  error_message: string | null
+  sanitized_note: string
 }
 
 function emptyQuery(): QueryState {
@@ -125,13 +186,22 @@ function storageKey(execId: string) {
   return `porta-2d2b-evidence-query-${execId}`
 }
 
-function loadFromStorage(execId: string): QueryState | null {
+/**
+ * CORREÇÃO 10: carrega do localStorage somente o objeto validado e
+ * sanitizado (PersistedQueryState). raw_body NÃO é restaurado — fica
+ * disponível apenas na sessão em que foi obtido.
+ */
+function loadFromStorage(execId: string): PersistedQueryState | null {
   if (!execId) return null
   try {
     const raw = localStorage.getItem(storageKey(execId))
     if (!raw) return null
-    const parsed = JSON.parse(raw) as QueryState
+    const parsed = JSON.parse(raw) as PersistedQueryState
     if (!parsed || typeof parsed !== 'object') return null
+    // segurança extra: se o objeto antigo continha raw_body, descarta
+    if ('raw_body' in parsed && typeof (parsed as Record<string, unknown>).raw_body === 'string') {
+      delete (parsed as Record<string, unknown>).raw_body
+    }
     return parsed
   } catch {
     return null
@@ -139,15 +209,26 @@ function loadFromStorage(execId: string): QueryState | null {
 }
 
 /**
- * Salva somente a resposta sanitizada. Nunca persiste token, Authorization
- * ou headers. O QueryState aqui contém apenas http_status, ok, canonical
- * (resposta sanitizada pelo backend), raw_body (corpo sanitizado pelo backend)
- * e error_message (mensagem sanitizada).
+ * CORREÇÃO 10: salva somente o objeto validado e sanitizado (canonical)
+ * + metadados mínimos. raw_body é deliberadamente omitido — nunca
+ * persistido em localStorage. Só o backend sanitiza; o frontend não
+ * persiste resposta bruta.
  */
 function saveToStorage(execId: string, data: QueryState) {
   if (!execId) return
   try {
-    localStorage.setItem(storageKey(execId), JSON.stringify(data))
+    const persisted: PersistedQueryState = {
+      executed: data.executed,
+      queried_at: data.queried_at,
+      http_status: data.http_status,
+      ok: data.ok,
+      structurally_valid: data.structurally_valid,
+      canonical: data.canonical,
+      error_message: data.error_message,
+      sanitized_note:
+        'Persistido somente objeto validado/sanitizado (canonical). raw_body não persistido (apenas sessão atual).',
+    }
+    localStorage.setItem(storageKey(execId), JSON.stringify(persisted))
   } catch {
     /* ignore quota */
   }
@@ -189,8 +270,8 @@ function isStructurallyValid(parsed: unknown): parsed is CanonicalEvidenceRespon
     typeof o.classification === 'string' &&
     typeof o.total_steps_expected === 'number' &&
     Array.isArray(o.steps) &&
-    Array.isArray(o.anomalies) &&
-    Array.isArray(o.read_errors)
+    Array.isArray(o.anomalies)
+    // read_errors agora é opcional em v0.0.137 (não mais array constante)
   )
 }
 
@@ -561,7 +642,8 @@ export function Porta2D2BEvidenceQueryBlock() {
                       {query.canonical.anomalies.slice(0, 20).map((a, idx) => (
                         <li key={idx} className="font-mono break-all">
                           {a.step ? `[${a.step}] ` : ''}
-                          {a.type}: {a.description}
+                          {a.type}
+                          {a.description ? ': ' + a.description : ''}
                         </li>
                       ))}
                     </ul>
@@ -665,15 +747,72 @@ export function Porta2D2BEvidenceQueryBlock() {
                 </Button>
               </div>
 
-              {/* Corpo bruto real da resposta */}
-              <div className="rounded-lg border bg-muted/50 p-3">
-                <div className="text-xs font-medium text-muted-foreground mb-2">
-                  Corpo bruto real da resposta (response.text)
+              {/* CORREÇÃO 10: corpo bruto exibido apenas na sessão atual,
+                  nunca persistido em localStorage */}
+              {query.raw_body && (
+                <div className="rounded-lg border bg-muted/50 p-3">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">
+                    Corpo bruto real da resposta (exibido apenas nesta sessão — não persistido em
+                    localStorage)
+                  </div>
+                  <pre className="max-h-[600px] overflow-auto text-xs font-mono whitespace-pre-wrap break-all">
+                    {query.raw_body}
+                  </pre>
                 </div>
-                <pre className="max-h-[600px] overflow-auto text-xs font-mono whitespace-pre-wrap break-all">
-                  {query.raw_body}
-                </pre>
-              </div>
+              )}
+
+              {/* CORREÇÃO 9: external_calls qualificado + hash declaration */}
+              {query.canonical.external_calls_qualified && (
+                <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-3 space-y-1">
+                  <div className="text-xs font-medium text-blue-800 dark:text-blue-300">
+                    external_calls qualificado (não constante)
+                  </div>
+                  <ul className="text-xs font-mono text-blue-700 dark:text-blue-200 ml-4 list-disc">
+                    <li>
+                      activecampaign_calls:{' '}
+                      {query.canonical.external_calls_qualified.activecampaign_calls}
+                    </li>
+                    <li>
+                      blocked_external_attempts:{' '}
+                      {query.canonical.external_calls_qualified.blocked_external_attempts}
+                    </li>
+                    <li>
+                      allowed_internal_calls:{' '}
+                      {query.canonical.external_calls_qualified.allowed_internal_calls}
+                    </li>
+                  </ul>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {query.canonical.external_calls_qualified.note}
+                  </div>
+                </div>
+              )}
+              {query.canonical.hash_declaration && (
+                <div className="rounded-lg border bg-purple-50 dark:bg-purple-950/20 p-3 space-y-1">
+                  <div className="text-xs font-medium text-purple-800 dark:text-purple-300">
+                    Hashes verificáveis
+                  </div>
+                  <ul className="text-xs text-purple-700 dark:text-purple-200 ml-4 list-disc space-y-1">
+                    <li>
+                      <span className="font-mono">raw_body_sanitized_sha256</span>:{' '}
+                      {query.canonical.hash_declaration.raw_body_sanitized_sha256}
+                    </li>
+                    <li>
+                      <span className="font-mono">raw_body_original_sha256</span>:{' '}
+                      {query.canonical.hash_declaration.raw_body_original_sha256}
+                    </li>
+                    <li>Recomputável: {query.canonical.hash_declaration.recomputable}</li>
+                    <li>
+                      Refere-se ao original: {query.canonical.hash_declaration.refers_to_original}
+                    </li>
+                  </ul>
+                </div>
+              )}
+              {query.canonical.validation_shared_with_runner && (
+                <div className="text-xs text-muted-foreground">
+                  Validação canônica compartilhada entre runner e rota de consulta
+                  ($porta2d2bValidate).
+                </div>
+              )}
             </div>
           ) : null}
         </CardContent>

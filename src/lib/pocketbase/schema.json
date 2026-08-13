@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T20:36:33.415Z",
+  "generatedAt": "2026-08-13T20:44:03.291Z",
   "collections": [
     {
       "name": "users",
@@ -1548,6 +1548,24 @@
           "system": false
         },
         {
+          "name": "allowed_internal_calls",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "blocked_external_attempts",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "activecampaign_calls",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
           "name": "versao_commit",
           "type": "text",
           "required": false,
@@ -1682,8 +1700,62 @@
           "system": false
         },
         {
+          "name": "raw_body_original_sha256",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "raw_body_sanitized",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "raw_body_sanitized_sha256",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "raw_body_size",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sanitized",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
           "name": "resposta_sanitizada",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resposta_truncated",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resposta_original_length",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contrato",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contrato_ok",
+          "type": "bool",
           "required": false,
           "system": false
         },
