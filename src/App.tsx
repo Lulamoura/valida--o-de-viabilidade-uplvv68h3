@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import Index from './pages/Index'
 import Login from './pages/Login'
 import Foundation from './pages/Foundation'
+import AuditCapture from './pages/AuditCapture'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
@@ -34,6 +35,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Foundation />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/audit-capture"
+                element={
+                  <ProtectedRoute>
+                    <AuditCapture />
                   </ProtectedRoute>
                 }
               />
