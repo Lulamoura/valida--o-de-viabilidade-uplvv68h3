@@ -10,6 +10,7 @@ import { VinculosTab } from '@/components/foundation/VinculosTab'
 import { IntegrationTestsTab } from '@/components/foundation/IntegrationTestsTab'
 import { DiagConsultaDependenciasBlock } from '@/components/foundation/DiagConsultaDependenciasBlock'
 import { Porta2D2BAuditBlock } from '@/components/foundation/Porta2D2BAuditBlock'
+import { Porta2D2BEvidenceQueryBlock } from '@/components/foundation/Porta2D2BEvidenceQueryBlock'
 import { DiagCompensacaoAuditEvidenceBlock } from '@/components/foundation/DiagCompensacaoAuditEvidenceBlock'
 import { DiagCompensacaoDependenciasBlock } from '@/components/foundation/DiagCompensacaoDependenciasBlock'
 import { DiagTransportEvidenceBlock } from '@/components/foundation/DiagTransportEvidenceBlock'
@@ -67,7 +68,12 @@ export default function Foundation() {
             <DiagCompensacaoAuditEvidenceBlock />
             <DiagCompensacaoDependenciasBlock />
             <DiagConsultaDependenciasBlock />
-            {isSuperAdmin && !loadingSuperAdmin ? <Porta2D2BAuditBlock /> : null}
+            {isSuperAdmin && !loadingSuperAdmin ? (
+              <>
+                <Porta2D2BAuditBlock />
+                <Porta2D2BEvidenceQueryBlock />
+              </>
+            ) : null}
           </div>
         </TabsContent>{' '}
       </Tabs>

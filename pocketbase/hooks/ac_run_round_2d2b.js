@@ -24,6 +24,20 @@ routerAdd(
     }
     if (!isSA) return e.forbiddenError('Apenas superadministrador')
 
+    var execId = $security.randomStringWithAlphabet(32, 'abcdefghijklmnopqrstuvwxyz0123456789')
+    var runnerVersion = 'R2-RUNNER-2D2B-20260813-INSTRUMENTED'
+    var evidenceCol = null
+    var execCol = null
+    try {
+      evidenceCol = $app.findCollectionByNameOrId('com_etapas_porta_2d2b')
+    } catch (_) {}
+    try {
+      execCol = $app.findCollectionByNameOrId('com_execucoes_porta_2d2b')
+    } catch (_) {}
+    var execRecord = null
+    var terminalSaved = false
+    var runningSet = false
+
     var lockKey = 'ac_2d2b_execution_lock'
     try {
       var exLock = $app.findFirstRecordByData('com_parametros', 'chave', lockKey)
@@ -169,6 +183,138 @@ routerAdd(
         passed: pass,
       })
     }
+    function truncId(s) {
+      return s ? String(s).substring(0, 8) : ''
+    }
+    function computeDeltas(before, after) {
+      var d = {}
+      var keys = [
+        'contatos',
+        'negocios',
+        'eventos',
+        'execucoes',
+        'vinculos',
+        'snapshots',
+        'ocorrencias',
+        'auditoria',
+      ]
+      for (var i = 0; i < keys.length; i++) {
+        d[keys[i]] = (after[keys[i]] || 0) - (before[keys[i]] || 0)
+      }
+      return d
+    }
+    function sanitizeForPersistence(obj) {
+      if (obj === null || obj === undefined) return obj
+      if (typeof obj !== 'object') return obj
+      if (Array.isArray(obj)) {
+        var arr = []
+        for (var ai = 0; ai < obj.length; ai++) arr.push(sanitizeForPersistence(obj[ai]))
+        return arr
+      }
+      var FORBIDDEN = {
+        email: true,
+        phone: true,
+        token: true,
+        signature: true,
+        secret: true,
+        Authorization: true,
+        authorization: true,
+        password: true,
+        apikey: true,
+        apiKey: true,
+      }
+      var out = {}
+      for (var key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          if (FORBIDDEN[key]) continue
+          out[key] = sanitizeForPersistence(obj[key])
+        }
+      }
+      return out
+    }
+    function persistStep(
+      ordem,
+      codigo,
+      metodo,
+      rota,
+      sAt,
+      fAt,
+      httpReal,
+      httpEsp,
+      pass,
+      cb,
+      ca,
+      respJson,
+      erro,
+      idsCorr,
+    ) {
+      if (!evidenceCol || !execRecord) return
+      try {
+        var step = new Record(evidenceCol)
+        step.set('id', execId + '_' + ordem)
+        step.set('execucao_id', execId)
+        step.set('ordem', ordem)
+        step.set('codigo', codigo)
+        step.set('metodo', metodo)
+        step.set('rota_sanitizada', rota)
+        step.set('started_at', sAt)
+        step.set('finished_at', fAt)
+        step.set('http_status_real', httpReal)
+        step.set('http_status_esperado', httpEsp)
+        step.set('resultado', pass ? 'PASS' : 'FAIL')
+        step.set('counts_antes', JSON.stringify(cb || {}))
+        step.set('counts_depois', JSON.stringify(ca || {}))
+        step.set('deltas', JSON.stringify(computeDeltas(cb || {}, ca || {})))
+        step.set('ids_correlacao_sanitizados', JSON.stringify(idsCorr || []))
+        var sanitizedResp = sanitizeForPersistence(respJson || {})
+        step.set('sha256_corpo_bruto', $security.sha256(JSON.stringify(respJson || {})))
+        step.set('resposta_sanitizada', JSON.stringify(sanitizedResp).substring(0, 2000))
+        step.set('erro_real', erro || '')
+        $app.save(step)
+      } catch (er) {
+        console.log('evidence persistStep error ' + ordem + ': ' + String(er).substring(0, 200))
+      }
+    }
+    function safeUpdateExec(fields) {
+      if (!execRecord) return
+      try {
+        for (var k in fields) {
+          if (Object.prototype.hasOwnProperty.call(fields, k)) {
+            execRecord.set(k, fields[k])
+          }
+        }
+        $app.save(execRecord)
+      } catch (er1) {
+        try {
+          $app.save(execRecord)
+        } catch (er2) {
+          console.log('evidence safeUpdateExec error: ' + String(er2).substring(0, 200))
+        }
+      }
+    }
+    function checkTerminal() {
+      if (!execRecord || terminalSaved) return
+      if (!runningSet) {
+        runningSet = true
+        safeUpdateExec({ estado: 'running' })
+      }
+      if (overallStatus === 'STOP' || overallStatus === 'BLOCKED') {
+        terminalSaved = true
+        safeUpdateExec({
+          estado: overallStatus === 'BLOCKED' ? 'blocked' : 'fail',
+          finished_at: new Date().toISOString(),
+          counts_after: JSON.stringify(countsAfter || gc()),
+          flag_final: JSON.stringify(flagFinal || readFlag()),
+          decisao: JSON.stringify({
+            porta: '2D.2B',
+            overall_status: overallStatus,
+            go_no_go: 'NO-GO',
+            stop_reason: stopReason,
+            total_calls: callResults.length,
+          }),
+        })
+      }
+    }
 
     var overallStatus = 'PASS',
       stopReason = null,
@@ -180,6 +326,28 @@ routerAdd(
       finalProbeStatus = null
     var countsBefore = gc(),
       countsAfter = null
+
+    // Persistir abertura da execução (antes da primeira chamada)
+    if (execCol) {
+      try {
+        execRecord = new Record(execCol)
+        execRecord.set('id', execId)
+        execRecord.set('runner_version', runnerVersion)
+        execRecord.set('correlation_key', 'TESTE-2D2B')
+        execRecord.set('estado', 'started')
+        execRecord.set('started_at', startedAt)
+        execRecord.set('counts_before', JSON.stringify(countsBefore))
+        execRecord.set('flag_before', JSON.stringify(flagBefore))
+        execRecord.set('prova_zero_chamadas_externas', true)
+        execRecord.set('versao_commit', runnerVersion)
+        $app.save(execRecord)
+      } catch (er) {
+        console.log('evidence exec open error: ' + String(er).substring(0, 200))
+        try {
+          $app.save(execRecord)
+        } catch (_) {}
+      }
+    }
 
     var disRes = setWH(false)
     if (!disRes.success) {
@@ -197,6 +365,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'A1: expected 503 got ' + r1.status
       }
+      persistStep(
+        'A1',
+        'A1',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        r1.status,
+        503,
+        a1p,
+        cb1,
+        ca1,
+        r1.json,
+        a1p ? '' : 'Expected 503 got ' + r1.status,
+        [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var enRes = setWH(true)
@@ -205,6 +390,7 @@ routerAdd(
         stopReason = 'Failed to enable flag: ' + enRes.error
       }
       flagDuring = readFlag()
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var cb2 = gc()
@@ -216,6 +402,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'A2: expected 405 got ' + r2.status
       }
+      persistStep(
+        'A2',
+        'A2',
+        'GET',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        r2.status,
+        405,
+        a2p,
+        cb2,
+        ca2,
+        r2.json,
+        a2p ? '' : 'Expected 405 got ' + r2.status,
+        [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var cb3 = gc()
@@ -227,6 +430,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'A3: expected 400 got ' + r3.status
       }
+      persistStep(
+        'A3',
+        'A3',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        r3.status,
+        400,
+        a3p,
+        cb3,
+        ca3,
+        r3.json,
+        a3p ? '' : 'Expected 400 got ' + r3.status,
+        [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var a4b = JSON.stringify({ timestamp: nowTs() })
@@ -240,6 +460,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'A4: expected 400 got ' + r4.status
       }
+      persistStep(
+        'A4',
+        'A4',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        r4.status,
+        400,
+        a4p,
+        cb4,
+        ca4,
+        r4.json,
+        a4p ? '' : 'Expected 400 got ' + r4.status,
+        [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var a5b = 'not-json{'
@@ -253,6 +490,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'A5: expected 400 got ' + r5.status
       }
+      persistStep(
+        'A5',
+        'A5',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        r5.status,
+        400,
+        a5p,
+        cb5,
+        ca5,
+        r5.json,
+        a5p ? '' : 'Expected 400 got ' + r5.status,
+        [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var a6p_ = { timestamp: nowTs(), data: new Array(300000).join('x') }
@@ -267,6 +521,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'A6: expected 400 got ' + r6.status
       }
+      persistStep(
+        'A6',
+        'A6',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        r6.status,
+        400,
+        a6p,
+        cb6,
+        ca6,
+        r6.json,
+        a6p ? '' : 'Expected 400 got ' + r6.status,
+        [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var a7p_ = {
@@ -290,6 +561,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'A7: expected 401 missing_signature got ' + r7.status
       }
+      persistStep(
+        'A7',
+        'A7',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        r7.status,
+        401,
+        a7p,
+        cb7,
+        ca7,
+        r7.json,
+        a7p ? '' : 'Expected 401 missing_signature got ' + r7.status,
+        [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var a8p_ = {
@@ -317,6 +605,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'A8: expected 401 got ' + r8.status
       }
+      persistStep(
+        'A8',
+        'A8',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        r8.status,
+        401,
+        a8p,
+        cb8,
+        ca8,
+        r8.json,
+        a8p ? '' : 'Expected 401 got ' + r8.status,
+        [],
+      )
+      checkTerminal()
     }
 
     var b1Body = '',
@@ -353,6 +658,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'B1: expected 200 got ' + rB1.status
       }
+      persistStep(
+        'B1',
+        'B1_contato_criado',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        rB1.status,
+        200,
+        b1p,
+        cbB1,
+        caB1,
+        rB1.json,
+        b1p ? '' : 'Expected 200 got ' + rB1.status,
+        rB1.json && rB1.json.event_id ? [truncId(String(rB1.json.event_id))] : [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var cbB2 = gc()
@@ -368,6 +690,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'B2: expected 409 duplicate got ' + rB2.status
       }
+      persistStep(
+        'B2',
+        'B2_duplicidade_sem_efeito',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        rB2.status,
+        409,
+        b2p,
+        cbB2,
+        caB2,
+        rB2.json,
+        b2p ? '' : 'Expected 409 duplicate got ' + rB2.status,
+        [],
+      )
+      checkTerminal()
     }
     var b3Body = '',
       b3Sig = ''
@@ -402,6 +741,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'B3: expected 200 got ' + rB3.status
       }
+      persistStep(
+        'B3',
+        'B3_negocio_criado',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        rB3.status,
+        200,
+        b3p,
+        cbB3,
+        caB3,
+        rB3.json,
+        b3p ? '' : 'Expected 200 got ' + rB3.status,
+        rB3.json && rB3.json.event_id ? [truncId(String(rB3.json.event_id))] : [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var b4p_ = {
@@ -430,6 +786,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'B4: expected 200 with snapshot got ' + rB4.status
       }
+      persistStep(
+        'B4',
+        'B4_snapshot_e_atualizacao',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        rB4.status,
+        200,
+        b4p,
+        cbB4,
+        caB4,
+        rB4.json,
+        b4p ? '' : 'Expected 200 with snapshot got ' + rB4.status,
+        rB4.json && rB4.json.event_id ? [truncId(String(rB4.json.event_id))] : [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var b5p_ = {
@@ -458,6 +831,23 @@ routerAdd(
         overallStatus = 'STOP'
         stopReason = 'B5: expected 200 with quality occurrence got ' + rB5.status
       }
+      persistStep(
+        'B5',
+        'B5_negocio_e_ocorrencia_qualidade',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        rB5.status,
+        200,
+        b5p,
+        cbB5,
+        caB5,
+        rB5.json,
+        b5p ? '' : 'Expected 200 with quality occurrence got ' + rB5.status,
+        rB5.json && rB5.json.event_id ? [truncId(String(rB5.json.event_id))] : [],
+      )
+      checkTerminal()
     }
 
     var c1Body = '',
@@ -487,6 +877,23 @@ routerAdd(
           ' body=' +
           JSON.stringify(rC1.json).substring(0, 200)
       }
+      persistStep(
+        'C1',
+        'C1_rollback',
+        'POST',
+        '/backend/v1/integracao/ac/rollback',
+        startedAt,
+        nowTs(),
+        rC1.status,
+        200,
+        c1p,
+        cbC1,
+        caC1,
+        rC1.json,
+        c1p ? '' : 'C1: contract violation — status=' + rC1.status,
+        [],
+      )
+      checkTerminal()
     }
     if (overallStatus === 'PASS') {
       var cbC2 = gc()
@@ -507,6 +914,23 @@ routerAdd(
           ' body=' +
           JSON.stringify(rC2.json).substring(0, 200)
       }
+      persistStep(
+        'C2',
+        'C2_repeticao_idempotente',
+        'POST',
+        '/backend/v1/integracao/ac/rollback',
+        startedAt,
+        nowTs(),
+        rC2.status,
+        200,
+        c2p,
+        cbC2,
+        caC2,
+        rC2.json,
+        c2p ? '' : 'C2: contract violation — status=' + rC2.status,
+        [],
+      )
+      checkTerminal()
     }
 
     var restoreRes = setWH(false)
@@ -519,16 +943,36 @@ routerAdd(
       overallStatus = 'BLOCKED'
       stopReason = 'Flag not restored to false'
     }
+    checkTerminal()
 
     {
+      var cbD1 = gc()
       var rD1 = callWH('POST', { 'Content-Type': 'application/json' }, '{}')
       finalProbeStatus = rD1.status
       var d1p = rD1.status === 503
+      var caD1 = gc()
       rc('D1', 'POST', '/webhook', 503, rD1.status, rD1.json, gc(), gc(), d1p)
       if (!d1p && overallStatus === 'PASS') {
         overallStatus = 'STOP'
         stopReason = 'D1: expected 503 got ' + rD1.status
       }
+      persistStep(
+        'D1',
+        'D1',
+        'POST',
+        '/backend/v1/integracao/ac/webhook',
+        startedAt,
+        nowTs(),
+        rD1.status,
+        503,
+        d1p,
+        cbD1,
+        caD1,
+        rD1.json,
+        d1p ? '' : 'Expected 503 got ' + rD1.status,
+        [],
+      )
+      checkTerminal()
     }
 
     countsAfter = gc()
@@ -555,6 +999,43 @@ routerAdd(
     if (!deltaMatch && overallStatus === 'PASS') {
       overallStatus = 'STOP'
       stopReason = 'Delta mismatch: ' + deltaMismatches.join(', ')
+    }
+
+    // Persistir estado terminal da execução
+    if (execRecord && !terminalSaved) {
+      var terminalEstado = 'pass'
+      if (overallStatus === 'STOP') terminalEstado = 'fail'
+      else if (overallStatus === 'BLOCKED') terminalEstado = 'blocked'
+      var decisaoFinal = JSON.stringify({
+        porta: '2D.2B',
+        overall_status: overallStatus,
+        go_no_go: overallStatus === 'PASS' ? 'GO' : 'NO-GO',
+        stop_reason: stopReason,
+        total_calls: callResults.length,
+        delta_match: deltaMatch,
+      })
+      safeUpdateExec({
+        estado: terminalEstado,
+        finished_at: new Date().toISOString(),
+        counts_after: JSON.stringify(countsAfter || {}),
+        flag_final: JSON.stringify(flagFinal),
+        decisao: decisaoFinal,
+      })
+    } else if (execRecord && terminalSaved) {
+      // Já terminal — atualiza apenas dados finais, sem mudar estado/finished_at
+      var decisaoFinal2 = JSON.stringify({
+        porta: '2D.2B',
+        overall_status: overallStatus,
+        go_no_go: overallStatus === 'PASS' ? 'GO' : 'NO-GO',
+        stop_reason: stopReason,
+        total_calls: callResults.length,
+        delta_match: deltaMatch,
+      })
+      safeUpdateExec({
+        counts_after: JSON.stringify(countsAfter || {}),
+        flag_final: JSON.stringify(flagFinal),
+        decisao: decisaoFinal2,
+      })
     }
 
     return e.json(200, {
