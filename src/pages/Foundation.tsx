@@ -9,6 +9,7 @@ import { UsuariosTab } from '@/components/foundation/UsuariosTab'
 import { VinculosTab } from '@/components/foundation/VinculosTab'
 import { IntegrationTestsTab } from '@/components/foundation/IntegrationTestsTab'
 import { DiagConsultaDependenciasBlock } from '@/components/foundation/DiagConsultaDependenciasBlock'
+import { Porta2D2BAuditBlock } from '@/components/foundation/Porta2D2BAuditBlock'
 import { DiagCompensacaoAuditEvidenceBlock } from '@/components/foundation/DiagCompensacaoAuditEvidenceBlock'
 import { DiagCompensacaoDependenciasBlock } from '@/components/foundation/DiagCompensacaoDependenciasBlock'
 import { DiagTransportEvidenceBlock } from '@/components/foundation/DiagTransportEvidenceBlock'
@@ -63,6 +64,7 @@ export default function Foundation() {
             <DiagCompensacaoAuditEvidenceBlock />
             <DiagCompensacaoDependenciasBlock />
             <DiagConsultaDependenciasBlock />
+            <Porta2D2BAuditBlock />
           </div>
         </TabsContent>{' '}
       </Tabs>
