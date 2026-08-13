@@ -1,10 +1,10 @@
-# Plano de Entrada — Porta 2D.2B (Correção Consolidada)
+# Plano de Entrada — Porta 2D.2B (Correção Consolidada Final)
 
 ## 0. Declaração Inicial
 
 **Porta 2D.2B: NÃO INICIADA.**
 
-Este é um documento de planejamento exclusivamente. Nenhuma rota, teste, query, webhook, chamada externa ou alteração de qualquer arquivo — exceto este próprio — foi executada. A expressão "end-to-end com tráfego real" foi removida. O escopo futuro descrito é um teste local, assinado, completo e controlado do endpoint de webhook existente, usando exclusivamente amostras sintéticas `[TESTE]`, sem registro de webhook no ActiveCampaign, sem tráfego originado pelo ActiveCampaign e sem chamadas a serviços externos.
+Este é um documento de planejamento exclusivamente. Nenhuma rota, teste, query, webhook, chamada externa ou alteração de qualquer arquivo — exceto este próprio — foi executada. O escopo futuro descrito é um teste local, assinado, completo e controlado do endpoint de webhook existente, usando exclusivamente amostras sintéticas `[TESTE]`, sem registro de webhook no ActiveCampaign, sem tráfego originado pelo ActiveCampaign e sem chamadas a serviços externos.
 
 ---
 
@@ -131,7 +131,7 @@ Se não houver prova estática, o item é **NO-GO** antes de qualquer teste.
 ### 4.5 Idempotência
 
 - Chave derivada: `SHA-256(sistema_origem + "|" + evento_tipo + "|" + external_id)`.
-- Campo `idempotency_key` em `com_eventos_integracao` com índice UNIQUE (a comprovar na análise estática).
+- Campo `idempotency_key` em `com_eventos_integracao` com índice UNIQUE (a comprovar na análise estática — S2).
 - Duplicatas retornam HTTP 409 com `{ duplicate: true, event_id, status }`.
 - Nenhuma duplicata cria segundo evento funcional, contato, empresa, negócio, vínculo, auditoria ou snapshot.
 
@@ -144,7 +144,7 @@ Se não houver prova estática, o item é **NO-GO** antes de qualquer teste.
 
 ---
 
-## 5. Round Único — Sequência Fixa (Correção 1)
+## 5. Round Único — Sequência Fixa
 
 ### 5.1 Eliminação de Modos
 
@@ -156,25 +156,26 @@ O round é dividido em quatro fases sequenciais:
 
 | Fase      | Descrição                                         | Número de Chamadas |
 | --------- | ------------------------------------------------- | ------------------ |
-| A         | Testes negativos de segurança (zero persistência) | 8                  |
-| B         | Testes positivos funcionais (deltas sintéticos)   | 7                  |
-| C         | Rollback e repetição idempotente                  | 2                  |
-| D         | Probe final com endpoint desabilitado             | 1                  |
-| **Total** |                                                   | **18**             |
+| A         | Testes negativos de segurança (zero persistência) | 8 (A1–A8)          |
+| B         | Testes positivos funcionais (deltas sintéticos)   | 5 (B1–B5)          |
+| C         | Rollback e repetição idempotente                  | 2 (C1–C2)          |
+| D         | Probe final com endpoint desabilitado             | 1 (D1)             |
+| **Total** |                                                   | **16**             |
 
 ### 5.3 Ordem de Execução
 
-1. Garantir que `ac_webhook_enabled = false`.
-2. Fase A: 8 testes negativos (endpoint desabilitado ou assinatura/timestamp inválidos).
+1. Confirmar que `ac_webhook_enabled = false`.
+2. **A1**: POST `/backend/v1/integracao/ac/webhook` → esperado HTTP **503** (endpoint desabilitado).
 3. Habilitar `ac_webhook_enabled = true`.
-4. Fase B: 7 testes funcionais positivos (assinados, timestamp válido).
-5. Fase C: 2 chamadas de rollback (primeira execução + repetição idempotente).
-6. Restaurar `ac_webhook_enabled = false`.
-7. Fase D: 1 probe final (deve retornar 503).
+4. **A2–A8**: 7 testes negativos (endpoint habilitado; cada um falha por seu motivo específico).
+5. **B1–B5**: 5 testes funcionais positivos (assinados, timestamp válido).
+6. **C1–C2**: 2 chamadas de rollback (primeira execução + repetição idempotente).
+7. Restaurar `ac_webhook_enabled = false`.
+8. **D1**: POST `/backend/v1/integracao/ac/webhook` → esperado HTTP **503** (endpoint desabilitado).
 
 ---
 
-## 6. Estágio de Análise Estática Prévio (Correção 4)
+## 6. Estágio de Análise Estática Prévio
 
 Antes de qualquer teste, um estágio de **análise estática apenas** deve provar os seguintes itens no código/schema existente. Qualquer item não provado é **NO-GO**.
 
@@ -187,16 +188,20 @@ Antes de qualquer teste, um estágio de **análise estática apenas** deve prova
 | S5  | Contrato literal do endpoint webhook (`POST /backend/v1/integracao/ac/webhook`)                                                                                                                                               | Código de `ac_webhook.js`                                  | A comprovar |
 | S6  | Contrato literal do endpoint rollback (`POST /backend/v1/integracao/ac/rollback`)                                                                                                                                             | Código de `ac_rollback.js`                                 | A comprovar |
 | S7  | Campos estruturais de `com_vinculos_externos` (`sistema_origem`, `external_type`, `external_id`, `collection_name`, `record_id`) distinguindo contato (`external_type = 'contact'`) de negócio (`external_type = 'business'`) | `schema.json` e migração 0042                              | A comprovar |
+| S8  | Se B5 (`deal_create` com stage sem mapeamento) cria um vínculo em `com_vinculos_externos` — análise do caminho de código em `ac_webhook.js` para novos negócios                                                               | Código de `ac_webhook.js`                                  | A comprovar |
+| S9  | Se C1 (rollback) cria um registro em `com_execucoes_sincronizacao` — análise do caminho de código em `ac_rollback.js`                                                                                                         | Código de `ac_rollback.js`                                 | A comprovar |
+| S10 | Se o endpoint de rollback (`ac_rollback.js`) implementa idempotência para C2 (repetição produz delta 0)                                                                                                                       | Código de `ac_rollback.js`                                 | A comprovar |
+| S11 | Delta de `com_auditoria` durante o round — análise de todos os caminhos de código em `ac_webhook.js` e `ac_rollback.js` para criação server-side de registros de auditoria                                                    | Código de `ac_webhook.js` e `ac_rollback.js`               | A comprovar |
 
 ### Resultado do Estágio de Análise Estática
 
-Todos os itens S1–S7 devem estar com status "Provado" antes de proceder. Qualquer item "A comprovar" ou "Não provado" é NO-GO.
+Todos os itens S1–S11 devem estar com status "Provado" antes de proceder. Qualquer item "A comprovar" ou "Não provado" é NO-GO.
 
 ---
 
-## 7. Matriz Completa de Testes (Correção 5)
+## 7. Matriz Completa de Testes
 
-### 7.1 Coleções Monitoradas (Correção 6)
+### 7.1 Coleções Monitoradas
 
 | Coleção                       | Campo no JSON |
 | ----------------------------- | ------------- |
@@ -211,45 +216,72 @@ Todos os itens S1–S7 devem estar com status "Provado" antes de proceder. Qualq
 
 Contagens são capturadas: antes do round, após cada chamada individual, e ao final.
 
-> **Ver também:** Seção 7.7 — Tabela Consolidada de Monitoramento (contagens iniciais, deltas exatos, fórmulas de contagem final e bloco do parâmetro `ac_webhook_enabled`).
+> **Ver também:** Seção 7.7 — Tabela Consolidada de Monitoramento.
 
 ### 7.2 Fase A — Testes Negativos de Segurança (Zero Persistência)
 
 > Todos os testes negativos devem produzir **delta zero** em todas as coleções monitoradas.
 
-| #   | Método | Rota                                | Headers                                                               | Categoria do Payload                   | HTTP Esperado | Delta por Coleção |
-| --- | ------ | ----------------------------------- | --------------------------------------------------------------------- | -------------------------------------- | ------------- | ----------------- |
-| A1  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`                                      | `{}` (endpoint desabilitado)           | 503           | 0 em todas        |
-| A2  | GET    | `/backend/v1/integracao/ac/webhook` | (nenhum)                                                              | (nenhum corpo)                         | 405           | 0 em todas        |
-| A3  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: text/plain`                                            | `{}`                                   | 400           | 0 em todas        |
-| A4  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature` (válido, assinado) | `{}` (corpo vazio sem tipo/id externo) | 400           | 0 em todas        |
-| A5  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: x`                 | JSON malformado `not-json{`            | 400           | 0 em todas        |
-| A6  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature` (válido, assinado) | Payload > 256KB                        | 400           | 0 em todas        |
-| A7  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json` (sem `X-AC-Signature`)               | Payload de contato sintético `[TESTE]` | 401           | 0 em todas        |
-| A8  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: invalido`          | Payload de contato sintético `[TESTE]` | 401           | 0 em todas        |
+| #   | Método | Rota                                | Headers                                                                                      | Categoria do Payload                                        | HTTP Esperado | Delta por Coleção |
+| --- | ------ | ----------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------- | ----------------- |
+| A1  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`                                                             | `{}` (endpoint desabilitado)                                | 503           | 0 em todas        |
+| A2  | GET    | `/backend/v1/integracao/ac/webhook` | (nenhum)                                                                                     | (nenhum corpo)                                              | 405           | 0 em todas        |
+| A3  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: text/plain`                                                                   | `{}`                                                        | 400           | 0 em todas        |
+| A4  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | `{}` (corpo vazio sem tipo/id externo)                      | 400           | 0 em todas        |
+| A5  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`                                 | JSON malformado `not-json{`                                 | 400           | 0 em todas        |
+| A6  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | Payload > 256KB                                             | 400           | 0 em todas        |
+| A7  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json` (sem `X-AC-Signature`)                                      | Payload de contato sintético `[TESTE]` com timestamp válido | 401           | 0 em todas        |
+| A8  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: invalido`                                 | Payload de contato sintético `[TESTE]` com timestamp válido | 401           | 0 em todas        |
+
+> **A4:** Assinatura válida e timestamp válido garantem que a única razão de falha seja "Evento sem tipo ou id externo identificavel" (HTTP 400), e não ausência de assinatura ou timestamp inválido.
+>
+> **A6:** Assinatura válida e timestamp válido garantem que a única razão de falha seja "Corpo da requisicao excede o limite de 256KB" (HTTP 400), e não ausência de assinatura ou timestamp inválido.
 
 ### 7.3 Fase B — Testes Positivos Funcionais (Deltas Sintéticos Pré-definidos)
 
-> Após habilitar `ac_webhook_enabled = true`. Todos os payloads são assinados com HMAC sobre bytes exatos, com timestamp obrigatório válido.
+> Após habilitar `ac_webhook_enabled = true`. Todos os payloads são assinados com HMAC sobre bytes exatos, com timestamp obrigatório válido. Nenhum valor de secret é exposto.
 
-| #   | Método | Rota                                 | Categoria do Payload                                           | HTTP Esperado | Delta por Coleção                                                  |
-| --- | ------ | ------------------------------------ | -------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
-| B1  | POST   | `/backend/v1/integracao/ac/webhook`  | `contact_create` (`TESTE-2D2B-FN-C1`)                          | 200           | contatos +1, eventos +1, execuções +1, vinculos +1                 |
-| B2  | POST   | `/backend/v1/integracao/ac/webhook`  | Replay idêntico de B1                                          | 409           | 0 em todas (duplicata)                                             |
-| B3  | POST   | `/backend/v1/integracao/ac/webhook`  | `deal_create` (`TESTE-2D2B-FN-D1`, stage `prospects`)          | 200           | negocios +1, eventos +1, execuções +1, vinculos +1                 |
-| B4  | POST   | `/backend/v1/integracao/ac/webhook`  | `deal_update` (`TESTE-2D2B-FN-D1`, stage `producao_proposta`)  | 200           | snapshots +1, eventos +1, execuções +1                             |
-| B5  | POST   | `/backend/v1/integracao/ac/webhook`  | `deal_create` (`TESTE-2D2B-FN-D2`, stage `unmapped_stage_xyz`) | 200           | negocios +1, eventos +1, execucoes +1, vinculos +1, ocorrencias +1 |
-| B6  | POST   | `/backend/v1/integracao/ac/rollback` | Rollback de `TESTE-2D2B-FN-D1` (`business`)                    | 200           | eventos +1 (compensador), snapshots restaurados                    |
-| B7  | POST   | `/backend/v1/integracao/ac/rollback` | Replay idêntico de B6                                          | 200           | 0 em todas (idempotente — não cria novo evento compensador)        |
+| #   | Método | Rota                                | Headers                                                                                      | Categoria do Payload                                           | HTTP Esperado | Delta por Coleção                                                   |
+| --- | ------ | ----------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------- | ------------------------------------------------------------------- |
+| B1  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | `contact_create` (`TESTE-2D2B-FN-C1`)                          | 200           | contatos +1, eventos +1, execuções +1, vinculos +1                  |
+| B2  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | Replay idêntico de B1                                          | 409           | 0 em todas (duplicata)                                              |
+| B3  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | `deal_create` (`TESTE-2D2B-FN-D1`, stage `prospects`)          | 200           | negocios +1, eventos +1, execuções +1, vinculos +1                  |
+| B4  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | `deal_update` (`TESTE-2D2B-FN-D1`, stage `producao_proposta`)  | 200           | snapshots +1, eventos +1, execuções +1                              |
+| B5  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | `deal_create` (`TESTE-2D2B-FN-D2`, stage `unmapped_stage_xyz`) | 200           | negocios +1, eventos +1, execuções +1, vinculos +1†, ocorrencias +1 |
+
+> **† B5 — `com_vinculos_externos` +1:** Baseado na análise do código em `ac_webhook.js`, o caminho de criação de novo negócio (`!nRec`) cria um vínculo. **Este item depende da análise estática S8 (NO-GO até provado).** Se S8 provar que B5 NÃO cria vínculo, remover `vinculos +1` de B5 e ajustar o total de `com_vinculos_externos` para +2.
 
 ### 7.4 Fase C — Rollback e Repetição Idempotente
 
-Os testes B6 e B7 constituem a Fase C. O contrato esperado:
+| #   | Método | Rota                                 | Headers                                                                                      | Categoria do Payload                        | HTTP Esperado | Delta por Coleção                                               |
+| --- | ------ | ------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------- | --------------------------------------------------------------- |
+| C1  | POST   | `/backend/v1/integracao/ac/rollback` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | Rollback de `TESTE-2D2B-FN-D1` (`business`) | 200           | eventos +1 (compensador), snapshots restaurados; execuções +0†† |
+| C2  | POST   | `/backend/v1/integracao/ac/rollback` | `Content-Type: application/json`, `X-AC-Signature: <válido>`, `timestamp: <válido no corpo>` | Replay idêntico de C1                       | 200           | 0 em todas (idempotente)                                        |
 
-- **B6 (primeira execução):** HTTP 200 com `{ success: true, rolled_back: [...] }`. O negócio identificado por `TESTE-2D2B-FN-D1` é restaurado a partir do snapshot mais recente. Um evento compensador é criado em `com_eventos_integracao`.
-- **B7 (repetição idempotente):** HTTP 200 com `{ success: true, rolled_back: [], idempotent: true }` ou HTTP 409 com `{ duplicate: true }`. Nenhum novo evento compensador é criado. Nenhum snapshot adicional é criado. O estado do negócio não é alterado.
+> **†† C1 — `com_execucoes_sincronizacao` +0:** Baseado na análise do código em `ac_rollback.js`, o endpoint de rollback NÃO cria um registro em `com_execucoes_sincronizacao`. **Este item depende da análise estática S9 (NO-GO até provado).** Se S9 provar que C1 CRIA execução, ajustar o total de `com_execucoes_sincronizacao` para +5.
 
-> Não se aceita "200 ou 404" sem distinção. O contrato idempotente deve ser único e inequívoco.
+#### Contrato de C1 (Primeira Execução)
+
+| Aspecto                 | Valor                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| HTTP Esperado           | 200                                                                                                                                  |
+| Body Esperado           | `{ success: true, rolled_back: [{ collection, record_id, restored_from_snapshot, compensating_event }] }`                            |
+| Comportamento           | Negócio `TESTE-2D2B-FN-D1` restaurado a partir do snapshot mais recente. Um evento compensador é criado em `com_eventos_integracao`. |
+| Cria execução?          | **Não** (a comprovar em S9 — NO-GO até provado)                                                                                      |
+| Cria snapshot?          | Não                                                                                                                                  |
+| Cria evento compensador | Sim (+1 em `com_eventos_integracao`)                                                                                                 |
+
+#### Contrato de C2 (Repetição Idempotente)
+
+| Aspecto       | Valor                                                                                                                                                                                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP Esperado | **200**                                                                                                                                                                                                                                                                                     |
+| Body Esperado | `{ success: true, rolled_back: [], idempotent: true }`                                                                                                                                                                                                                                      |
+| Comportamento | Negócio NÃO é alterado. Nenhum novo evento compensador é criado. Nenhum snapshot adicional é criado.                                                                                                                                                                                        |
+| Delta         | 0 em todas as coleções                                                                                                                                                                                                                                                                      |
+| Observação    | **Este contrato depende da análise estática S10 (NO-GO até provado).** O código atual de `ac_rollback.js` utiliza `Date.now()` na `idempotency_key`, o que pode impedir a idempotência. Se S10 provar que o código NÃO é idempotente, o contrato de C2 deve ser revisado antes da execução. |
+
+> Não se aceita "200 ou 409" sem distinção. O contrato idempotente é único: **HTTP 200 com `{ success: true, rolled_back: [], idempotent: true }`** e delta 0.
 
 ### 7.5 Fase D — Probe Final
 
@@ -257,41 +289,47 @@ Os testes B6 e B7 constituem a Fase C. O contrato esperado:
 | --- | ------ | ----------------------------------- | -------------------------------- | ------------- | ---------- |
 | D1  | POST   | `/backend/v1/integracao/ac/webhook` | `Content-Type: application/json` | 503           | 0 em todas |
 
-### 7.6 Deltas Finais Totais (Correção 9)
+### 7.6 Deltas Finais Totais
 
-| Coleção                       | Delta Total Esperado                                  |
-| ----------------------------- | ----------------------------------------------------- |
-| `com_contatos`                | +1                                                    |
-| `com_negocios`                | +2                                                    |
-| `com_eventos_integracao`      | +6 (B1, B3, B4, B5, B6 compensador, B7=0)             |
-| `com_execucoes_sincronizacao` | +5 (B1, B3, B4, B5, B6)                               |
-| `com_vinculos_externos`       | +2 (B1 contato, B3 negócio)                           |
-| `com_snapshots_negocio`       | +1 (B4)                                               |
-| `com_ocorrencias_qualidade`   | +1 (B5)                                               |
-| `com_auditoria`               | +0 (criação server-side apenas, regra `create: null`) |
+| Coleção                       | Delta Total Esperado                                               |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `com_contatos`                | +1                                                                 |
+| `com_negocios`                | +2                                                                 |
+| `com_eventos_integracao`      | +5 (B1, B3, B4, B5, C1 compensador; B2=0, C2=0)                    |
+| `com_execucoes_sincronizacao` | +4 (B1, B3, B4, B5; C1=0†† — a comprovar em S9, NO-GO até provado) |
+| `com_vinculos_externos`       | +3 (B1, B3, B5† — a comprovar em S8, NO-GO até provado)            |
+| `com_snapshots_negocio`       | +1 (B4)                                                            |
+| `com_ocorrencias_qualidade`   | +1 (B5)                                                            |
+| `com_auditoria`               | a determinar na análise estática (S11 — NO-GO até provado)         |
 
-> **Ver também:** Seção 7.7 — Tabela Consolidada de Monitoramento (visão única com contagem inicial, delta exato, fórmula de contagem final e fases responsáveis por cada delta).
+> **Nota sobre `com_eventos_integracao`:** O delta total é +5. Derivação linha a linha: B1 (+1), B2 (+0 — duplicata), B3 (+1), B4 (+1), B5 (+1), C1 (+1 — compensador), C2 (+0 — idempotente). Não existe nenhum valor alternativo (+6) em qualquer parte deste documento.
+
+> **Nota sobre `com_execucoes_sincronizacao`:** O delta é +4 com base na análise do código de `ac_rollback.js` (que não cria execução). **Item S9 é NO-GO até provado.** Se S9 provar que C1 cria execução, o delta passa a +5.
+
+> **Nota sobre `com_vinculos_externos`:** O delta é +3 com base na análise do código de `ac_webhook.js` (caminho de criação de novo negócio cria vínculo). **Item S8 é NO-GO até provado.** Se S8 provar que B5 não cria vínculo, o delta passa a +2.
+
+> **Nota sobre `com_auditoria`:** O delta é **"a determinar na análise estática"**. A inferência anterior baseada em `createRule: null` foi **removida**. Sem prova estática (S11), o item é **NO-GO**. Apenas após prova o valor exato será atualizado antes de autorizar o round.
 
 ---
 
-## 7.7 Tabela Consolidada de Monitoramento (Adição Documental)
+## 7.7 Tabela Consolidada de Monitoramento
 
 > Esta seção consolida em uma única tabela, para cada coleção monitorada, a contagem inicial (a capturar antes do round — sem valor numérico inventado), o delta exato esperado para o round completo, a fórmula da contagem final (`inicial + delta`) e as fases/chamadas responsáveis pelo delta.
 
-| Coleção                       | Contagem Inicial          | Delta Exato Esperado (Round Completo) | Fórmula Contagem Final | Fases / Chamadas Responsáveis                                            |
-| ----------------------------- | ------------------------- | ------------------------------------- | ---------------------- | ------------------------------------------------------------------------ |
-| `com_contatos`                | a capturar antes do round | +1                                    | inicial + 1            | B1 (contact_create `TESTE-2D2B-FN-C1`)                                   |
-| `com_negocios`                | a capturar antes do round | +2                                    | inicial + 2            | B3 (deal_create `TESTE-2D2B-FN-D1`), B5 (deal_create `TESTE-2D2B-FN-D2`) |
-| `com_eventos_integracao`      | a capturar antes do round | +5                                    | inicial + 5            | B1, B3, B4, B5, B6 (compensador); B7 = 0 (idempotente)                   |
-| `com_execucoes_sincronizacao` | a capturar antes do round | +5                                    | inicial + 5            | B1, B3, B4, B5, B6                                                       |
-| `com_vinculos_externos`       | a capturar antes do round | +2                                    | inicial + 2            | B1 (vínculo contato), B3 (vínculo negócio)                               |
-| `com_snapshots_negocio`       | a capturar antes do round | +1                                    | inicial + 1            | B4 (deal_update `TESTE-2D2B-FN-D1`)                                      |
-| `com_ocorrencias_qualidade`   | a capturar antes do round | +1                                    | inicial + 1            | B5 (unmapped_stage `TESTE-2D2B-FN-D2`)                                   |
-| `com_auditoria`               | a capturar antes do round | +0                                    | inicial + 0            | Nenhuma (criação server-side apenas, regra `create: null`)               |
+| Coleção                       | Contagem Inicial          | Delta Exato Esperado (Round Completo)                    | Fórmula Contagem Final | Fases / Chamadas Responsáveis                                            |
+| ----------------------------- | ------------------------- | -------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------ |
+| `com_contatos`                | a capturar antes do round | +1                                                       | inicial + 1            | B1 (contact_create `TESTE-2D2B-FN-C1`)                                   |
+| `com_negocios`                | a capturar antes do round | +2                                                       | inicial + 2            | B3 (deal_create `TESTE-2D2B-FN-D1`), B5 (deal_create `TESTE-2D2B-FN-D2`) |
+| `com_eventos_integracao`      | a capturar antes do round | +5                                                       | inicial + 5            | B1, B3, B4, B5, C1 (compensador); B2=0, C2=0 (idempotentes)              |
+| `com_execucoes_sincronizacao` | a capturar antes do round | +4 (S9 NO-GO — se C1 cria execução, delta passa a +5)    | inicial + 4 (ou +5)    | B1, B3, B4, B5; C1=0 (a comprovar em S9)                                 |
+| `com_vinculos_externos`       | a capturar antes do round | +3 (S8 NO-GO — se B5 não cria vínculo, delta passa a +2) | inicial + 3 (ou +2)    | B1 (vínculo contato), B3 (vínculo negócio), B5 (vínculo negócio†)        |
+| `com_snapshots_negocio`       | a capturar antes do round | +1                                                       | inicial + 1            | B4 (deal_update `TESTE-2D2B-FN-D1`)                                      |
+| `com_ocorrencias_qualidade`   | a capturar antes do round | +1                                                       | inicial + 1            | B5 (unmapped_stage `TESTE-2D2B-FN-D2`)                                   |
+| `com_auditoria`               | a capturar antes do round | a determinar na análise estática (S11 NO-GO)             | inicial + (a provar)   | A determinar em S11                                                      |
 
-> **Nota sobre `com_eventos_integracao`:** O delta total é +5 (B1, B3, B4, B5, B6 compensador). A repetição idempotente B7 produz delta 0 (nenhum novo evento compensador é criado).
+> **Nota sobre `com_eventos_integracao`:** O delta total é +5. Derivação: B1 (+1), B2 (+0), B3 (+1), B4 (+1), B5 (+1), C1 (+1), C2 (+0). Valor único — não existe +6 em nenhuma parte do documento.
 
-> **Nota sobre `com_auditoria`:** O delta esperado é 0 porque a regra de criação é `create: null` (server-side apenas). Nenhum registro de auditoria é criado pelas chamadas do round.
+> **Nota sobre `com_auditoria`:** O delta é "a determinar na análise estática". A inferência anterior baseada em `createRule: null` foi **removida**. Sem prova estática (S11), o item é **NO-GO**.
 
 ### Bloco do Parâmetro `ac_webhook_enabled` (Registrado Separadamente)
 
@@ -304,11 +342,11 @@ Os testes B6 e B7 constituem a Fase C. O contrato esperado:
 | Restauração automática após PARE    | Restaurar `ac_webhook_enabled = false` é a **única** ação corretiva automática permitida  |
 | Outros parâmetros ou locks          | Fora do escopo — proibidos (nenhuma outra chave de `com_parametros` é lida ou modificada) |
 
-> **Ver também:** Seção 8 — Parâmetro de Ativação (Correção 7) para o detalhamento completo do parâmetro `ac_webhook_enabled`.
+> **Ver também:** Seção 8 — Parâmetro de Ativação para o detalhamento completo.
 
 ---
 
-## 8. Parâmetro de Ativação (Correção 7)
+## 8. Parâmetro de Ativação
 
 ### `ac_webhook_enabled` — Parâmetro de Ativação (Não Lock)
 
@@ -327,7 +365,7 @@ O lock `ac_r13_execution_lock` é **removido do plano**. Não é lido, modificad
 
 ---
 
-## 9. PARE — Segurança e Correção Automática (Correção 8)
+## 9. PARE — Segurança e Correção Automática
 
 ### PARE — Pausar, Analisar, Refletir, Engajar
 
@@ -355,6 +393,7 @@ Se uma falha ocorrer após a habilitação de `ac_webhook_enabled = true`, a **�
 9. 🔴 Qualquer hook, migração, schema ou configuração for alterada.
 10. 🔴 Qualquer credencial, token ou secret for exposto.
 11. 🔴 Qualquer divergência de status, identidade, delta, flag, assinatura ou timestamp.
+12. 🔴 Qualquer item S1–S11 não provado na análise estática.
 
 ### Ação ao Disparar PARE
 
@@ -365,7 +404,7 @@ Se uma falha ocorrer após a habilitação de `ac_webhook_enabled = true`, a **�
 
 ---
 
-## 10. Rollback — Identificação por Correlação (Correção 10)
+## 10. Rollback — Identificação por Correlação
 
 ### Identificação de Alvos
 
@@ -387,12 +426,14 @@ Os alvos de rollback são identificados **exclusivamente** por:
 
 ### Contrato de Rollback
 
-| Execução         | HTTP Esperado | Comportamento                                              |
-| ---------------- | ------------- | ---------------------------------------------------------- |
-| Primeira (B6)    | 200           | Negócio restaurado do snapshot. Evento compensador criado. |
-| Idempotente (B7) | 200 ou 409    | Negócio não alterado. Nenhum novo evento compensador.      |
+| Execução      | HTTP Esperado | Body Esperado                                          | Comportamento                                              |
+| ------------- | ------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
+| C1 (primeira) | 200           | `{ success: true, rolled_back: [{ ... }] }`            | Negócio restaurado do snapshot. Evento compensador criado. |
+| C2 (replay)   | 200           | `{ success: true, rolled_back: [], idempotent: true }` | Negócio não alterado. Nenhum novo evento compensador.      |
 
-> O contrato idempotente deve ser único e distinguível. Não se aceita "200 ou 404" sem distinção.
+> O contrato idempotente é **único e inequívoco**: C2 retorna HTTP 200 com `{ success: true, rolled_back: [], idempotent: true }` e delta 0. Não se aceita "200 ou 409".
+>
+> **Dependência:** O cumprimento do contrato de C2 depende da análise estática S10 (NO-GO até provado).
 
 ### Preservação de Histórico
 
@@ -403,26 +444,30 @@ Os alvos de rollback são identificados **exclusivamente** por:
 
 ---
 
-## 11. GO/NO-GO (Correção 12)
+## 11. GO/NO-GO
 
 ### GO (Todos devem ser verdadeiros e prováveis objetivamente)
 
-1. ✅ Estágio de análise estática (S1–S7) totalmente provado.
-2. ✅ `$security.hs256()` comportamento provado documentalmente (ou marcado "a comprovar" e resolvido).
+1. ✅ Estágio de análise estática (S1–S11) totalmente provado.
+2. ✅ `$security.hs256()` comportamento provado documentalmente (S1).
 3. ✅ `ac_webhook_enabled` inicial é `false`.
 4. ✅ Todos os 8 testes negativos (Fase A) produzem delta zero e retornam o HTTP esperado.
-5. ✅ Todos os 7 testes funcionais (Fases B+C) produzem exatamente os deltas pré-definidos.
-6. ✅ Rollback (B6) restaura o negócio do snapshot e cria evento compensador.
-7. ✅ Repetição idempotente (B7) não cria novos eventos nem altera o negócio.
+5. ✅ Todos os 5 testes funcionais (Fase B) produzem exatamente os deltas pré-definidos.
+6. ✅ Rollback (C1) restaura o negócio do snapshot e cria evento compensador.
+7. ✅ Repetição idempotente (C2) retorna HTTP 200 com `{ success: true, rolled_back: [], idempotent: true }` e delta 0.
 8. ✅ Probe final (D1) retorna 503.
 9. ✅ `ac_webhook_enabled` é restaurado para `false` ao final.
 10. ✅ Nenhuma chamada externa para ActiveCampaign ou serviço externo é feita.
 11. ✅ Nenhum dado real (não-`[TESTE]`) é criado ou alterado.
 12. ✅ Todas as contagens finais correspondem aos deltas totais definidos.
+13. ✅ S8 provado: delta de `com_vinculos_externos` confirmado (+3 ou +2).
+14. ✅ S9 provado: delta de `com_execucoes_sincronizacao` confirmado (+4 ou +5).
+15. ✅ S10 provado: idempotência de C2 confirmada.
+16. ✅ S11 provado: delta de `com_auditoria` determinado.
 
 ### NO-GO (Qualquer um dispara PARE)
 
-1. ❌ Qualquer item do estágio de análise estática não provado.
+1. ❌ Qualquer item do estágio de análise estática (S1–S11) não provado.
 2. ❌ Qualquer teste negativo criar registros (delta > 0).
 3. ❌ Qualquer teste funcional produzir delta divergente do pré-definido.
 4. ❌ Qualquer divergência de status HTTP em relação ao esperado.
@@ -434,12 +479,14 @@ Os alvos de rollback são identificados **exclusivamente** por:
 10. ❌ `ac_webhook_enabled` não restaurado para `false`.
 11. ❌ Probe final não retornar 503.
 12. ❌ Rollback não restaurar do snapshot.
-13. ❌ Repetição idempotente criar novos eventos.
-14. ❌ Qualquer dado real criado ou alterado.
+13. ❌ Repetição idempotente (C2) criar novos eventos ou alterar o negócio.
+14. ❌ C2 retornar status diferente de 200 ou body diferente do contrato.
+15. ❌ Qualquer dado real criado ou alterado.
+16. ❌ Delta de `com_auditoria` não determinado (S11 não provado).
 
 ---
 
-## 12. Evidências e Tratamento (Correção 13)
+## 12. Evidências e Tratamento
 
 ### Artefato Privado de Auditoria
 
@@ -460,7 +507,7 @@ O artefato privado de auditoria deve conter:
 
 ---
 
-## 13. Listas Separadas (Correção 11)
+## 13. Listas Separadas
 
 ### 13.1 Ações Futuras Explicitamente Autorizáveis
 
@@ -502,7 +549,7 @@ O artefato privado de auditoria deve conter:
 
 ---
 
-## 14. Autorização Futura Ainda Não Concedida (Correção 14)
+## 14. Autorização Futura Ainda Não Concedida
 
 > **Autorização futura ainda não concedida.**
 
@@ -510,25 +557,25 @@ A autorização para executar a Porta 2D.2B será redigida externamente apenas a
 
 ---
 
-## 15. Relatório de Correções Item por Item (Correção 15)
+## 15. Relatório de Correções Item por Item
 
-| #   | Correção                                                                                                                                                                                                                                                                                                                                                              | Status      |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| 1   | **Round único:** modos `security-only` e `full` eliminados. Round único com sequência fixa, 18 chamadas, resultado esperado por chamada. Sem "até", "pode criar" ou deltas variáveis.                                                                                                                                                                                 | ✅ Aplicada |
-| 2   | **Separação clara:** Fase A (negativos, zero persistência), Fase B (positivos, deltas sintéticos), Fase C (rollback e idempotência), Fase D (probe final desabilitado).                                                                                                                                                                                               | ✅ Aplicada |
-| 3   | **HMAC corrigido:** assinatura sobre bytes exatos do corpo recebido, sem canonicalização. Timestamp obrigatório, dentro de 5 minutos, incluído no material assinado. Falha fechada se ausente/inválido/fora de janela. Comparação em tempo constante com validação prévia de formato e comprimento. `$security.hs256()` marcado como "a comprovar antes da execução". | ✅ Aplicada |
-| 4   | **Análise estática prévia:** estágio S1–S7 incluído para provar API criptográfica, índice UNIQUE em `idempotency_key`, estados válidos, formato do snapshot, contratos dos endpoints e campos estruturais de `com_vinculos_externos`. Item não provado = NO-GO.                                                                                                       | ✅ Aplicada |
-| 5   | **Matriz completa:** matriz com numeração, método, rota, headers, categoria de payload, HTTP esperado e delta exato por coleção. Sem secrets ou dados reais.                                                                                                                                                                                                          | ✅ Aplicada |
-| 6   | **Monitoramento obrigatório:** todas as 8 coleções afetáveis monitoradas (incluindo `com_contatos` e `com_auditoria`) com contagens antes, após cada chamada e ao final.                                                                                                                                                                                              | ✅ Aplicada |
-| 7   | **Parâmetro de ativação:** `ac_webhook_enabled` tratado como parâmetro de ativação (não lock). Valor inicial `false`, única transição `false → true → false`, procedimento de restauração. `ac_r13_execution_lock` removido. Nenhuma outra chave de `com_parametros` é lida ou modificada.                                                                            | ✅ Aplicada |
-| 8   | **PARE segurança:** única ação corretiva automática é restaurar `ac_webhook_enabled = false`. Tudo o demais para imediatamente sem correção automática.                                                                                                                                                                                                               | ✅ Aplicada |
-| 9   | **Deltas exatos:** deltas definidos por teste e totais finais. Testes negativos com delta zero. `com_contatos` incluído na tabela. Sem resultados dependentes de modo.                                                                                                                                                                                                | ✅ Aplicada |
-| 10  | **Rollback corrigido:** alvos identificados por correlation keys e relações estruturais provadas. Sem busca textual ou inferência por `record_id` isolado. Contrato único para primeira execução e repetição idempotente. Histórico preservado por schema provado. R13 v8 não reutilizado.                                                                            | ✅ Aplicada |
-| 11  | **Duas listas separadas:** lista de "ações futuras explicitamente autorizáveis" e lista de "ações proibidas". Esclarecimento de que chamar endpoints não altera o backend.                                                                                                                                                                                            | ✅ Aplicada |
-| 12  | **GO/NO-GO corrigido:** corresponde ao round único. Todos os GO são objetivos e prováveis. Qualquer divergência é NO-GO e dispara PARE.                                                                                                                                                                                                                               | ✅ Aplicada |
-| 13  | **Tratamento de evidências:** artefato privado contém resultados completos e IDs integrais. Sanitização apenas no resumo de chat. Sem exposição de credenciais.                                                                                                                                                                                                       | ✅ Aplicada |
-| 14  | **Prompt futuro removido:** seção "Autorização futura ainda não concedida" sem texto executável.                                                                                                                                                                                                                                                                      | ✅ Aplicada |
-| 15  | **Registro final:** bloco JSON exato registrado abaixo. Relatório item por item apresentado. Único arquivo alterado: `PLAN_PORTA_2D2B_ENTRY.md`.                                                                                                                                                                                                                      | ✅ Aplicada |
+| #   | Correção                                                                                                                                                                                                                                     | Status      |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| 1   | **Total e fases corrigidos:** 8 negativos (A1–A8), 5 funcionais (B1–B5), 2 rollback (C1–C2), 1 probe (D1) = **16 chamadas**. B6/B7 renomeados para C1/C2 em todas as tabelas, referências e relatório final.                                 | ✅ Aplicada |
+| 2   | **Ordem de execução corrigida:** confirmar flag=false; A1→503; habilitar true; A2–A8, B1–B5, C1–C2; restaurar false; D1→503.                                                                                                                 | ✅ Aplicada |
+| 3   | **`com_eventos_integracao` delta unificado:** valor único +5 (B1, B3, B4, B5, C1 compensador; B2=0, C2=0). Eliminado o valor +6 de todas as seções. Derivação linha a linha incluída.                                                        | ✅ Aplicada |
+| 4   | **B5 vs `com_vinculos_externos` resolvido:** delta +3 (B1, B3, B5) com B5 marcado como dependente de S8 (NO-GO até provado). Se S8 provar que B5 não cria vínculo, delta passa a +2.                                                         | ✅ Aplicada |
+| 5   | **C1 execução resolvido:** C1 não cria execução (delta +4 para `com_execucoes_sincronizacao`). Marcado como dependente de S9 (NO-GO até provado). C1 row, totais e fórmula alinhados.                                                        | ✅ Aplicada |
+| 6   | **C2 contrato único:** HTTP 200 com `{ success: true, rolled_back: [], idempotent: true }` e delta 0. Eliminado "200 ou 409". Dependente de S10 (NO-GO até provado).                                                                         | ✅ Aplicada |
+| 7   | **Coluna Headers adicionada:** B1–B5 e C1–C2 incluem coluna Headers com `Content-Type`, `X-AC-Signature: <válido>` e `timestamp: <válido no corpo>`, sem expor secrets.                                                                      | ✅ Aplicada |
+| 8   | **`com_auditoria` delta corrigido:** inferência baseada em `createRule: null` removida. Delta declarado como "a determinar na análise estática" (S11). Sem prova, NO-GO.                                                                     | ✅ Aplicada |
+| 9   | **A4 e A6 corrigidos:** ambos requerem assinatura válida E timestamp válido no corpo, garantindo que cada teste falha pelo motivo específico (A4: sem tipo/id externo; A6: corpo > 256KB).                                                   | ✅ Aplicada |
+| 10  | **S1–S11 como pré-requisitos NO-GO:** S1–S7 mantidos. S8 (B5 vínculo), S9 (C1 execução), S10 (C2 idempotência) e S11 (auditoria delta) adicionados. Todos são NO-GO até prova estática. Documento não declara pronto para execução.          | ✅ Aplicada |
+| 11  | **Consistência geral:** todas as tabelas, GO/NO-GO, referências e relatório final atualizados para eliminar contradições.                                                                                                                    | ✅ Aplicada |
+| 12  | **HMAC corrigido:** assinatura sobre bytes exatos do corpo recebido, sem canonicalização. Timestamp obrigatório, dentro de 5 minutos. Falha fechada se ausente/inválido/fora de janela. `$security.hs256()` marcado como "a comprovar" (S1). | ✅ Aplicada |
+| 13  | **Rollback corrigido:** alvos identificados por correlation keys e relações estruturais. Contrato único para C1 e C2. R13 v8 não reutilizado.                                                                                                | ✅ Aplicada |
+| 14  | **Prompt futuro removido:** seção "Autorização futura ainda não concedida" sem texto executável.                                                                                                                                             | ✅ Aplicada |
+| 15  | **Registro final:** bloco JSON exato registrado abaixo. Único arquivo alterado: `PLAN_PORTA_2D2B_ENTRY.md`.                                                                                                                                  | ✅ Aplicada |
 
 ---
 
@@ -545,7 +592,6 @@ A autorização para executar a Porta 2D.2B será redigida externamente apenas a
 ```json
 {
   "documentation_only": true,
-  "consolidated_table_added": true,
   "files_modified": ["PLAN_PORTA_2D2B_ENTRY.md"],
   "analysis_executed": false,
   "routes_executed": 0,
