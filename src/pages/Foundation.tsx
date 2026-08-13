@@ -13,8 +13,11 @@ import { Porta2D2BAuditBlock } from '@/components/foundation/Porta2D2BAuditBlock
 import { DiagCompensacaoAuditEvidenceBlock } from '@/components/foundation/DiagCompensacaoAuditEvidenceBlock'
 import { DiagCompensacaoDependenciasBlock } from '@/components/foundation/DiagCompensacaoDependenciasBlock'
 import { DiagTransportEvidenceBlock } from '@/components/foundation/DiagTransportEvidenceBlock'
+import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 
 export default function Foundation() {
+  const { isSuperAdmin, loading: loadingSuperAdmin } = useIsSuperAdmin()
+
   return (
     <div className="container mx-auto p-4 space-y-4">
       <div>
@@ -64,7 +67,7 @@ export default function Foundation() {
             <DiagCompensacaoAuditEvidenceBlock />
             <DiagCompensacaoDependenciasBlock />
             <DiagConsultaDependenciasBlock />
-            <Porta2D2BAuditBlock />
+            {isSuperAdmin && !loadingSuperAdmin ? <Porta2D2BAuditBlock /> : null}
           </div>
         </TabsContent>{' '}
       </Tabs>

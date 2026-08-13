@@ -1,5 +1,61 @@
 import pb from '@/lib/pocketbase/client'
 
+const AUDIT_ROUTE = '/backend/v1/integracao/ac/audit-round-2d2b'
+
+export interface CapturedAuditRound2D2B {
+  httpStatus: number
+  rawBody: string
+  parsedBody?: unknown
+}
+
+/**
+ * Captura HTTP real (wire-level) da rota de auditoria 2D.2B.
+ *
+ * Ao contrário de `auditRound2D2B()` (que retorna apenas o corpo já
+ * desserializado pelo SDK), esta função executa uma única GET autenticada
+ * via `fetch()` nativo usando o token do authStore do PocketBase SDK e
+ * captura:
+ *  - `httpStatus`: o status HTTP REAL retornado pelo servidor
+ *    (campo `status` do objeto Response do fetch — nunca fixo).
+ *  - `rawBody`: o texto bruto recebido ANTES de qualquer JSON.parse
+ *    (campo `text()` do Response — nunca JSON.stringify).
+ *  - `parsedBody`: resultado de `JSON.parse(rawBody)` quando possível,
+ *    exposto opcionalmente para leitura estruturada de campos sem
+ *    substituir o `rawBody` exibido.
+ *
+ * Não expõe token, Authorization nem headers sensíveis no retorno.
+ * Não reconstrói o corpo bruto com JSON.stringify.
+ * Não fixa 200.
+ */
+export async function captureAuditRound2D2B(): Promise<CapturedAuditRound2D2B> {
+  const base = (import.meta.env.VITE_POCKETBASE_URL ?? '').replace(/\/$/, '')
+  const url = `${base}${AUDIT_ROUTE}`
+  const token = pb.authStore.token || ''
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: token,
+    },
+  })
+
+  const rawBody = await response.text()
+  const httpStatus = response.status
+
+  let parsedBody: unknown
+  try {
+    parsedBody = rawBody ? JSON.parse(rawBody) : undefined
+  } catch {
+    parsedBody = undefined
+  }
+
+  return {
+    httpStatus,
+    rawBody,
+    parsedBody,
+  }
+}
+
 export interface AuditParamState {
   exists: boolean
   readError: boolean

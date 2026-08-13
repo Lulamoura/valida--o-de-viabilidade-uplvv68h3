@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ClientResponseError } from 'pocketbase'
 import {
   Play,
   Loader2,
@@ -26,22 +25,26 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
-import { auditRound2D2B } from '@/services/audit-round-2d2b'
+import { captureAuditRound2D2B } from '@/services/audit-round-2d2b'
 
 /**
  * Porta 2D.2B — Auditoria (captura manual somente-leitura).
  *
- * Reutiliza exclusivamente `auditRound2D2B()` de src/services/audit-round-2d2b.ts
- * (pb.send GET /backend/v1/integracao/ac/audit-round-2d2b). Nenhuma chamada
- * automática em montagem, renderização ou atualização. A execução ocorre SOMENTE
- * após clique humano no botão e confirmação no diálogo. No máximo uma chamada GET
- * por clique confirmado. Sem retry, polling ou chamada em segundo plano.
+ * Utiliza exclusivamente `captureAuditRound2D2B()` de
+ * src/services/audit-round-2d2b.ts, que executa uma única GET autenticada
+ * (fetch nativo + token do authStore do PocketBase SDK) contra
+ * /backend/v1/integracao/ac/audit-round-2d2b e captura o status HTTP REAL
+ * (response.status) e o corpo bruto REAL (response.text()) — sem fixar 200 e
+ * sem reconstruir o corpo via JSON.stringify. Nenhuma chamada automática em
+ * montagem, renderização ou atualização. A execução ocorre SOMENTE após clique
+ * humano no botão e confirmação no diálogo. No máximo uma chamada GET por clique
+ * confirmado. Sem retry, polling ou chamada em segundo plano.
  */
 
 const ROUTE_PATH = '/backend/v1/integracao/ac/audit-round-2d2b'
 const ROUTE_METHOD = 'GET'
 const LOCALSTORAGE_KEY = 'porta-2d2b-last-audit'
-const FRONTEND_VERSION = 'R13-2D2B-AUDIT-CAPTURE-FRONTEND-20260812-v1'
+const FRONTEND_VERSION = 'R13-2D2B-AUDIT-CAPTURE-FRONTEND-20260813-v2-0.0.134'
 
 interface AuditCapture {
   executed: boolean
@@ -88,27 +91,26 @@ function saveToStorage(data: AuditCapture) {
   }
 }
 
-/** Sanitiza o erro: expõe apenas message e status, sem tokens ou headers. */
-function sanitizeError(err: unknown): { message: string; status: number; body: string } {
-  if (err instanceof ClientResponseError) {
-    const status = err.status ?? 0
-    const message = err.message ?? 'Erro desconhecido'
-    let body = ''
-    try {
-      body = err.response
-        ? JSON.stringify(err.response, null, 2)
-        : JSON.stringify({ message }, null, 2)
-    } catch {
-      body = JSON.stringify({ message }, null, 2)
-    }
-    return { message, status, body }
-  }
+/** Sanitiza o erro de rede: expõe apenas message, sem tokens ou headers. */
+function sanitizeError(err: unknown): { message: string } {
   const message = err instanceof Error ? err.message : 'Erro desconhecido'
-  return {
-    message,
-    status: 0,
-    body: JSON.stringify({ message }, null, 2),
+  return { message }
+}
+
+/** Extrai mensagem estruturada do parsedBody (se houver) sem substituir rawBody. */
+function extrairMensagemErro(parsedBody: unknown): string | null {
+  if (!parsedBody || typeof parsedBody !== 'object') return null
+  try {
+    const obj = parsedBody as { message?: unknown; error?: unknown }
+    if (typeof obj.message === 'string') return obj.message
+    if (typeof obj.error === 'string') return obj.error
+    if (obj.message && typeof obj.message === 'object') {
+      return JSON.stringify(obj.message)
+    }
+  } catch {
+    /* ignore */
   }
+  return null
 }
 
 export function Porta2D2BAuditBlock() {
@@ -123,36 +125,40 @@ export function Porta2D2BAuditBlock() {
     const captured_at = new Date().toISOString()
 
     try {
-      const body = await auditRound2D2B()
-      const raw_body = JSON.stringify(body, null, 2)
+      const { httpStatus, rawBody, parsedBody } = await captureAuditRound2D2B()
+      const ok = httpStatus >= 200 && httpStatus < 300
       const next: AuditCapture = {
         executed: true,
         captured_at,
         route: `GET ${ROUTE_PATH}`,
         method: ROUTE_METHOD,
-        http_status: 200,
-        ok: true,
-        raw_body,
-        error_message: null,
+        http_status: httpStatus,
+        ok,
+        raw_body: rawBody,
+        error_message: ok ? null : extrairMensagemErro(parsedBody),
       }
       saveToStorage(next)
       setCapture(next)
-      toast.success('Auditoria somente-leitura executada — resposta capturada')
+      if (ok) {
+        toast.success('Auditoria somente-leitura executada — resposta capturada')
+      } else {
+        toast.error(`Auditoria retornou HTTP ${httpStatus} — resposta capturada`)
+      }
     } catch (err) {
-      const { message, status, body } = sanitizeError(err)
+      const { message } = sanitizeError(err)
       const next: AuditCapture = {
         executed: true,
         captured_at,
         route: `GET ${ROUTE_PATH}`,
         method: ROUTE_METHOD,
-        http_status: status,
+        http_status: 0,
         ok: false,
-        raw_body: body,
+        raw_body: message,
         error_message: message,
       }
       saveToStorage(next)
       setCapture(next)
-      toast.error(`Auditoria retornou erro (HTTP ${status || 'n/a'}) — erro capturado`)
+      toast.error('Erro de rede ao executar auditoria — erro capturado')
     } finally {
       setExecuting(false)
     }
