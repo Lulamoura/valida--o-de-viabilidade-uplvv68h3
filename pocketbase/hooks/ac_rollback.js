@@ -45,7 +45,74 @@ routerAdd(
     }
     if (!isSuperAdmin) return e.forbiddenError('Apenas superadministrador pode executar rollback')
 
-    var body = e.requestInfo().body || {}
+    // ═══ BODY SIZE: early rejection via Content-Length (defense in depth) ═══
+    var contentLength = parseInt(e.request.header.get('Content-Length') || '0', 10)
+    if (contentLength > 262144) {
+      return e.badRequestError('Corpo da requisicao excede o limite de 256KB')
+    }
+
+    // ═══ RAW BODY: read before any parsing ═══
+    var rawBody = toString(e.request.body)
+    if (!rawBody) {
+      return e.badRequestError('Corpo da requisicao vazio')
+    }
+
+    // ═══ SIGNATURE: identical contract to approved ac_webhook.js ═══
+    var signature = e.request.header.get('X-AC-Signature') || ''
+    if (!signature) {
+      return e.json(401, { error: 'missing_signature', message: 'Assinatura ausente' })
+    }
+
+    var hexPattern = /^[0-9a-fA-F]{64}$/
+    if (!hexPattern.test(signature)) {
+      return e.json(401, {
+        error: 'invalid_signature_format',
+        message: 'Assinatura deve ser uma string hexadecimal de 64 caracteres',
+      })
+    }
+
+    signature = signature.toLowerCase()
+
+    var webhookSecret = $secrets.get('AC_WEBHOOK_SECRET') || ''
+    if (!webhookSecret) {
+      $app.logger().error('AC_WEBHOOK_SECRET not configured')
+      return e.internalServerError('Configuracao do servidor ausente')
+    }
+
+    var expectedSig = $security.hs256(rawBody, webhookSecret)
+
+    if (expectedSig.length !== signature.length) {
+      return e.json(401, { error: 'invalid_signature', message: 'Assinatura invalida' })
+    }
+    var sigDiff = 0
+    for (var si = 0; si < expectedSig.length; si++) {
+      sigDiff |= expectedSig.charCodeAt(si) ^ signature.charCodeAt(si)
+    }
+    if (sigDiff !== 0) {
+      return e.json(401, { error: 'invalid_signature', message: 'Assinatura invalida' })
+    }
+
+    // ═══ PARSE BODY ═══
+    var body
+    try {
+      body = JSON.parse(rawBody)
+    } catch (parseErr) {
+      return e.badRequestError('Corpo da requisicao nao e JSON valido')
+    }
+
+    // ═══ TIMESTAMP: validate before any persistence (fail closed) ═══
+    var eventTimestamp = body.timestamp || body.ts || ''
+    if (!eventTimestamp) {
+      return e.badRequestError('Timestamp obrigatorio ausente')
+    }
+    var eventTime = new Date(eventTimestamp).getTime()
+    if (isNaN(eventTime)) {
+      return e.badRequestError('Timestamp invalido')
+    }
+    if (Math.abs(Date.now() - eventTime) > 300000) {
+      return e.badRequestError('Evento fora da janela de tempo permitida (5 minutos)')
+    }
+
     var externalId = body.external_id || ''
     var entityType = body.entity_type || ''
     var sistemaOrigem = 'activecampaign'
@@ -54,7 +121,7 @@ routerAdd(
       return e.badRequestError('external_id e entity_type sao obrigatorios')
     }
 
-    // ═══ LOCATE RECORDS VIA COMPOSITE EXTERNAL LINK + record_id ═══
+    // ═══ LOCATE RECORDS VIA EXTERNAL LINK ═══
     var vinculos = []
     try {
       vinculos = $app.findRecordsByFilter(
@@ -89,9 +156,17 @@ routerAdd(
       try {
         record = $app.findRecordById(collectionName, recordId)
       } catch (_) {}
-      if (!record) continue
 
-      // For negocios: restore from latest immutable snapshot
+      // ═══ FAIL-CLOSED: no target record ═══
+      if (!record) {
+        return e.json(404, {
+          error: 'Registro vinculado nao encontrado',
+          collection: collectionName,
+          record_id: recordId,
+        })
+      }
+
+      // ═══ BUSINESS RESTORE: only com_negocios, fail-closed for missing snapshot ═══
       if (collectionName === 'com_negocios') {
         var snapshots = []
         try {
@@ -104,52 +179,92 @@ routerAdd(
           )
         } catch (_) {}
 
-        if (snapshots.length > 0) {
-          var snapData = JSON.parse(snapshots[0].getString('snapshot') || '{}')
-          if (snapData.titulo) record.set('titulo', snapData.titulo)
-          if (snapData.etapa) record.set('etapa', snapData.etapa)
-          if (snapData.resultado) record.set('resultado', snapData.resultado)
-          $app.save(record)
-
-          // Create compensating event
-          var evCol = $app.findCollectionByNameOrId('com_eventos_integracao')
-          var compEv = new Record(evCol)
-          compEv.set('sistema_origem', sistemaOrigem)
-          compEv.set('evento_tipo', 'rollback')
-          compEv.set('external_id', externalId)
-          compEv.set(
-            'idempotency_key',
-            $security.sha256(
-              sistemaOrigem + '|rollback|' + externalId + '|' + recordId + '|' + Date.now(),
-            ),
-          )
-          compEv.set(
-            'payload',
-            JSON.stringify({
-              entity_type: entityType,
-              record_id: recordId,
-              snapshot_id: snapshots[0].id,
-            }),
-          )
-          compEv.set('status', 'rollback_executed')
-          $app.save(compEv)
-
-          rolledBack.push({
+        if (snapshots.length === 0) {
+          return e.json(404, {
+            error: 'Nenhum snapshot disponivel para restauracao',
             collection: collectionName,
             record_id: recordId,
-            restored_from_snapshot: snapshots[0].id,
-            compensating_event: compEv.id,
           })
-        } else {
-          rolledBack.push({
-            collection: collectionName,
-            record_id: recordId,
-            restored: false,
-            reason: 'No snapshot available for restoration',
+        }
+
+        var snapshotId = snapshots[0].id
+        var snapData = JSON.parse(snapshots[0].getString('snapshot') || '{}')
+
+        // ═══ DETERMINISTIC IDEMPOTENCY KEY ═══
+        var idempotencyKey = $security.sha256(
+          sistemaOrigem +
+            '|rollback|' +
+            entityType +
+            '|' +
+            externalId +
+            '|' +
+            recordId +
+            '|' +
+            snapshotId,
+        )
+
+        // ═══ IDEMPOTENT EARLY RETURN ═══
+        var existingCompEvent = null
+        try {
+          existingCompEvent = $app.findFirstRecordByData(
+            'com_eventos_integracao',
+            'idempotency_key',
+            idempotencyKey,
+          )
+        } catch (_) {}
+
+        if (existingCompEvent) {
+          return e.json(200, {
+            success: true,
+            rolled_back: [],
+            idempotent: true,
+          })
+        }
+
+        // ═══ ATOMIC RESTORE: business restore + compensating event in one transaction ═══
+        try {
+          $app.runInTransaction(function (txApp) {
+            // Restore business record from snapshot
+            var txRecord = txApp.findRecordById('com_negocios', recordId)
+            if (snapData.titulo) txRecord.set('titulo', snapData.titulo)
+            if (snapData.etapa) txRecord.set('etapa', snapData.etapa)
+            if (snapData.resultado) txRecord.set('resultado', snapData.resultado)
+            txApp.save(txRecord)
+
+            // Create single compensating event
+            var evCol = txApp.findCollectionByNameOrId('com_eventos_integracao')
+            var compEv = new Record(evCol)
+            compEv.set('sistema_origem', sistemaOrigem)
+            compEv.set('evento_tipo', 'rollback')
+            compEv.set('external_id', externalId)
+            compEv.set('idempotency_key', idempotencyKey)
+            compEv.set(
+              'payload',
+              JSON.stringify({
+                entity_type: entityType,
+                record_id: recordId,
+                snapshot_id: snapshotId,
+              }),
+            )
+            compEv.set('status', 'rollback_executed')
+            txApp.save(compEv)
+
+            rolledBack.push({
+              collection: collectionName,
+              record_id: recordId,
+              restored_from_snapshot: snapshotId,
+              compensating_event: compEv.id,
+            })
+          })
+        } catch (txErr) {
+          return e.json(500, {
+            error: 'Falha na restauracao atomica',
+            detail: String(txErr).substring(0, 500),
           })
         }
       } else {
-        // For non-business entities: mark as inactive (no physical delete)
+        // ═══ NON-BUSINESS ENTITIES: deactivate (no physical delete) ═══
+        // For non-business entities, fail-closed if no 'ativo' field
         try {
           record.set('ativo', false)
           $app.save(record)
@@ -159,11 +274,10 @@ routerAdd(
             action: 'deactivated',
           })
         } catch (_) {
-          rolledBack.push({
+          return e.json(500, {
+            error: 'Nao foi possivel desativar o registro',
             collection: collectionName,
             record_id: recordId,
-            restored: false,
-            reason: 'Could not deactivate record',
           })
         }
       }
@@ -178,4 +292,5 @@ routerAdd(
     })
   },
   $apis.requireAuth(),
+  $apis.bodyLimit(262144),
 )
