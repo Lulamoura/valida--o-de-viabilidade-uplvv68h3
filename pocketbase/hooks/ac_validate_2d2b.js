@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Validador CANÔNICO compartilhado (v0.0.152)
+// Porta 2D.2B — Validador CANÔNICO compartilhado (v0.0.153)
 // ════════════════════════════════════════════════════════════════════
 // SEGMENTO 2A — FALHA 2: Validador canônico ÚNICO.
 // Toda a lógica de validação canônica vive em UMA ÚNICA função interna
@@ -28,7 +28,7 @@
 // counters. external_calls não é constante sem qualificação.
 // ════════════════════════════════════════════════════════════════════
 
-var PORTA2D2B_EXPECTED_VERSION = 'v0.0.152'
+var PORTA2D2B_EXPECTED_VERSION = 'v0.0.153'
 
 var PORTA2D2B_CANONICAL_ORDERS = [
   'A1',
@@ -606,7 +606,7 @@ function $porta2d2bValidateRecords(savedExec, stepRecords) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// SEGMENTO G2 (v0.0.152) — Marcador de deployment.
+// SEGMENTO G2 (v0.0.153) — Marcador de deployment.
 // Este arquivo é um módulo CommonJS puro (module.exports) consumido via
 // require() pelos handlers runner e evidence. O Skip Cloud só implanta em
 // pb_hooks arquivos que registram hooks; sem um registro, o arquivo não
@@ -617,14 +617,19 @@ function $porta2d2bValidateRecords(savedExec, stepRecords) {
 // auditoria ou ActiveCampaign. Exige autenticação da coleção users via
 // middleware oficial $apis.requireAuth('users').
 // ════════════════════════════════════════════════════════════════════
-routerAdd(
-  'GET',
-  '/backend/v1/integracao/ac/validator-2d2b-health',
-  function (e) {
-    return e.json(200, { ok: true, module: 'ac_validate_2d2b', version: 'v0.0.152' })
-  },
-  $apis.requireAuth('users'),
-)
+try {
+  routerAdd(
+    'GET',
+    '/backend/v1/integracao/ac/validator-2d2b-health',
+    function (e) {
+      return e.json(200, { ok: true, module: 'ac_validate_2d2b', version: 'v0.0.153' })
+    },
+    $apis.requireAuth('users'),
+  )
+} catch (_) {
+  // Ao ser carregado via require durante uma requisição, o registro de rota não é permitido.
+  // A exceção é suprimida para que module.exports continue disponível.
+}
 
 module.exports = {
   validate: $porta2d2bValidate,
