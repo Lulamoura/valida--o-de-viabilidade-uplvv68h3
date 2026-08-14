@@ -1,6 +1,29 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Runner instrumentado fail-closed (v0.0.137)
+// Porta 2D.2B — Runner instrumentado fail-closed (v0.0.142)
 // ════════════════════════════════════════════════════════════════════
+// Correções 0.0.142 (SEGMENTO 2 — TERMINALIZAÇÃO FAIL-CLOSED):
+//  T1 — Validar ANTES de persistir pass. O bug 0.0.141 persistia
+//       estado=pass e só depois executava a validação canônica pré-GO;
+//       se falhava, tentava mutar o registro já terminal, o que o hook
+//       de imutabilidade bloqueava corretamente — deixando a execução
+//       terminalizada como pass apesar da falha de validação.
+//  T2 — Nova ordem: enquanto running, reler exec + 16 etapas; montar
+//       projeção/candidato em memória com todos os campos finais
+//       (estado=pass, decisão, counters, counts_after, flag_final);
+//       rodar a validação canônica ($porta2d2bValidateProjection) sobre
+//       a projeção + etapas relidas ANTES de persistir pass; se aprovar,
+//       única transição running → pass, reler, confirmar, terminalSaved;
+//       se falhar/erro/ambiguidade, única transição running → blocked
+//       (ou fail conforme contrato vigente), reler, confirmar, NO-GO.
+//  T3 — Nenhum caminho altera registro depois de terminalizado. Não há
+//       mais safeUpdateExec após terminalSaved.
+//  T4 — terminalSaved só true após save confirmado + releitura coerente.
+//  T5 — GO só existe quando estado=pass confirmado após validação
+//       canônica prévia (não pós-hoc).
+//  Imutabilidade server-side (ac_immutable_porta_2d2b.js) preservada —
+//  não afrouxada, sem bypass administrativo.
+//  Contratos funcionais A1–D1, payloads, deltas, hash, sanitização,
+//  truncamento, contadores PRESERVADOS.
 // Correções 0.0.137:
 //  4 — safeUpdateExec retorna estrutura, relê e valida; terminalSaved só
 //       após confirmação de save + reread; gravação terminal falhou →
@@ -51,7 +74,7 @@ routerAdd(
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
     // ─── Precondição de evidência ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.137'
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.142'
     var execCol = null
     var evidenceCol = null
     try {
@@ -1472,11 +1495,39 @@ routerAdd(
         }
       }
 
-      // ─── CORREÇÃO 4: Persistir estado terminal com safeUpdateExec estruturado ───
+      // ══════════════════════════════════════════════════════════════════
+      // v0.0.142 — TERMINALIZAÇÃO FAIL-CLOSED (ordem correta)
+      // ══════════════════════════════════════════════════════════════════
+      // O bug 0.0.141: persistia estado=pass e SÓ DEPOIS executava a
+      // validação canônica pré-GO. Se a validação falhava, tentava
+      // alterar o registro já terminal — o hook de imutabilidade
+      // (ac_immutable_porta_2d2b.js) bloqueia corretamente essa mutação,
+      // deixando a execução terminalizada como pass apesar da falha.
+      //
+      // Nova ordem (fail-closed):
+      //   1. Enquanto ainda running, RELER execução + 16 etapas do disco.
+      //   2. Montar projeção/candidato em memória com TODOS os campos
+      //      finais pretendidos (estado=pass, decisão final, counters,
+      //      counts_after, flag_final, etc.).
+      //   3. Executar a validação canônica completa ($porta2d2bValidate)
+      //      sobre a projeção + etapas relidas, ANTES de persistir pass.
+      //   4. Se aprovar: única transição running → pass; reler; confirmar
+      //      estado e campos críticos; só então terminalSaved=true e GO.
+      //   5. Se falhar/erro/ambiguidade de leitura: NÃO persiste pass;
+      //      única transição running → blocked (ou fail, conforme contrato
+      //      vigente); reler e confirmar terminalização; NO-GO.
+      //   6. Nenhum caminho altera registro depois de terminalizado.
+      //   7. terminalSaved só true após save confirmado + releitura coerente.
+      //   8. GO só existe quando estado=pass confirmado após validação
+      //      canônica prévia (não pós-hoc).
+      // ══════════════════════════════════════════════════════════════════
+
       if (execRecord && !terminalSaved) {
+        // Determinar estado terminal pretendido conforme contrato vigente.
         var terminalEstado = 'pass'
         if (overallStatus === 'STOP') terminalEstado = 'fail'
         else if (overallStatus === 'BLOCKED') terminalEstado = 'blocked'
+
         var decisaoFinal = JSON.stringify({
           porta: '2D.2B',
           overall_status: overallStatus,
@@ -1486,8 +1537,152 @@ routerAdd(
           delta_match: deltaMatch,
           persist_failure: persistFailure,
         })
-        var termSave = safeUpdateExec({
+
+        // ─── (1) Reler execução + 16 etapas ENQUANTO running ───
+        // A execução neste momento ainda está em 'running' (ou 'started'
+        // se checkTerminal nunca correu — inofensivo). Nada terminal.
+        var rereadExec = null
+        var rereadSteps = []
+        var readAmbiguous = false
+        try {
+          rereadExec = $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
+        } catch (reErr) {
+          readAmbiguous = true
+          stopReason =
+            'Terminalização abortada: falha ao reler execução pré-terminal: ' +
+            String(reErr).substring(0, 150)
+        }
+        if (rereadExec) {
+          var rereadEstado = rereadExec.getString('estado')
+          // Se por acaso já está terminal (não deveria), NÃO mutar — fail.
+          if (
+            rereadEstado === 'pass' ||
+            rereadEstado === 'fail' ||
+            rereadEstado === 'blocked' ||
+            rereadEstado === 'aborted'
+          ) {
+            readAmbiguous = true
+            stopReason =
+              'Terminalização abortada: execução já terminal (' +
+              rereadEstado +
+              ') ao reler pré-terminal'
+          } else {
+            // Reler as 16 etapas do disco
+            try {
+              var rereadStepRecs = $app.findRecordsByFilter(
+                'com_etapas_porta_2d2b',
+                "execucao_id = '" + execId + "'",
+                'ordem',
+                200,
+                0,
+              )
+              for (var rsi = 0; rsi < rereadStepRecs.length; rsi++) {
+                rereadSteps.push(rereadStepRecs[rsi])
+              }
+            } catch (rsErr) {
+              readAmbiguous = true
+              stopReason =
+                'Terminalização abortada: falha ao reler etapas pré-terminal: ' +
+                String(rsErr).substring(0, 150)
+            }
+          }
+        } else if (!readAmbiguous) {
+          readAmbiguous = true
+          stopReason = 'Terminalização abortada: execução não encontrada ao reler pré-terminal'
+        }
+
+        // ─── (2) Montar projeção/candidato em memória ───
+        // Projeção com TODOS os campos finais pretendidos, inclusive
+        // estado=pass e decisão final. Ainda não persistido.
+        var projection = {
+          id: execId,
           estado: terminalEstado,
+          versao_commit: EXPECTED_SCHEMA_VERSION,
+          flag_final: JSON.stringify(flagFinal || readFlag()),
+          decisao: decisaoFinal,
+          counts_before: JSON.stringify(countsBefore),
+          counts_after: JSON.stringify(countsAfter || {}),
+          allowed_internal_calls: allowedInternalCalls,
+          blocked_external_attempts: blockedExternalAttempts,
+          activecampaign_calls: activecampaignCalls,
+          prova_zero_chamadas_externas: blockedExternalAttempts === 0,
+        }
+
+        // ─── (3) Validar ANTES de persistir ───
+        // Se houver falha/ambiguidade de leitura, NÃO persiste pass.
+        // Para o caso pass, exigimos validação canônica aprovada sobre
+        // a projeção e as etapas relidas.
+        var validationPassed = false
+        var validationReason = ''
+        var validationAnomalies = []
+
+        if (!readAmbiguous && terminalEstado === 'pass') {
+          // Pré-condições estruturais mínimas antes da validação canônica.
+          if (rereadSteps.length !== 16) {
+            validationReason =
+              'Pré-validação: esperadas 16 etapas relidas, obtidas ' + rereadSteps.length
+          } else if (callResults.length !== 16) {
+            validationReason =
+              'Pré-validação: esperadas 16 callResults, obtidas ' + callResults.length
+          } else if (!deltaMatch) {
+            validationReason = 'Pré-validação: delta final não corresponde'
+          } else if (overallStatus !== 'PASS') {
+            validationReason = 'Pré-validação: overallStatus=' + overallStatus + ' (esperado PASS)'
+          } else {
+            // Validar canonicamente a projeção + etapas relidas.
+            // A validação canônica $porta2d2bValidate lê do disco via $app;
+            // como ainda não persistimos pass, ela verá estado=running e
+            // portanto NÃO aprovaria pass. Para validar a projeção de pass
+            // sem persistir, aplicamos a validação sobre uma imagem em
+            // memória equivalente ao que seria relido após o save.
+            var projectionValidation = $porta2d2bValidateProjection(
+              $app,
+              execId,
+              projection,
+              rereadSteps,
+            )
+            validationPassed = projectionValidation.pass
+            validationReason = projectionValidation.reason
+            validationAnomalies = projectionValidation.anomalies || []
+            if (!validationPassed) {
+              validationReason = 'Pre-GO canonical validation failed: ' + validationReason
+            }
+          }
+        } else if (!readAmbiguous && terminalEstado !== 'pass') {
+          // fail/blocked: sem necessidade de validação canônica de pass.
+          // A terminalização para fail/blocked é sempre permitida (não GO).
+          validationPassed = true
+        }
+
+        // ─── (4)/(5) Única transição terminal ───
+        var finalTerminalEstado = terminalEstado
+        if (readAmbiguous) {
+          // Falha/ambiguidade de leitura → blocked, nunca pass.
+          finalTerminalEstado = 'blocked'
+          overallStatus = 'BLOCKED'
+          validationPassed = false
+        } else if (terminalEstado === 'pass' && !validationPassed) {
+          // Validação canônica falhou → blocked, nunca pass.
+          finalTerminalEstado = 'blocked'
+          overallStatus = 'BLOCKED'
+          if (!stopReason) stopReason = validationReason || 'Canonical validation failed'
+        }
+
+        // Decisão final coerente com o estado terminal efetivamente gravado.
+        var finalDecisao = JSON.stringify({
+          porta: '2D.2B',
+          overall_status: overallStatus,
+          go_no_go: overallStatus === 'PASS' ? 'GO' : 'NO-GO',
+          stop_reason: stopReason,
+          total_calls: callResults.length,
+          delta_match: deltaMatch,
+          persist_failure: persistFailure,
+          pre_go_validation:
+            finalTerminalEstado === 'blocked' && validationReason ? validationReason : undefined,
+        })
+
+        var termSave = safeUpdateExec({
+          estado: finalTerminalEstado,
           finished_at: new Date().toISOString(),
           counts_after: JSON.stringify(countsAfter || {}),
           flag_final: JSON.stringify(flagFinal || readFlag()),
@@ -1495,51 +1690,72 @@ routerAdd(
           allowed_internal_calls: allowedInternalCalls,
           blocked_external_attempts: blockedExternalAttempts,
           activecampaign_calls: activecampaignCalls,
-          decisao: decisaoFinal,
+          decisao: finalDecisao,
         })
+
+        // ─── (7) terminalSaved só após save confirmado + releitura coerente ───
         if (termSave.saved && termSave.reread) {
           var tsv = termSave.reread.getString('estado')
-          if (tsv === terminalEstado) {
-            terminalSaved = true
+          if (tsv === finalTerminalEstado) {
+            // Confirmar campos críticos da releitura.
+            var decOk = true
+            try {
+              var decObj = JSON.parse(termSave.reread.getString('decisao') || '{}')
+              if (decObj.overall_status !== overallStatus) decOk = false
+            } catch (_) {
+              decOk = false
+            }
+            if (
+              finalTerminalEstado === 'pass' &&
+              termSave.reread.getInt('activecampaign_calls') !== 0
+            )
+              decOk = false
+            if (
+              finalTerminalEstado === 'pass' &&
+              termSave.reread.getInt('blocked_external_attempts') !== 0
+            )
+              decOk = false
+            if (decOk) {
+              terminalSaved = true
+            } else {
+              // Releitura incoerente — registro já terminal, NÃO mutar.
+              // O registro está em finalTerminalEstado (pass/blocked/fail),
+              // que é terminal. Não tentamos corrigir: reportamos NO-GO.
+              terminalSaved = false
+              overallStatus = 'BLOCKED'
+              stopReason =
+                'Terminal save reread incoerente: estado=' +
+                tsv +
+                ' mas campos críticos divergentes'
+            }
           } else {
+            // estado divergente — registro pode estar terminal; NÃO mutar.
+            terminalSaved = false
             overallStatus = 'BLOCKED'
             stopReason =
-              'Terminal save reread mismatch: estado=' + tsv + ' expected=' + terminalEstado
+              'Terminal save reread mismatch: estado=' + tsv + ' expected=' + finalTerminalEstado
           }
         } else {
-          // CORREÇÃO 4: gravação terminal falhou → BLOCKED/NO-GO
+          // Gravação terminal falhou → BLOCKED/NO-GO. NÃO há caminho de
+          // mutação pós-terminal aqui: o registro permanece running/started.
+          terminalSaved = false
           overallStatus = 'BLOCKED'
           stopReason = 'Terminal save failed: ' + (termSave.error || 'unknown')
         }
-      }
 
-      // ─── CORREÇÃO 4: ANTES de GO, reler exec + 16 etapas e validar ───
-      // CORREÇÃO 9: usa validação canônica compartilhada $porta2d2bValidate
-      // (mesma função da rota de consulta) — não duplica lógica.
-      if (overallStatus === 'PASS' && terminalSaved) {
-        var preGoValidation = $porta2d2bValidate($app, execId)
-        if (!preGoValidation.pass) {
-          overallStatus = 'BLOCKED'
-          stopReason = 'Pre-GO canonical validation failed: ' + preGoValidation.reason
-          // tentar marcar blocked
-          safeUpdateExec({
-            estado: 'blocked',
-            decisao: JSON.stringify({
-              porta: '2D.2B',
-              overall_status: 'BLOCKED',
-              go_no_go: 'NO-GO',
-              stop_reason: stopReason,
-              total_calls: callResults.length,
-              pre_go_validation: preGoValidation.reason,
-              anomalies: preGoValidation.anomalies.slice(0, 10),
-            }),
-          })
+        // ─── (8) GO só quando pass confirmado após validação canônica prévia ───
+        // terminalSaved só é true se finalTerminalEstado === 'pass' E a
+        // validação canônica foi aprovada ANTES do save. Caso contrário,
+        // overallStatus já foi ajustado para BLOCKED acima.
+        if (terminalSaved && finalTerminalEstado !== 'pass') {
           terminalSaved = false
+          overallStatus = 'BLOCKED'
+          if (!stopReason) stopReason = 'Terminalização não-pass não pode emitir GO'
         }
-      } else if (overallStatus !== 'PASS' && !terminalSaved) {
-        // garante que não devolve GO sem terminalSaved
-        overallStatus = 'BLOCKED'
-        if (!stopReason) stopReason = 'Terminal state not persisted — cannot return GO'
+        if (overallStatus === 'PASS' && !terminalSaved) {
+          overallStatus = 'BLOCKED'
+          if (!stopReason) stopReason = 'Terminal state not persisted — cannot return GO'
+        }
       }
     } finally {
       try {
