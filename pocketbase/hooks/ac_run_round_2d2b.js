@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Runner instrumentado fail-closed (v0.0.143)
+// Porta 2D.2B — Runner instrumentado fail-closed (v0.0.145)
 // ════════════════════════════════════════════════════════════════════
 // Correções 0.0.142 (SEGMENTO 2 — TERMINALIZAÇÃO FAIL-CLOSED):
 //  T1 — Validar ANTES de persistir pass. O bug 0.0.141 persistia
@@ -74,7 +74,7 @@ routerAdd(
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
     // ─── Precondição de evidência ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.143'
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.145'
     var execCol = null
     var evidenceCol = null
     try {
@@ -116,6 +116,19 @@ routerAdd(
     function readFlag() {
       try {
         var r = $app.findFirstRecordByData('com_parametros', 'chave', 'ac_webhook_enabled')
+        return { valor: r.getString('valor'), ativo: r.getBool('ativo'), error: null }
+      } catch (er) {
+        return { valor: null, ativo: null, error: String(er).substring(0, 200) }
+      }
+    }
+    // CORREÇÃO 1 (v0.0.145) — readFlagWith(app): variante transacional.
+    // readFlag() original usa $app diretamente e viola o isolamento quando
+    // invocada dentro de $app.runInTransaction((txApp) => { ... }). Esta
+    // variante recebe a instância da aplicação como parâmetro (txApp) e usa-a
+    // exclusivamente. Fora da transação, readFlag() original permanece.
+    function readFlagWith(app) {
+      try {
+        var r = app.findFirstRecordByData('com_parametros', 'chave', 'ac_webhook_enabled')
         return { valor: r.getString('valor'), ativo: r.getBool('ativo'), error: null }
       } catch (er) {
         return { valor: null, ativo: null, error: String(er).substring(0, 200) }
@@ -1593,7 +1606,7 @@ routerAdd(
                 id: execId,
                 estado: 'pass',
                 versao_commit: EXPECTED_SCHEMA_VERSION,
-                flag_final: JSON.stringify(flagFinal || readFlag()),
+                flag_final: JSON.stringify(flagFinal || readFlagWith(txApp)),
                 decisao: decisaoFinal,
                 counts_before: JSON.stringify(countsBefore),
                 counts_after: JSON.stringify(countsAfter || {}),
@@ -1614,7 +1627,7 @@ routerAdd(
               txExec.set('estado', 'pass')
               txExec.set('finished_at', new Date().toISOString())
               txExec.set('counts_after', JSON.stringify(countsAfter || {}))
-              txExec.set('flag_final', JSON.stringify(flagFinal || readFlag()))
+              txExec.set('flag_final', JSON.stringify(flagFinal || readFlagWith(txApp)))
               txExec.set('prova_zero_chamadas_externas', blockedExternalAttempts === 0)
               txExec.set('allowed_internal_calls', allowedInternalCalls)
               txExec.set('blocked_external_attempts', blockedExternalAttempts)
@@ -1672,6 +1685,25 @@ routerAdd(
               } catch (_) {}
               if (!savedFlagFinal || savedFlagFinal.valor !== 'false')
                 throw new Error('flag_final não é false após save')
+
+              // (8b) CORREÇÃO 2 (v0.0.145) — VALIDAÇÃO CANÔNICA COMPLETA PÓS-SAVE.
+              //      Após txApp.save(txExec) e a releitura de savedExec, normaliza
+              //      o registro relido e as 16 txSteps e chama o MESMO núcleo
+              //      validateCore usado na validação pré-save (via
+              //      $porta2d2bValidateProjection). Não duplica regras: é a
+              //      mesma função. As verificações manuais acima fornecem
+              //      mensagens específicas; validateCore é a guarda final.
+              //      Se falhar, throw → rollback integral da transação.
+              var normalizedSavedExec = normalizeExecRecord(savedExec)
+              var normalizedTxSteps = []
+              for (var nti = 0; nti < txSteps.length; nti++) {
+                normalizedTxSteps.push(normalizeStepRecord(txSteps[nti]))
+              }
+              var postSaveResult = validateCore(normalizedSavedExec, normalizedTxSteps)
+              if (postSaveResult.pass === false)
+                throw new Error(
+                  'Post-save canonical validation failed: ' + (postSaveResult.reason || 'unknown'),
+                )
 
               // Se chegou aqui, transação comita com sucesso
               transactionSucceeded = true
