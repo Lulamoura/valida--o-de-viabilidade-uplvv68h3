@@ -14,7 +14,7 @@
 // ════════════════════════════════════════════════════════════════════
 routerAdd(
   'GET',
-  '/backend/v1/integracao/ac/evidence-porta-2d2b/:execId',
+  '/backend/v1/integracao/ac/evidence-porta-2d2b/{execId}',
   (e) => {
     var validator = require(__hooks + '/ac_validate_2d2b.js')
     var authId = e.auth ? e.auth.id : ''
@@ -105,7 +105,7 @@ routerAdd(
     }
 
     var canonical = {
-      route: 'GET /backend/v1/integracao/ac/evidence-porta-2d2b/:execId',
+      route: 'GET /backend/v1/integracao/ac/evidence-porta-2d2b/{execId}',
       route_version: 'R2-EVIDENCE-2D2B-20260813-FAILCLOSED-v0.0.137',
       read_only: true,
       writes_performed: 0,
