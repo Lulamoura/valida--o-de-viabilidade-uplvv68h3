@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Runner instrumentado fail-closed (v0.0.142)
+// Porta 2D.2B — Runner instrumentado fail-closed (v0.0.143)
 // ════════════════════════════════════════════════════════════════════
 // Correções 0.0.142 (SEGMENTO 2 — TERMINALIZAÇÃO FAIL-CLOSED):
 //  T1 — Validar ANTES de persistir pass. O bug 0.0.141 persistia
@@ -74,7 +74,7 @@ routerAdd(
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
     // ─── Precondição de evidência ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.142'
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.143'
     var execCol = null
     var evidenceCol = null
     try {
@@ -1496,30 +1496,43 @@ routerAdd(
       }
 
       // ══════════════════════════════════════════════════════════════════
-      // v0.0.142 — TERMINALIZAÇÃO FAIL-CLOSED (ordem correta)
+      // v0.0.143 — TERMINALIZAÇÃO ATÔMICA (SEGMENTO 2A — FALHA 1)
       // ══════════════════════════════════════════════════════════════════
-      // O bug 0.0.141: persistia estado=pass e SÓ DEPOIS executava a
-      // validação canônica pré-GO. Se a validação falhava, tentava
-      // alterar o registro já terminal — o hook de imutabilidade
-      // (ac_immutable_porta_2d2b.js) bloqueia corretamente essa mutação,
-      // deixando a execução terminalizada como pass apesar da falha.
+      // FALHA 1 (0.0.142): a terminalização pass validava a projeção em
+      // memória e só DEPOIS persistia via safeUpdateExec (sem atomicidade).
+      // Uma falha entre a validação e o save (ou uma releitura divergente)
+      // podia deixar pass inconsistente — e o hook de imutabilidade
+      // bloqueava qualquer correção pós-terminal.
       //
-      // Nova ordem (fail-closed):
-      //   1. Enquanto ainda running, RELER execução + 16 etapas do disco.
-      //   2. Montar projeção/candidato em memória com TODOS os campos
-      //      finais pretendidos (estado=pass, decisão final, counters,
-      //      counts_after, flag_final, etc.).
-      //   3. Executar a validação canônica completa ($porta2d2bValidate)
-      //      sobre a projeção + etapas relidas, ANTES de persistir pass.
-      //   4. Se aprovar: única transição running → pass; reler; confirmar
-      //      estado e campos críticos; só então terminalSaved=true e GO.
-      //   5. Se falhar/erro/ambiguidade de leitura: NÃO persiste pass;
-      //      única transição running → blocked (ou fail, conforme contrato
-      //      vigente); reler e confirmar terminalização; NO-GO.
-      //   6. Nenhum caminho altera registro depois de terminalizado.
-      //   7. terminalSaved só true após save confirmado + releitura coerente.
-      //   8. GO só existe quando estado=pass confirmado após validação
-      //      canônica prévia (não pós-hoc).
+      // Nova ordem (transação atômica):
+      //   - Se terminalEstado === 'pass': tudo acontece dentro de
+      //     $app.runInTransaction((txApp) => { ... }). Dentro dela
+      //     TODA leitura/escrita usa txApp (NUNCA $app). O callback:
+      //       (1) relê execução com txApp e confirma estado=running/started;
+      //       (2) relê exatamente as 16 etapas com txApp;
+      //       (3) monta projeção em memória com TODOS os campos finais;
+      //       (4) executa validação canônica (validateCore via
+      //           $porta2d2bValidateProjection) sobre projeção + etapas
+      //           relidas; se falhar, throw → rollback integral;
+      //       (5) aplica campos finais e transição running → pass no
+      //           registro transacional;
+      //       (6) salva com txApp;
+      //       (7) relê o registro salvo usando txApp;
+      //       (8) confirma estado=pass e campos críticos; divergência
+      //           → throw → rollback integral.
+      //     Se a transação conclui sem throw, transactionSucceeded=true e
+      //     terminalSaved=true (GO). Qualquer erro/divergência/falha de
+      //     validação provoca rollback integral do pass — a execução
+      //     permanece não-terminal (running) — e então fazemos UMA ÚNICA
+      //     transição running → blocked fora da transação.
+      //   - Se terminalEstado !== 'pass' (fail/blocked): mantém a lógica
+      //     atual de safeUpdateExec (sem transação).
+      //   - Nenhum caminho altera registro depois de terminalizado.
+      //   - terminalSaved=true e GO SOMENTE após a transação de pass
+      //     concluir com sucesso.
+      //   - $porta2d2bValidateProjection NÃO usa `app` internamente (o
+      //     parâmetro é recebido mas nunca referenciado no corpo), então
+      //     passar txApp é seguro e não causa deadlock.
       // ══════════════════════════════════════════════════════════════════
 
       if (execRecord && !terminalSaved) {
@@ -1528,147 +1541,6 @@ routerAdd(
         if (overallStatus === 'STOP') terminalEstado = 'fail'
         else if (overallStatus === 'BLOCKED') terminalEstado = 'blocked'
 
-        var decisaoFinal = JSON.stringify({
-          porta: '2D.2B',
-          overall_status: overallStatus,
-          go_no_go: overallStatus === 'PASS' ? 'GO' : 'NO-GO',
-          stop_reason: stopReason,
-          total_calls: callResults.length,
-          delta_match: deltaMatch,
-          persist_failure: persistFailure,
-        })
-
-        // ─── (1) Reler execução + 16 etapas ENQUANTO running ───
-        // A execução neste momento ainda está em 'running' (ou 'started'
-        // se checkTerminal nunca correu — inofensivo). Nada terminal.
-        var rereadExec = null
-        var rereadSteps = []
-        var readAmbiguous = false
-        try {
-          rereadExec = $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
-        } catch (reErr) {
-          readAmbiguous = true
-          stopReason =
-            'Terminalização abortada: falha ao reler execução pré-terminal: ' +
-            String(reErr).substring(0, 150)
-        }
-        if (rereadExec) {
-          var rereadEstado = rereadExec.getString('estado')
-          // Se por acaso já está terminal (não deveria), NÃO mutar — fail.
-          if (
-            rereadEstado === 'pass' ||
-            rereadEstado === 'fail' ||
-            rereadEstado === 'blocked' ||
-            rereadEstado === 'aborted'
-          ) {
-            readAmbiguous = true
-            stopReason =
-              'Terminalização abortada: execução já terminal (' +
-              rereadEstado +
-              ') ao reler pré-terminal'
-          } else {
-            // Reler as 16 etapas do disco
-            try {
-              var rereadStepRecs = $app.findRecordsByFilter(
-                'com_etapas_porta_2d2b',
-                "execucao_id = '" + execId + "'",
-                'ordem',
-                200,
-                0,
-              )
-              for (var rsi = 0; rsi < rereadStepRecs.length; rsi++) {
-                rereadSteps.push(rereadStepRecs[rsi])
-              }
-            } catch (rsErr) {
-              readAmbiguous = true
-              stopReason =
-                'Terminalização abortada: falha ao reler etapas pré-terminal: ' +
-                String(rsErr).substring(0, 150)
-            }
-          }
-        } else if (!readAmbiguous) {
-          readAmbiguous = true
-          stopReason = 'Terminalização abortada: execução não encontrada ao reler pré-terminal'
-        }
-
-        // ─── (2) Montar projeção/candidato em memória ───
-        // Projeção com TODOS os campos finais pretendidos, inclusive
-        // estado=pass e decisão final. Ainda não persistido.
-        var projection = {
-          id: execId,
-          estado: terminalEstado,
-          versao_commit: EXPECTED_SCHEMA_VERSION,
-          flag_final: JSON.stringify(flagFinal || readFlag()),
-          decisao: decisaoFinal,
-          counts_before: JSON.stringify(countsBefore),
-          counts_after: JSON.stringify(countsAfter || {}),
-          allowed_internal_calls: allowedInternalCalls,
-          blocked_external_attempts: blockedExternalAttempts,
-          activecampaign_calls: activecampaignCalls,
-          prova_zero_chamadas_externas: blockedExternalAttempts === 0,
-        }
-
-        // ─── (3) Validar ANTES de persistir ───
-        // Se houver falha/ambiguidade de leitura, NÃO persiste pass.
-        // Para o caso pass, exigimos validação canônica aprovada sobre
-        // a projeção e as etapas relidas.
-        var validationPassed = false
-        var validationReason = ''
-        var validationAnomalies = []
-
-        if (!readAmbiguous && terminalEstado === 'pass') {
-          // Pré-condições estruturais mínimas antes da validação canônica.
-          if (rereadSteps.length !== 16) {
-            validationReason =
-              'Pré-validação: esperadas 16 etapas relidas, obtidas ' + rereadSteps.length
-          } else if (callResults.length !== 16) {
-            validationReason =
-              'Pré-validação: esperadas 16 callResults, obtidas ' + callResults.length
-          } else if (!deltaMatch) {
-            validationReason = 'Pré-validação: delta final não corresponde'
-          } else if (overallStatus !== 'PASS') {
-            validationReason = 'Pré-validação: overallStatus=' + overallStatus + ' (esperado PASS)'
-          } else {
-            // Validar canonicamente a projeção + etapas relidas.
-            // A validação canônica $porta2d2bValidate lê do disco via $app;
-            // como ainda não persistimos pass, ela verá estado=running e
-            // portanto NÃO aprovaria pass. Para validar a projeção de pass
-            // sem persistir, aplicamos a validação sobre uma imagem em
-            // memória equivalente ao que seria relido após o save.
-            var projectionValidation = $porta2d2bValidateProjection(
-              $app,
-              execId,
-              projection,
-              rereadSteps,
-            )
-            validationPassed = projectionValidation.pass
-            validationReason = projectionValidation.reason
-            validationAnomalies = projectionValidation.anomalies || []
-            if (!validationPassed) {
-              validationReason = 'Pre-GO canonical validation failed: ' + validationReason
-            }
-          }
-        } else if (!readAmbiguous && terminalEstado !== 'pass') {
-          // fail/blocked: sem necessidade de validação canônica de pass.
-          // A terminalização para fail/blocked é sempre permitida (não GO).
-          validationPassed = true
-        }
-
-        // ─── (4)/(5) Única transição terminal ───
-        var finalTerminalEstado = terminalEstado
-        if (readAmbiguous) {
-          // Falha/ambiguidade de leitura → blocked, nunca pass.
-          finalTerminalEstado = 'blocked'
-          overallStatus = 'BLOCKED'
-          validationPassed = false
-        } else if (terminalEstado === 'pass' && !validationPassed) {
-          // Validação canônica falhou → blocked, nunca pass.
-          finalTerminalEstado = 'blocked'
-          overallStatus = 'BLOCKED'
-          if (!stopReason) stopReason = validationReason || 'Canonical validation failed'
-        }
-
-        // Decisão final coerente com o estado terminal efetivamente gravado.
         var finalDecisao = JSON.stringify({
           porta: '2D.2B',
           overall_status: overallStatus,
@@ -1677,84 +1549,238 @@ routerAdd(
           total_calls: callResults.length,
           delta_match: deltaMatch,
           persist_failure: persistFailure,
-          pre_go_validation:
-            finalTerminalEstado === 'blocked' && validationReason ? validationReason : undefined,
         })
 
-        var termSave = safeUpdateExec({
-          estado: finalTerminalEstado,
-          finished_at: new Date().toISOString(),
-          counts_after: JSON.stringify(countsAfter || {}),
-          flag_final: JSON.stringify(flagFinal || readFlag()),
-          prova_zero_chamadas_externas: blockedExternalAttempts === 0,
-          allowed_internal_calls: allowedInternalCalls,
-          blocked_external_attempts: blockedExternalAttempts,
-          activecampaign_calls: activecampaignCalls,
-          decisao: finalDecisao,
-        })
+        var decisaoFinal = finalDecisao
 
-        // ─── (7) terminalSaved só após save confirmado + releitura coerente ───
-        if (termSave.saved && termSave.reread) {
-          var tsv = termSave.reread.getString('estado')
-          if (tsv === finalTerminalEstado) {
-            // Confirmar campos críticos da releitura.
-            var decOk = true
-            try {
-              var decObj = JSON.parse(termSave.reread.getString('decisao') || '{}')
-              if (decObj.overall_status !== overallStatus) decOk = false
-            } catch (_) {
-              decOk = false
+        if (terminalEstado === 'pass') {
+          // ─── CAMINHO PASS: transação atômica ───
+          var transactionSucceeded = false
+          var transactionError = ''
+
+          try {
+            $app.runInTransaction(function (txApp) {
+              // (1) RELER execução com txApp e confirmar estado=running
+              var txExec = txApp.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
+              var txEstado = txExec.getString('estado')
+              if (
+                txEstado === 'pass' ||
+                txEstado === 'fail' ||
+                txEstado === 'blocked' ||
+                txEstado === 'aborted'
+              ) {
+                throw new Error(
+                  'Execução já terminal (' + txEstado + ') ao iniciar transação de pass',
+                )
+              }
+              if (txEstado !== 'running' && txEstado !== 'started') {
+                throw new Error('Execução em estado inesperado: ' + txEstado)
+              }
+
+              // (2) RELER exatamente as 16 etapas com txApp
+              var txSteps = txApp.findRecordsByFilter(
+                'com_etapas_porta_2d2b',
+                "execucao_id = '" + execId + "'",
+                'ordem',
+                200,
+                0,
+              )
+              if (txSteps.length !== 16)
+                throw new Error('Esperadas 16 etapas na transação, obtidas ' + txSteps.length)
+
+              // (3) MONTAR projeção em memória com TODOS os campos finais
+              var projection = {
+                id: execId,
+                estado: 'pass',
+                versao_commit: EXPECTED_SCHEMA_VERSION,
+                flag_final: JSON.stringify(flagFinal || readFlag()),
+                decisao: decisaoFinal,
+                counts_before: JSON.stringify(countsBefore),
+                counts_after: JSON.stringify(countsAfter || {}),
+                allowed_internal_calls: allowedInternalCalls,
+                blocked_external_attempts: blockedExternalAttempts,
+                activecampaign_calls: activecampaignCalls,
+                prova_zero_chamadas_externas: blockedExternalAttempts === 0,
+              }
+
+              // (4) EXECUTAR validação canônica completa sobre projeção + etapas relidas
+              var valResult = $porta2d2bValidateProjection(txApp, execId, projection, txSteps)
+              if (!valResult.pass)
+                throw new Error(
+                  'Pre-GO canonical validation failed: ' + (valResult.reason || 'unknown'),
+                )
+
+              // (5) APLICAR campos finais e transição running → pass no registro transacional
+              txExec.set('estado', 'pass')
+              txExec.set('finished_at', new Date().toISOString())
+              txExec.set('counts_after', JSON.stringify(countsAfter || {}))
+              txExec.set('flag_final', JSON.stringify(flagFinal || readFlag()))
+              txExec.set('prova_zero_chamadas_externas', blockedExternalAttempts === 0)
+              txExec.set('allowed_internal_calls', allowedInternalCalls)
+              txExec.set('blocked_external_attempts', blockedExternalAttempts)
+              txExec.set('activecampaign_calls', activecampaignCalls)
+              txExec.set('decisao', finalDecisao)
+
+              // (6) SALVAR com txApp
+              txApp.save(txExec)
+
+              // (7) RELER o registro salvo usando a instância transacional
+              var savedExec = txApp.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
+              if (!savedExec) throw new Error('Registro não encontrado após save transacional')
+
+              // (8) CONFIRMAR estado e campos críticos
+              if (savedExec.getString('estado') !== 'pass')
+                throw new Error(
+                  'Estado pós-save: ' + savedExec.getString('estado') + ' (esperado pass)',
+                )
+              if (savedExec.getInt('activecampaign_calls') !== 0)
+                throw new Error(
+                  'activecampaign_calls=' +
+                    savedExec.getInt('activecampaign_calls') +
+                    ' (esperado 0)',
+                )
+              if (savedExec.getInt('blocked_external_attempts') !== 0)
+                throw new Error(
+                  'blocked_external_attempts=' +
+                    savedExec.getInt('blocked_external_attempts') +
+                    ' (esperado 0)',
+                )
+              if (savedExec.getInt('allowed_internal_calls') <= 0)
+                throw new Error(
+                  'allowed_internal_calls=' +
+                    savedExec.getInt('allowed_internal_calls') +
+                    ' (esperado >0)',
+                )
+
+              var savedDecisao = null
+              try {
+                savedDecisao = JSON.parse(savedExec.getString('decisao') || '{}')
+              } catch (_) {}
+              if (!savedDecisao || savedDecisao.overall_status !== 'PASS')
+                throw new Error('Decisão incoerente após save')
+
+              var savedCountsAfter = null
+              try {
+                savedCountsAfter = JSON.parse(savedExec.getString('counts_after') || '{}')
+              } catch (_) {}
+              if (!savedCountsAfter || Object.keys(savedCountsAfter).length === 0)
+                throw new Error('counts_after vazio após save')
+
+              var savedFlagFinal = null
+              try {
+                savedFlagFinal = JSON.parse(savedExec.getString('flag_final') || '{}')
+              } catch (_) {}
+              if (!savedFlagFinal || savedFlagFinal.valor !== 'false')
+                throw new Error('flag_final não é false após save')
+
+              // Se chegou aqui, transação comita com sucesso
+              transactionSucceeded = true
+            })
+          } catch (txErr) {
+            transactionError = String(txErr).substring(0, 300)
+            transactionSucceeded = false
+          }
+
+          if (transactionSucceeded) {
+            // (9) terminalSaved=true e GO somente após transação concluir com sucesso
+            terminalSaved = true
+            // overallStatus permanece 'PASS', decisaoFinal já tem go_no_go='GO'
+          } else {
+            // (10) Qualquer erro/divergência/ambiguidade/falha de validação
+            //      provocou rollback integral do pass. Execução continua
+            //      não-terminal (running). Agora faz UMA ÚNICA transição
+            //      running → blocked.
+            overallStatus = 'BLOCKED'
+            stopReason = 'Transação de pass falhou (rollback): ' + transactionError
+            var finalTerminalEstado = 'blocked'
+
+            var blockedDecisao = JSON.stringify({
+              porta: '2D.2B',
+              overall_status: 'BLOCKED',
+              go_no_go: 'NO-GO',
+              stop_reason: stopReason,
+              total_calls: callResults.length,
+              delta_match: deltaMatch,
+              persist_failure: persistFailure,
+              transaction_error: transactionError,
+            })
+
+            var blockedSave = safeUpdateExec({
+              estado: 'blocked',
+              finished_at: new Date().toISOString(),
+              counts_after: JSON.stringify(countsAfter || {}),
+              flag_final: JSON.stringify(flagFinal || readFlag()),
+              prova_zero_chamadas_externas: blockedExternalAttempts === 0,
+              allowed_internal_calls: allowedInternalCalls,
+              blocked_external_attempts: blockedExternalAttempts,
+              activecampaign_calls: activecampaignCalls,
+              decisao: blockedDecisao,
+            })
+
+            if (blockedSave.saved && blockedSave.reread) {
+              var bts = blockedSave.reread.getString('estado')
+              if (bts === 'blocked') {
+                terminalSaved = true
+              } else {
+                overallStatus = 'BLOCKED'
+                stopReason = 'Falha ao confirmar blocked após rollback: estado=' + bts
+                terminalSaved = false
+              }
+            } else {
+              overallStatus = 'BLOCKED'
+              stopReason =
+                'Falha ao gravar blocked após rollback: ' + (blockedSave.error || 'unknown')
+              terminalSaved = false
             }
-            if (
-              finalTerminalEstado === 'pass' &&
-              termSave.reread.getInt('activecampaign_calls') !== 0
-            )
-              decOk = false
-            if (
-              finalTerminalEstado === 'pass' &&
-              termSave.reread.getInt('blocked_external_attempts') !== 0
-            )
-              decOk = false
-            if (decOk) {
+          }
+
+          // GO só quando pass confirmado após transação. Se a transação
+          // falhou, overallStatus já é BLOCKED e terminalSaved reflete o
+          // blocked (ou false). Nenhum caminho emite GO aqui sem pass.
+          if (overallStatus === 'PASS' && !terminalSaved) {
+            overallStatus = 'BLOCKED'
+            if (!stopReason) stopReason = 'Terminal state not persisted — cannot return GO'
+          }
+        } else {
+          // ─── CAMINHO FAIL/BLOCKED: sem transação, mantém safeUpdateExec ───
+          var finalTerminalEstado = terminalEstado
+          var termSave = safeUpdateExec({
+            estado: finalTerminalEstado,
+            finished_at: new Date().toISOString(),
+            counts_after: JSON.stringify(countsAfter || {}),
+            flag_final: JSON.stringify(flagFinal || readFlag()),
+            prova_zero_chamadas_externas: blockedExternalAttempts === 0,
+            allowed_internal_calls: allowedInternalCalls,
+            blocked_external_attempts: blockedExternalAttempts,
+            activecampaign_calls: activecampaignCalls,
+            decisao: finalDecisao,
+          })
+
+          if (termSave.saved && termSave.reread) {
+            var tsv = termSave.reread.getString('estado')
+            if (tsv === finalTerminalEstado) {
               terminalSaved = true
             } else {
-              // Releitura incoerente — registro já terminal, NÃO mutar.
-              // O registro está em finalTerminalEstado (pass/blocked/fail),
-              // que é terminal. Não tentamos corrigir: reportamos NO-GO.
               terminalSaved = false
               overallStatus = 'BLOCKED'
               stopReason =
-                'Terminal save reread incoerente: estado=' +
-                tsv +
-                ' mas campos críticos divergentes'
+                'Terminal save reread mismatch: estado=' + tsv + ' expected=' + finalTerminalEstado
             }
           } else {
-            // estado divergente — registro pode estar terminal; NÃO mutar.
             terminalSaved = false
             overallStatus = 'BLOCKED'
-            stopReason =
-              'Terminal save reread mismatch: estado=' + tsv + ' expected=' + finalTerminalEstado
+            stopReason = 'Terminal save failed: ' + (termSave.error || 'unknown')
           }
-        } else {
-          // Gravação terminal falhou → BLOCKED/NO-GO. NÃO há caminho de
-          // mutação pós-terminal aqui: o registro permanece running/started.
-          terminalSaved = false
-          overallStatus = 'BLOCKED'
-          stopReason = 'Terminal save failed: ' + (termSave.error || 'unknown')
-        }
 
-        // ─── (8) GO só quando pass confirmado após validação canônica prévia ───
-        // terminalSaved só é true se finalTerminalEstado === 'pass' E a
-        // validação canônica foi aprovada ANTES do save. Caso contrário,
-        // overallStatus já foi ajustado para BLOCKED acima.
-        if (terminalSaved && finalTerminalEstado !== 'pass') {
-          terminalSaved = false
-          overallStatus = 'BLOCKED'
-          if (!stopReason) stopReason = 'Terminalização não-pass não pode emitir GO'
-        }
-        if (overallStatus === 'PASS' && !terminalSaved) {
-          overallStatus = 'BLOCKED'
-          if (!stopReason) stopReason = 'Terminal state not persisted — cannot return GO'
+          if (terminalSaved && finalTerminalEstado !== 'pass') {
+            // fail/blocked terminalizado com sucesso, mas não é GO.
+            // terminalSaved=true apenas indica que o estado terminal foi
+            // persistido; overallStatus já é STOP/BLOCKED (NO-GO).
+          }
+          if (overallStatus === 'PASS' && !terminalSaved) {
+            overallStatus = 'BLOCKED'
+            if (!stopReason) stopReason = 'Terminal state not persisted — cannot return GO'
+          }
         }
       }
     } finally {
