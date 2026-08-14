@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Validador CANÔNICO compartilhado (v0.0.150)
+// Porta 2D.2B — Validador CANÔNICO compartilhado (v0.0.151)
 // ════════════════════════════════════════════════════════════════════
 // SEGMENTO 2A — FALHA 2: Validador canônico ÚNICO.
 // Toda a lógica de validação canônica vive em UMA ÚNICA função interna
@@ -28,7 +28,7 @@
 // counters. external_calls não é constante sem qualificação.
 // ════════════════════════════════════════════════════════════════════
 
-var PORTA2D2B_EXPECTED_VERSION = 'v0.0.150'
+var PORTA2D2B_EXPECTED_VERSION = 'v0.0.151'
 
 var PORTA2D2B_CANONICAL_ORDERS = [
   'A1',

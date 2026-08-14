@@ -75,7 +75,7 @@ routerAdd(
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
     // ─── Precondição de evidência ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.150'
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.151'
     var execCol = null
     var evidenceCol = null
     try {
@@ -294,7 +294,7 @@ routerAdd(
       password: true,
       api_key: true,
       apikey: true,
-      private_key: true,
+      privatekey: true,
       email: true,
       'e-mail': true,
       phone: true,
