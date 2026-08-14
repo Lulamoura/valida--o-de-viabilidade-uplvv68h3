@@ -28,7 +28,7 @@
 // counters. external_calls não é constante sem qualificação.
 // ════════════════════════════════════════════════════════════════════
 
-var PORTA2D2B_EXPECTED_VERSION = 'v0.0.145'
+var PORTA2D2B_EXPECTED_VERSION = 'v0.0.146'
 
 var PORTA2D2B_CANONICAL_ORDERS = [
   'A1',
@@ -574,6 +574,25 @@ globalThis.$porta2d2bValidateProjection = function (app, execId, projection, ste
     }
   }
 
+  return validateCore(execution, steps)
+}
+
+// ════════════════════════════════════════════════════════════════════
+// $porta2d2bValidateRecords(savedExec, stepRecords)
+// ENTRADA PÚBLICA para validação pós-save sobre registros já carregados.
+// Normaliza o registro de execução (savedExec) com normalizeExecRecord,
+// as 16 etapas (stepRecords) com normalizeStepRecord, e delega ao MESMO
+// núcleo validateCore usado pelas demais entradas. Não duplica regras.
+// Retorna integralmente o resultado canônico de validateCore.
+// ════════════════════════════════════════════════════════════════════
+globalThis.$porta2d2bValidateRecords = function (savedExec, stepRecords) {
+  var execution = normalizeExecRecord(savedExec)
+  var steps = []
+  if (stepRecords && stepRecords.length > 0) {
+    for (var i = 0; i < stepRecords.length; i++) {
+      steps.push(normalizeStepRecord(stepRecords[i]))
+    }
+  }
   return validateCore(execution, steps)
 }
 

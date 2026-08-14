@@ -74,7 +74,7 @@ routerAdd(
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
     // ─── Precondição de evidência ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.145'
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.146'
     var execCol = null
     var evidenceCol = null
     try {
@@ -1694,12 +1694,7 @@ routerAdd(
               //      mesma função. As verificações manuais acima fornecem
               //      mensagens específicas; validateCore é a guarda final.
               //      Se falhar, throw → rollback integral da transação.
-              var normalizedSavedExec = normalizeExecRecord(savedExec)
-              var normalizedTxSteps = []
-              for (var nti = 0; nti < txSteps.length; nti++) {
-                normalizedTxSteps.push(normalizeStepRecord(txSteps[nti]))
-              }
-              var postSaveResult = validateCore(normalizedSavedExec, normalizedTxSteps)
+              var postSaveResult = $porta2d2bValidateRecords(savedExec, txSteps)
               if (postSaveResult.pass === false)
                 throw new Error(
                   'Post-save canonical validation failed: ' + (postSaveResult.reason || 'unknown'),
