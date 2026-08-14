@@ -1,7 +1,20 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Hook consolidado (v0.0.161)
+// Porta 2D.2B — Hook consolidado (v0.0.162)
 // ════════════════════════════════════════════════════════════════════
-// SEGMENTO G19 (v0.0.161) — CORRIGIR CONFIRMAÇÃO TERMINAL E
+// SEGMENTO G20 (v0.0.162) — CORREÇÃO CONTRATUAL FINAL DO SNAPSHOT.
+//   1. persist_failure estritamente booleano em buildTerminalSnapshot
+//      (persist_failure: o.persistFailure === true). Causa textual do
+//      erro de persistência preservada em stop_reason e, quando
+//      aplicável, transaction_error. Sem migration ou novo campo.
+//   2. Contrato fail-closed 409 da evidence: pass:false restaurado em
+//      TODAS as respostas 409; HTTP 200 sem pass; STEP_READ_ERROR
+//      retorna envelope fail-closed (error='evidence_incomplete',
+//      pass:false, classification='INDETERMINADO', anomalies
+//      type='STEP_READ_ERROR' com descrição sanitizada).
+//   3. reconstruction_note com validatorCanonical.expectedVersion.
+// Preservações G19 integralmente mantidas.
+// ════════════════════════════════════════════════════════════════════
+// SEGMENTO G19 (v0.0.162) — CORRIGIR CONFIRMAÇÃO TERMINAL E
 // INTEGRIDADE DO SNAPSHOT.
 //   1. Mapa canônico completo: A8 incluído em todas as listas
 //      canonicalKeys usadas pela evidence e por confirmTerminalSnapshot().
@@ -61,8 +74,8 @@
 // compartilhado ou eval é usado — tudo vive neste único arquivo.
 //
 // Unificação de versão:
-//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.161),
-//     coordenada com package.json (0.0.161).
+//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.162),
+//     coordenada com package.json (0.0.162).
 //
 // PASS somente após:
 //   - execução terminal (estado=pass)
@@ -95,7 +108,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/validator-2d2b-health',
   function (e) {
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.161'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.162'
     return e.json(200, {
       ok: true,
       module: 'ac_validate_2d2b',
@@ -229,8 +242,15 @@ routerAdd(
     }
     if (stepReadError !== null) {
       return e.json(409, {
-        error: 'STEP_READ_ERROR',
-        description: stepReadError,
+        error: 'evidence_incomplete',
+        pass: false,
+        classification: 'INDETERMINADO',
+        anomalies: [
+          {
+            type: 'STEP_READ_ERROR',
+            description: 'Erro de leitura das etapas impede a validação do snapshot',
+          },
+        ],
       })
     }
 
@@ -243,6 +263,7 @@ routerAdd(
     if (!snapshot || !snapshot.snapshot_source || !snapshot.classification) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -278,6 +299,7 @@ routerAdd(
       if (snapshot[requiredFields[ri]] === undefined) {
         return e.json(409, {
           error: 'evidence_incomplete',
+          pass: false,
           classification: 'INDETERMINADO',
           anomalies: [
             {
@@ -305,6 +327,7 @@ routerAdd(
       if (typeof snapshot[stringFields[sfi]] !== 'string') {
         return e.json(409, {
           error: 'evidence_incomplete',
+          pass: false,
           classification: 'INDETERMINADO',
           anomalies: [
             {
@@ -323,6 +346,7 @@ routerAdd(
     if (typeof snapshot.delta_match !== 'boolean') {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [{ type: 'SNAPSHOT_TIPO_INVALIDO', description: 'delta_match nao é boolean' }],
       })
@@ -330,6 +354,7 @@ routerAdd(
     if (typeof snapshot.persist_failure !== 'boolean') {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           { type: 'SNAPSHOT_TIPO_INVALIDO', description: 'persist_failure nao é boolean' },
@@ -339,6 +364,7 @@ routerAdd(
     if (typeof snapshot.pass !== 'boolean') {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [{ type: 'SNAPSHOT_TIPO_INVALIDO', description: 'pass nao é boolean' }],
       })
@@ -351,6 +377,7 @@ routerAdd(
     ) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           { type: 'SNAPSHOT_TIPO_INVALIDO', description: 'total_calls nao é inteiro nao negativo' },
@@ -360,6 +387,7 @@ routerAdd(
     if (!Array.isArray(snapshot.anomalies)) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [{ type: 'SNAPSHOT_TIPO_INVALIDO', description: 'anomalies nao é array' }],
       })
@@ -371,6 +399,7 @@ routerAdd(
     ) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [{ type: 'SNAPSHOT_TIPO_INVALIDO', description: 'canonical_map nao é objeto' }],
       })
@@ -382,6 +411,7 @@ routerAdd(
     ) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           { type: 'SNAPSHOT_TIPO_INVALIDO', description: 'expected_contracts nao é objeto' },
@@ -395,6 +425,7 @@ routerAdd(
     ) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           { type: 'SNAPSHOT_TIPO_INVALIDO', description: 'hash_declaration nao é objeto' },
@@ -406,6 +437,7 @@ routerAdd(
     if (snapshot.snapshot_source !== 'validateCore') {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -420,6 +452,7 @@ routerAdd(
     if (snapshot.expected_version !== snapshot.snapshot_version) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -436,6 +469,7 @@ routerAdd(
     if (snapshot.expected_version !== normalizedExec.versao_commit) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -473,6 +507,7 @@ routerAdd(
       if (!snapshot.canonical_map[canonicalKeys[ci]]) {
         return e.json(409, {
           error: 'evidence_incomplete',
+          pass: false,
           classification: 'INDETERMINADO',
           anomalies: [
             {
@@ -488,6 +523,7 @@ routerAdd(
     if (steps.length !== 16) {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -502,6 +538,7 @@ routerAdd(
     if (execRec.getString('estado') === 'pass' && snapshot.classification !== 'PASS') {
       return e.json(409, {
         error: 'evidence_incomplete',
+        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -513,8 +550,10 @@ routerAdd(
     }
 
     // ─── Sucesso: devolver snapshot literal (sem adicionar pass) ───
-    // G19: reconstruction_note restaurado e preservado literalmente da
-    // v0.0.159 (ressalva aprovada no G18).
+    // G20: reconstruction_note com validatorCanonical.expectedVersion.
+    // validatorCanonical mínimo declarado no escopo da evidence (cada
+    // routerAdd é isolado no JSVM).
+    var validatorCanonical = { expectedVersion: 'v0.0.162' }
     return e.json(200, {
       route: 'GET /backend/v1/integracao/ac/evidence-porta-2d2b/{execId}',
       route_version: 'R2-EVIDENCE-2D2B-20260813-FAILCLOSED-v0.0.137',
@@ -546,7 +585,9 @@ routerAdd(
       anomalies: snapshot.anomalies,
       validation_shared_with_runner: true,
       reconstruction_note:
-        'Evidencia lida do snapshot canonico persistido pelo runner (validateCore). Nenhuma reclassificacao ou validacao executada nesta rota.',
+        'PASS somente se TODOS os critérios satisfeitos pela função compartilhada $porta2d2bValidate: estado=pass, 16 etapas únicas A1–D1, contratos estruturados (A7 missing_signature, B2 duplicate, B4 snapshots+1, B5 ocorrencias+1, C1 idempotent=false com rolled_back restaurado, C2 idempotent=true rolled_back vazio, D1 HTTP 503), deltas por etapa/finais, flag_final=false, hashes verificáveis (original + sanitizado recomputável), sanitização, versão ' +
+        validatorCanonical.expectedVersion +
+        ', counters qualificados (activecampaign=0). Anomalias cobrem conteúdo, delta, hash, truncamento, estado e counters. Qualquer divergência → nunca PASS.',
     })
   },
   $apis.requireAuth(),
@@ -557,7 +598,7 @@ routerAdd(
 // ════════════════════════════════════════════════════════════════════
 // Runner instrumentado fail-closed. Correções 0.0.142 (SEGMENTO 2 —
 // TERMINALIZAÇÃO FAIL-CLOSED) preservadas.
-// G19 (v0.0.161):
+// G19 (v0.0.162):
 //  - mapa canônico completo com A8 em todas as listas canonicalKeys;
 //  - BLOCKED/FAIL somente após montar projeção terminal em memória,
 //    validar com validateCore e exigir pass===false + classification
@@ -577,7 +618,7 @@ routerAdd(
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
     // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.161'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.162'
     var PORTA2D2B_CANONICAL_ORDERS = [
       'A1',
       'A2',
@@ -1085,7 +1126,7 @@ routerAdd(
         stop_reason: o.stopReason || '',
         total_calls: o.totalCalls,
         delta_match: o.deltaMatch,
-        persist_failure: o.persistFailure || false,
+        persist_failure: o.persistFailure === true,
         pass: v.pass,
         classification: v.classification,
         classification_justification: v.justification,
