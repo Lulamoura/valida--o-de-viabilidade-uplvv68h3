@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Validador CANÔNICO compartilhado (v0.0.151)
+// Porta 2D.2B — Validador CANÔNICO compartilhado (v0.0.152)
 // ════════════════════════════════════════════════════════════════════
 // SEGMENTO 2A — FALHA 2: Validador canônico ÚNICO.
 // Toda a lógica de validação canônica vive em UMA ÚNICA função interna
@@ -28,7 +28,7 @@
 // counters. external_calls não é constante sem qualificação.
 // ════════════════════════════════════════════════════════════════════
 
-var PORTA2D2B_EXPECTED_VERSION = 'v0.0.151'
+var PORTA2D2B_EXPECTED_VERSION = 'v0.0.152'
 
 var PORTA2D2B_CANONICAL_ORDERS = [
   'A1',
@@ -604,6 +604,27 @@ function $porta2d2bValidateRecords(savedExec, stepRecords) {
   }
   return validateCore(execution, steps)
 }
+
+// ════════════════════════════════════════════════════════════════════
+// SEGMENTO G2 (v0.0.152) — Marcador de deployment.
+// Este arquivo é um módulo CommonJS puro (module.exports) consumido via
+// require() pelos handlers runner e evidence. O Skip Cloud só implanta em
+// pb_hooks arquivos que registram hooks; sem um registro, o arquivo não
+// chega ao disco do runtime e o require() falha com "Invalid module".
+// A rota abaixo é uma rota de saúde MÍNIMA: apenas faz o Skip Cloud
+// reconhecer e implantar o arquivo. Não consulta nem altera banco,
+// secrets, flags, lock ou dados; não chama require(), webhook, rollback,
+// auditoria ou ActiveCampaign. Exige autenticação da coleção users via
+// middleware oficial $apis.requireAuth('users').
+// ════════════════════════════════════════════════════════════════════
+routerAdd(
+  'GET',
+  '/backend/v1/integracao/ac/validator-2d2b-health',
+  function (e) {
+    return e.json(200, { ok: true, module: 'ac_validate_2d2b', version: 'v0.0.152' })
+  },
+  $apis.requireAuth('users'),
+)
 
 module.exports = {
   validate: $porta2d2bValidate,
