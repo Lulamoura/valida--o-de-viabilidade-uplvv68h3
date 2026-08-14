@@ -1,18 +1,53 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Hook consolidado (v0.0.159)
+// Porta 2D.2B — Hook consolidado (v0.0.161)
 // ════════════════════════════════════════════════════════════════════
-// SEGMENTO G15 (v0.0.159) — CONSOLIDAÇÃO EM HOOK ÚNICO.
-// Este arquivo é o ÚNICO arquivo operacional da Porta 2D.2B. Concentra:
-//   - constantes e funções privadas do validador (canônico, deltas,
-//     parse de contratos, validateCore, normalizadores, $porta2d2bValidate,
-//     $porta2d2bValidateProjection, $porta2d2bValidateRecords);
-//   - objeto local validatorCanonical (seis membros: validate,
-//     validateProjection, validateRecords, canonical, canonicalOrders,
-//     expectedVersion) referenciado nominalmente pelas três rotas;
-//   - rota health GET (autenticada users);
-//   - rota evidence GET (autenticada, {execId});
-//   - rota runner POST (autenticada).
-//
+// SEGMENTO G19 (v0.0.161) — CORRIGIR CONFIRMAÇÃO TERMINAL E
+// INTEGRIDADE DO SNAPSHOT.
+//   1. Mapa canônico completo: A8 incluído em todas as listas
+//      canonicalKeys usadas pela evidence e por confirmTerminalSnapshot().
+//      Confirmadas as 16 chaves A1–A8, B1–B5, C1–C2, D1. O conteúdo do
+//      catálogo PORTA2D2B_CANONICAL é INALTERADO.
+//   2. Classificação correta antes de persistir BLOCKED/FAIL: não chama
+//      validateCore() sobre execução ainda running/started para construir
+//      snapshot terminal. Monta primeiro uma projeção em memória com o
+//      estado terminal pretendido (blocked/fail) e os campos finais que
+//      serão persistidos, executa validateCore sobre essa projeção,
+//      exige pass===false e classification coerente (BLOCKED/FAIL) ANTES
+//      do save, e somente então constrói/persiste o snapshot. Após o
+//      save relê e confirma estado e snapshot completos. Helper mecânico
+//      único buildAndValidateTerminalProjection cobre os três caminhos
+//      (checkTerminal, post-rollback blocked, fail/blocked terminal).
+//      Nenhum novo validateCore é criado.
+//   3. Confirmação integral do snapshot no runner
+//      (confirmTerminalSnapshot): 18 campos obrigatórios, tipos estritos,
+//      snapshot_source='validateCore', versões coerentes, snapshot_at ISO,
+//      igualdade literal do conteúdo crítico com PORTA2D2B_CANONICAL /
+//      expectedContracts / hashDeclaration, mapa com as 16 chaves (A8),
+//      coerência classification/overall_status/go_no_go/pass.
+//   4. Evidence fail-closed antes do HTTP 200: mantém evidence sem
+//      validateCore e sem regras canônicas duplicadas; valida os mesmos
+//      18 campos e tipos do snapshot; exige snapshot_source='validateCore';
+//      exige expected_version === snapshot_version ===
+//      execution.versao_commit; exige mapa com as 16 chaves (A8); em
+//      erro de leitura das etapas retorna 409 com STEP_READ_ERROR (não
+//      converte silenciosamente em STEP_COUNT_MISMATCH); preserva os
+//      caminhos 400, 404 e 409; no HTTP 200 não adiciona pass; restaura
+//      e preserva literalmente o reconstruction_note da v0.0.159
+//      (ressalva aprovada no G18).
+//   5. Preservações obrigatórias mantidas:
+//      - exatamente um validateCore, somente no runner;
+//      - exatamente uma cópia das regras e catálogos canônicos;
+//      - health sem regras de negócio;
+//      - evidence sem reclassificação;
+//      - PASS continua com validação pré-save, pós-save, segunda
+//        gravação, releitura e confirmação dentro de txApp;
+//      - zero require(), module.exports, globalThis, eval,
+//        EXPECTED_SCHEMA_VERSION e probes;
+//      - exatamente três routerAdd;
+//      - cinco arquivos removidos continuam ausentes;
+//      - contratos A1–D1, hashes, sanitização, truncamento, deltas,
+//        contadores, migrations, schema e frontend INALTERADOS.
+// ════════════════════════════════════════════════════════════════════
 // NOTA DE ESCOPO (JSVM PocketBase): cada handler de routerAdd é
 // serializado e executado em seu próprio contexto isolado, sem acesso a
 // declarações top-level do arquivo. Para que cada uma das três rotas
@@ -26,10 +61,8 @@
 // compartilhado ou eval é usado — tudo vive neste único arquivo.
 //
 // Unificação de versão:
-//   - a antiga constante de versão de schema do runner (existia
-//     apenas ali) foi removida;
-//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.159),
-//     coordenada com package.json (0.0.159).
+//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.161),
+//     coordenada com package.json (0.0.161).
 //
 // PASS somente após:
 //   - execução terminal (estado=pass)
@@ -62,7 +95,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/validator-2d2b-health',
   function (e) {
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.160'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.161'
     return e.json(200, {
       ok: true,
       module: 'ac_validate_2d2b',
@@ -75,8 +108,15 @@ routerAdd(
 // ════════════════════════════════════════════════════════════════════
 // ROTA 2/3 — evidence GET (autenticada, {execId})
 // ════════════════════════════════════════════════════════════════════
-// CORREÇÃO 9: delega a validação canônica para validatorCanonical.validate
-//   — mesma lógica usada pelo runner antes de GO.
+// G19: evidence fail-closed antes do HTTP 200. Mantém evidence sem
+//   validateCore e sem regras canônicas duplicadas. Valida os mesmos 18
+//   campos e tipos do snapshot; exige snapshot_source='validateCore';
+//   exige expected_version === snapshot_version ===
+//   execution.versao_commit; exige mapa com as 16 chaves (incluindo A8);
+//   em erro de leitura das etapas retorna 409 com STEP_READ_ERROR (não
+//   converte silenciosamente em STEP_COUNT_MISMATCH); preserva os
+//   caminhos 400, 404 e 409; no HTTP 200 não adiciona pass; restaura e
+//   preserva literalmente o reconstruction_note da v0.0.159.
 // CORREÇÃO 6: declara explicitamente qual hash pode ser recomputado
 //   (raw_body_sanitized_sha256, sobre o conteúdo devolvido) e qual
 //   refere-se ao original não exposto (raw_body_original_sha256).
@@ -84,8 +124,6 @@ routerAdd(
 //   (allowed_internal_calls, blocked_external_attempts,
 //   activecampaign_calls) em vez de prova_zero constante.
 // Leitura exclusivamente server-side, autenticada, superadmin.
-// Usa validatorCanonical.validate, validatorCanonical.expectedVersion e
-// validatorCanonical.canonical.
 // ════════════════════════════════════════════════════════════════════
 routerAdd(
   'GET',
@@ -172,7 +210,11 @@ routerAdd(
 
     var normalizedExec = normalizeExecRecord(execRec)
 
+    // ─── Leitura das etapas com STEP_READ_ERROR explícito ───
+    // G19: erro de leitura das etapas retorna 409 com STEP_READ_ERROR,
+    // sem converter silenciosamente em STEP_COUNT_MISMATCH.
     var steps = []
+    var stepReadError = null
     try {
       var stepRecs = $app.findRecordsByFilter(
         'com_etapas_porta_2d2b',
@@ -182,7 +224,15 @@ routerAdd(
         0,
       )
       for (var si = 0; si < stepRecs.length; si++) steps.push(normalizeStepRecord(stepRecs[si]))
-    } catch (_) {}
+    } catch (er) {
+      stepReadError = String(er).substring(0, 200)
+    }
+    if (stepReadError !== null) {
+      return e.json(409, {
+        error: 'STEP_READ_ERROR',
+        description: stepReadError,
+      })
+    }
 
     // ─── Parse do snapshot persistido ───
     var snapshot = null
@@ -193,7 +243,6 @@ routerAdd(
     if (!snapshot || !snapshot.snapshot_source || !snapshot.classification) {
       return e.json(409, {
         error: 'evidence_incomplete',
-        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -204,24 +253,31 @@ routerAdd(
       })
     }
 
-    // ─── Validar campos obrigatórios do snapshot ───
+    // ─── G19: validar os mesmos 18 campos e tipos estritos do snapshot ───
     var requiredFields = [
-      'pass',
+      'porta',
+      'overall_status',
+      'go_no_go',
+      'stop_reason',
       'classification',
       'classification_justification',
+      'expected_version',
+      'snapshot_source',
+      'snapshot_version',
+      'snapshot_at',
+      'delta_match',
+      'persist_failure',
+      'pass',
+      'total_calls',
       'anomalies',
       'canonical_map',
       'expected_contracts',
       'hash_declaration',
-      'expected_version',
-      'overall_status',
-      'total_calls',
     ]
     for (var ri = 0; ri < requiredFields.length; ri++) {
       if (snapshot[requiredFields[ri]] === undefined) {
         return e.json(409, {
           error: 'evidence_incomplete',
-          pass: false,
           classification: 'INDETERMINADO',
           anomalies: [
             {
@@ -232,8 +288,169 @@ routerAdd(
         })
       }
     }
+    // tipos estritos
+    var stringFields = [
+      'porta',
+      'overall_status',
+      'go_no_go',
+      'stop_reason',
+      'classification',
+      'classification_justification',
+      'expected_version',
+      'snapshot_source',
+      'snapshot_version',
+      'snapshot_at',
+    ]
+    for (var sfi = 0; sfi < stringFields.length; sfi++) {
+      if (typeof snapshot[stringFields[sfi]] !== 'string') {
+        return e.json(409, {
+          error: 'evidence_incomplete',
+          classification: 'INDETERMINADO',
+          anomalies: [
+            {
+              type: 'SNAPSHOT_TIPO_INVALIDO',
+              description:
+                'Campo nao é string: ' +
+                stringFields[sfi] +
+                ' (' +
+                typeof snapshot[stringFields[sfi]] +
+                ')',
+            },
+          ],
+        })
+      }
+    }
+    if (typeof snapshot.delta_match !== 'boolean') {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [{ type: 'SNAPSHOT_TIPO_INVALIDO', description: 'delta_match nao é boolean' }],
+      })
+    }
+    if (typeof snapshot.persist_failure !== 'boolean') {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [
+          { type: 'SNAPSHOT_TIPO_INVALIDO', description: 'persist_failure nao é boolean' },
+        ],
+      })
+    }
+    if (typeof snapshot.pass !== 'boolean') {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [{ type: 'SNAPSHOT_TIPO_INVALIDO', description: 'pass nao é boolean' }],
+      })
+    }
+    if (
+      typeof snapshot.total_calls !== 'number' ||
+      !isFinite(snapshot.total_calls) ||
+      Math.floor(snapshot.total_calls) !== snapshot.total_calls ||
+      snapshot.total_calls < 0
+    ) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [
+          { type: 'SNAPSHOT_TIPO_INVALIDO', description: 'total_calls nao é inteiro nao negativo' },
+        ],
+      })
+    }
+    if (!Array.isArray(snapshot.anomalies)) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [{ type: 'SNAPSHOT_TIPO_INVALIDO', description: 'anomalies nao é array' }],
+      })
+    }
+    if (
+      typeof snapshot.canonical_map !== 'object' ||
+      snapshot.canonical_map === null ||
+      Array.isArray(snapshot.canonical_map)
+    ) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [{ type: 'SNAPSHOT_TIPO_INVALIDO', description: 'canonical_map nao é objeto' }],
+      })
+    }
+    if (
+      typeof snapshot.expected_contracts !== 'object' ||
+      snapshot.expected_contracts === null ||
+      Array.isArray(snapshot.expected_contracts)
+    ) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [
+          { type: 'SNAPSHOT_TIPO_INVALIDO', description: 'expected_contracts nao é objeto' },
+        ],
+      })
+    }
+    if (
+      typeof snapshot.hash_declaration !== 'object' ||
+      snapshot.hash_declaration === null ||
+      Array.isArray(snapshot.hash_declaration)
+    ) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [
+          { type: 'SNAPSHOT_TIPO_INVALIDO', description: 'hash_declaration nao é objeto' },
+        ],
+      })
+    }
 
-    // ─── Validar canonical_map contém A1–D1 ───
+    // ─── snapshot_source === 'validateCore' ───
+    if (snapshot.snapshot_source !== 'validateCore') {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [
+          {
+            type: 'SNAPSHOT_SOURCE_INVALIDO',
+            description: 'snapshot_source=' + snapshot.snapshot_source + ' (esperado validateCore)',
+          },
+        ],
+      })
+    }
+
+    // ─── expected_version === snapshot_version === execution.versao_commit ───
+    if (snapshot.expected_version !== snapshot.snapshot_version) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [
+          {
+            type: 'SNAPSHOT_VERSION_MISMATCH',
+            description:
+              'expected_version=' +
+              snapshot.expected_version +
+              ' != snapshot_version=' +
+              snapshot.snapshot_version,
+          },
+        ],
+      })
+    }
+    if (snapshot.expected_version !== normalizedExec.versao_commit) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        classification: 'INDETERMINADO',
+        anomalies: [
+          {
+            type: 'SNAPSHOT_VERSION_MISMATCH',
+            description:
+              'expected_version=' +
+              snapshot.expected_version +
+              ' != execution.versao_commit=' +
+              normalizedExec.versao_commit,
+          },
+        ],
+      })
+    }
+
+    // ─── Validar canonical_map contém as 16 chaves A1–D1 (incluindo A8) ───
     var canonicalKeys = [
       'A1',
       'A2',
@@ -242,6 +459,7 @@ routerAdd(
       'A5',
       'A6',
       'A7',
+      'A8',
       'B1',
       'B2',
       'B3',
@@ -255,7 +473,6 @@ routerAdd(
       if (!snapshot.canonical_map[canonicalKeys[ci]]) {
         return e.json(409, {
           error: 'evidence_incomplete',
-          pass: false,
           classification: 'INDETERMINADO',
           anomalies: [
             {
@@ -271,7 +488,6 @@ routerAdd(
     if (steps.length !== 16) {
       return e.json(409, {
         error: 'evidence_incomplete',
-        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -286,7 +502,6 @@ routerAdd(
     if (execRec.getString('estado') === 'pass' && snapshot.classification !== 'PASS') {
       return e.json(409, {
         error: 'evidence_incomplete',
-        pass: false,
         classification: 'INDETERMINADO',
         anomalies: [
           {
@@ -297,7 +512,9 @@ routerAdd(
       })
     }
 
-    // ─── Sucesso: devolver snapshot literal ───
+    // ─── Sucesso: devolver snapshot literal (sem adicionar pass) ───
+    // G19: reconstruction_note restaurado e preservado literalmente da
+    // v0.0.159 (ressalva aprovada no G18).
     return e.json(200, {
       route: 'GET /backend/v1/integracao/ac/evidence-porta-2d2b/{execId}',
       route_version: 'R2-EVIDENCE-2D2B-20260813-FAILCLOSED-v0.0.137',
@@ -339,55 +556,28 @@ routerAdd(
 // ROTA 3/3 — runner POST (autenticada)
 // ════════════════════════════════════════════════════════════════════
 // Runner instrumentado fail-closed. Correções 0.0.142 (SEGMENTO 2 —
-// TERMINALIZAÇÃO FAIL-CLOSED):
-//  T1 — Validar ANTES de persistir pass. O bug 0.0.141 persistia
-//       estado=pass e só depois executava a validação canônica pré-GO;
-//       se falhava, tentava mutar o registro já terminal, o que o hook
-//       de imutabilidade bloqueava corretamente — deixando a execução
-//       terminalizada como pass apesar da falha de validação.
-//  T2 — Nova ordem: enquanto running, reler exec + 16 etapas; montar
-//       projeção/candidato em memória com todos os campos finais
-//       (estado=pass, decisão, counters, counts_after, flag_final);
-//       rodar a validação canônica (validatorCanonical.validateProjection)
-//       sobre a projeção + etapas relidas ANTES de persistir pass; se
-//       aprovar, única transição running → pass, reler, confirmar,
-//       terminalSaved; se falhar/erro/ambiguidade, única transição
-//       running → blocked (ou fail conforme contrato vigente), reler,
-//       confirmar, NO-GO.
-//  T3 — Nenhum caminho altera registro depois de terminalizado. Não há
-//       mais safeUpdateExec após terminalSaved.
-//  T4 — terminalSaved só true após save confirmado + releitura coerente.
-//  T5 — GO só existe quando estado=pass confirmado após validação
-//       canônica prévia (não pós-hoc).
-//  Imutabilidade server-side (ac_immutable_porta_2d2b.js) preservada —
-//  não afrouxada, sem bypass administrativo.
-//  Contratos funcionais A1–D1, payloads, deltas, hash, sanitização,
-//  truncamento, contadores PRESERVADOS.
-// Correções 0.0.137:
-//  4 — safeUpdateExec retorna estrutura, relê e valida; terminalSaved só
-//       após confirmação de save + reread; gravação terminal falhou →
-//       BLOCKED/NO-GO; antes de GO relê exec + 16 etapas e roda validação.
-//  5 — Contratos estruturais de cada etapa persistidos e validados.
-//  6 — raw_body_sanitized + sha256 + tamanho + sanitização; sha256 do
-//       raw original mantido separadamente; nunca persiste segredo.
-//  7 — resposta_truncated + resposta_original_length; envelope JSON se
-//       truncado; sanitização em erros e textos derivados.
-//  8 — allowed_internal_calls / blocked_external_attempts /
-//       activecampaign_calls separados (não prova_zero constante).
-//  9 — Validação canônica compartilhada inline (mesma lógica da rota de
-//       consulta) antes de GO.
-// Contratos funcionais A1–D1 e deltas PRESERVADOS (apenas instrumentação).
+// TERMINALIZAÇÃO FAIL-CLOSED) preservadas.
+// G19 (v0.0.161):
+//  - mapa canônico completo com A8 em todas as listas canonicalKeys;
+//  - BLOCKED/FAIL somente após montar projeção terminal em memória,
+//    validar com validateCore e exigir pass===false + classification
+//    coerente ANTES do save; helper único
+//    buildAndValidateTerminalProjection;
+//  - confirmTerminalSnapshot integral: 18 campos, tipos estritos,
+//    versões, igualdade literal, coerência;
+//  - PASS mantém validação pré-save, pós-save, segunda gravação,
+//    releitura e confirmação dentro de txApp.
 // Usa validatorCanonical.validateProjection e
 // validatorCanonical.validateRecords. Usa a constante
 // PORTA2D2B_EXPECTED_VERSION (via validatorCanonical.expectedVersion)
-// como versão — a antiga constante local do runner foi removida.
+// como versão.
 // ════════════════════════════════════════════════════════════════════
 routerAdd(
   'POST',
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
     // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.160'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.161'
     var PORTA2D2B_CANONICAL_ORDERS = [
       'A1',
       'A2',
@@ -912,9 +1102,89 @@ routerAdd(
       return snapshot
     }
 
+    // ─── G19 (ponto 2): helper mecânico único para montar/validar a
+    //     projeção terminal BLOCKED/FAIL antes do save.
+    // NÃO chama validateCore sobre execução ainda running/started. Monta
+    // uma projeção em memória com o estado terminal pretendido (blocked
+    // ou fail) e os campos finais que serão persistidos, executa
+    // validateCore sobre essa projeção, exige pass===false e
+    // classification coerente (BLOCKED/FAIL) ANTES do save. Retorna
+    // { ok, validation, projection, error }.
+    function buildAndValidateTerminalProjection(opts) {
+      var termEstado = opts.termEstado // 'blocked' ou 'fail'
+      var expectedClass = opts.expectedClass // 'BLOCKED' ou 'FAIL'
+      var steps = opts.steps // array já normalizado (etapas persistidas)
+      var execId = opts.execId
+      var versaoCommit = opts.versaoCommit || PORTA2D2B_EXPECTED_VERSION
+      var countsBeforeStr = opts.countsBeforeStr || ''
+      var countsAfterStr = opts.countsAfterStr || ''
+      var flagFinalStr = opts.flagFinalStr || ''
+      var allowedInternalCalls = opts.allowedInternalCalls || 0
+      var blockedExternalAttempts = opts.blockedExternalAttempts || 0
+      var activecampaignCalls = opts.activecampaignCalls || 0
+      var decisaoStr = opts.decisaoStr || ''
+      // Projeção terminal em memória com estado terminal pretendido e os
+      // campos finais que serão persistidos.
+      var projection = {
+        id: execId,
+        estado: termEstado,
+        versao_commit: versaoCommit,
+        flag_final: flagFinalStr,
+        decisao: decisaoStr,
+        counts_before: countsBeforeStr,
+        counts_after: countsAfterStr,
+        allowed_internal_calls: allowedInternalCalls,
+        blocked_external_attempts: blockedExternalAttempts,
+        activecampaign_calls: activecampaignCalls,
+        prova_zero_chamadas_externas: blockedExternalAttempts === 0,
+      }
+      // validateCore sobre a projeção terminal (não sobre execução
+      // running/started). Mesmo validateCore, sem criar outro.
+      var validation = validateCore(projection, steps)
+      if (!validation || validation.pass !== false) {
+        return {
+          ok: false,
+          validation: validation,
+          projection: projection,
+          error:
+            'Projeção terminal ' +
+            expectedClass +
+            ' não produziu pass===false (pass=' +
+            (validation && validation.pass) +
+            ')',
+        }
+      }
+      if (validation.classification !== expectedClass) {
+        return {
+          ok: false,
+          validation: validation,
+          projection: projection,
+          error:
+            'Projeção terminal classification=' +
+            validation.classification +
+            ' esperado=' +
+            expectedClass,
+        }
+      }
+      return { ok: true, validation: validation, projection: projection, error: null }
+    }
+
     // ─── Confirmação obrigatória do snapshot persistido ───
-    // G18: relê o registro, faz parse do snapshot e valida TODOS os
-    // campos obrigatórios. Retorna { ok: bool, error: string }.
+    // G19 (ponto 3): confirmação integral do snapshot no runner.
+    // Exige:
+    //   - presença dos 18 campos obrigatórios;
+    //   - tipos estritos (strings, booleanos, inteiro não negativo,
+    //     array, objetos não nulos e não arrays);
+    //   - snapshot_source === 'validateCore';
+    //   - expected_version === PORTA2D2B_EXPECTED_VERSION;
+    //   - snapshot_version === PORTA2D2B_EXPECTED_VERSION;
+    //   - snapshot_at como data ISO válida;
+    //   - igualdade literal do conteúdo crítico com PORTA2D2B_CANONICAL,
+    //     expectedContracts e hashDeclaration;
+    //   - mapa com as 16 chaves, incluindo A8;
+    //   - coerência de classification, overall_status, go_no_go e pass
+    //     para PASS/BLOCKED/FAIL.
+    // Retorna { ok: bool, error: string }.
     function confirmTerminalSnapshot(rec, expectedClassification, app) {
       var snap = null
       try {
@@ -922,93 +1192,12 @@ routerAdd(
       } catch (er) {
         return {
           ok: false,
-          error: 'G18_CONFIRMATION_FAILED: parse error: ' + String(er).substring(0, 120),
+          error: 'G19_CONFIRMATION_FAILED: parse error: ' + String(er).substring(0, 120),
         }
       }
-      if (!snap) return { ok: false, error: 'G18_CONFIRMATION_FAILED: snapshot nulo' }
-      if (snap.snapshot_source !== 'validateCore')
-        return {
-          ok: false,
-          error: 'G18_CONFIRMATION_FAILED: snapshot_source=' + snap.snapshot_source,
-        }
-      if (snap.expected_version !== PORTA2D2B_EXPECTED_VERSION)
-        return {
-          ok: false,
-          error: 'G18_CONFIRMATION_FAILED: expected_version=' + snap.expected_version,
-        }
-      if (snap.classification !== expectedClassification)
-        return {
-          ok: false,
-          error:
-            'G18_CONFIRMATION_FAILED: classification=' +
-            snap.classification +
-            ' esperado=' +
-            expectedClassification,
-        }
-      // PASS espera pass=true; BLOCKED/FAIL esperam pass=false
-      if (expectedClassification === 'PASS' && snap.pass !== true)
-        return {
-          ok: false,
-          error: 'G18_CONFIRMATION_FAILED: pass=' + snap.pass + ' esperado=true (PASS)',
-        }
-      if (
-        (expectedClassification === 'BLOCKED' || expectedClassification === 'FAIL') &&
-        snap.pass !== false
-      )
-        return {
-          ok: false,
-          error:
-            'G18_CONFIRMATION_FAILED: pass=' +
-            snap.pass +
-            ' esperado=false (' +
-            expectedClassification +
-            ')',
-        }
-      // PASS exige overall_status=PASS e total_calls=16
-      if (expectedClassification === 'PASS') {
-        if (snap.overall_status !== 'PASS')
-          return {
-            ok: false,
-            error: 'G18_CONFIRMATION_FAILED: overall_status=' + snap.overall_status,
-          }
-        if (snap.total_calls !== 16)
-          return { ok: false, error: 'G18_CONFIRMATION_FAILED: total_calls=' + snap.total_calls }
-      }
-      // tipos
-      if (!Array.isArray(snap.anomalies))
-        return { ok: false, error: 'G18_CONFIRMATION_FAILED: anomalies nao é array' }
-      if (typeof snap.canonical_map !== 'object' || snap.canonical_map === null)
-        return { ok: false, error: 'G18_CONFIRMATION_FAILED: canonical_map nao é objeto' }
-      if (typeof snap.expected_contracts !== 'object' || snap.expected_contracts === null)
-        return { ok: false, error: 'G18_CONFIRMATION_FAILED: expected_contracts nao é objeto' }
-      if (typeof snap.hash_declaration !== 'object' || snap.hash_declaration === null)
-        return { ok: false, error: 'G18_CONFIRMATION_FAILED: hash_declaration nao é objeto' }
-      // 16 chaves A1–D1
-      var canonicalKeys = [
-        'A1',
-        'A2',
-        'A3',
-        'A4',
-        'A5',
-        'A6',
-        'A7',
-        'B1',
-        'B2',
-        'B3',
-        'B4',
-        'B5',
-        'C1',
-        'C2',
-        'D1',
-      ]
-      for (var ci = 0; ci < canonicalKeys.length; ci++) {
-        if (!snap.canonical_map[canonicalKeys[ci]])
-          return {
-            ok: false,
-            error: 'G18_CONFIRMATION_FAILED: chave canonical_map ausente: ' + canonicalKeys[ci],
-          }
-      }
-      // campos obrigatórios do formato 2a
+      if (!snap) return { ok: false, error: 'G19_CONFIRMATION_FAILED: snapshot nulo' }
+
+      // ── presença dos 18 campos obrigatórios ──
       var requiredFields = [
         'porta',
         'overall_status',
@@ -1033,7 +1222,201 @@ routerAdd(
         if (snap[requiredFields[ri]] === undefined)
           return {
             ok: false,
-            error: 'G18_CONFIRMATION_FAILED: campo obrigatório ausente: ' + requiredFields[ri],
+            error: 'G19_CONFIRMATION_FAILED: campo obrigatório ausente: ' + requiredFields[ri],
+          }
+      }
+
+      // ── tipos estritos ──
+      var stringFields = [
+        'porta',
+        'overall_status',
+        'go_no_go',
+        'stop_reason',
+        'classification',
+        'classification_justification',
+        'expected_version',
+        'snapshot_source',
+        'snapshot_version',
+        'snapshot_at',
+      ]
+      for (var sfi = 0; sfi < stringFields.length; sfi++) {
+        if (typeof snap[stringFields[sfi]] !== 'string')
+          return {
+            ok: false,
+            error:
+              'G19_CONFIRMATION_FAILED: campo nao é string: ' +
+              stringFields[sfi] +
+              ' (' +
+              typeof snap[stringFields[sfi]] +
+              ')',
+          }
+      }
+      if (typeof snap.delta_match !== 'boolean')
+        return { ok: false, error: 'G19_CONFIRMATION_FAILED: delta_match nao é boolean' }
+      if (typeof snap.persist_failure !== 'boolean')
+        return { ok: false, error: 'G19_CONFIRMATION_FAILED: persist_failure nao é boolean' }
+      if (typeof snap.pass !== 'boolean')
+        return { ok: false, error: 'G19_CONFIRMATION_FAILED: pass nao é boolean' }
+      if (
+        typeof snap.total_calls !== 'number' ||
+        !isFinite(snap.total_calls) ||
+        Math.floor(snap.total_calls) !== snap.total_calls ||
+        snap.total_calls < 0
+      )
+        return {
+          ok: false,
+          error: 'G19_CONFIRMATION_FAILED: total_calls nao é inteiro nao negativo',
+        }
+      if (!Array.isArray(snap.anomalies))
+        return { ok: false, error: 'G19_CONFIRMATION_FAILED: anomalies nao é array' }
+      if (
+        typeof snap.canonical_map !== 'object' ||
+        snap.canonical_map === null ||
+        Array.isArray(snap.canonical_map)
+      )
+        return { ok: false, error: 'G19_CONFIRMATION_FAILED: canonical_map nao é objeto' }
+      if (
+        typeof snap.expected_contracts !== 'object' ||
+        snap.expected_contracts === null ||
+        Array.isArray(snap.expected_contracts)
+      )
+        return { ok: false, error: 'G19_CONFIRMATION_FAILED: expected_contracts nao é objeto' }
+      if (
+        typeof snap.hash_declaration !== 'object' ||
+        snap.hash_declaration === null ||
+        Array.isArray(snap.hash_declaration)
+      )
+        return { ok: false, error: 'G19_CONFIRMATION_FAILED: hash_declaration nao é objeto' }
+
+      // ── snapshot_source === 'validateCore' ──
+      if (snap.snapshot_source !== 'validateCore')
+        return {
+          ok: false,
+          error: 'G19_CONFIRMATION_FAILED: snapshot_source=' + snap.snapshot_source,
+        }
+      // ── expected_version === PORTA2D2B_EXPECTED_VERSION ──
+      if (snap.expected_version !== PORTA2D2B_EXPECTED_VERSION)
+        return {
+          ok: false,
+          error: 'G19_CONFIRMATION_FAILED: expected_version=' + snap.expected_version,
+        }
+      // ── snapshot_version === PORTA2D2B_EXPECTED_VERSION ──
+      if (snap.snapshot_version !== PORTA2D2B_EXPECTED_VERSION)
+        return {
+          ok: false,
+          error: 'G19_CONFIRMATION_FAILED: snapshot_version=' + snap.snapshot_version,
+        }
+      // ── snapshot_at como data ISO válida ──
+      var snapAtMs = new Date(snap.snapshot_at).getTime()
+      if (isNaN(snapAtMs))
+        return { ok: false, error: 'G19_CONFIRMATION_FAILED: snapshot_at ISO inválido' }
+
+      // ── igualdade literal do conteúdo crítico com PORTA2D2B_CANONICAL,
+      //    expectedContracts e hashDeclaration ──
+      if (JSON.stringify(snap.canonical_map) !== JSON.stringify(PORTA2D2B_CANONICAL))
+        return {
+          ok: false,
+          error: 'G19_CONFIRMATION_FAILED: canonical_map diverge de PORTA2D2B_CANONICAL',
+        }
+      if (JSON.stringify(snap.expected_contracts) !== JSON.stringify(expectedContracts))
+        return {
+          ok: false,
+          error: 'G19_CONFIRMATION_FAILED: expected_contracts diverge de expectedContracts',
+        }
+      if (JSON.stringify(snap.hash_declaration) !== JSON.stringify(hashDeclaration))
+        return {
+          ok: false,
+          error: 'G19_CONFIRMATION_FAILED: hash_declaration diverge de hashDeclaration',
+        }
+
+      // ── mapa com as 16 chaves, incluindo A8 ──
+      var canonicalKeys = [
+        'A1',
+        'A2',
+        'A3',
+        'A4',
+        'A5',
+        'A6',
+        'A7',
+        'A8',
+        'B1',
+        'B2',
+        'B3',
+        'B4',
+        'B5',
+        'C1',
+        'C2',
+        'D1',
+      ]
+      for (var ci = 0; ci < canonicalKeys.length; ci++) {
+        if (!snap.canonical_map[canonicalKeys[ci]])
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: chave canonical_map ausente: ' + canonicalKeys[ci],
+          }
+      }
+
+      // ── coerência de classification, overall_status, go_no_go e pass
+      //    para PASS/BLOCKED/FAIL ──
+      if (snap.classification !== expectedClassification)
+        return {
+          ok: false,
+          error:
+            'G19_CONFIRMATION_FAILED: classification=' +
+            snap.classification +
+            ' esperado=' +
+            expectedClassification,
+        }
+      if (expectedClassification === 'PASS') {
+        if (snap.pass !== true)
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: pass=' + snap.pass + ' esperado=true (PASS)',
+          }
+        if (snap.overall_status !== 'PASS')
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: overall_status=' + snap.overall_status + ' (PASS)',
+          }
+        if (snap.go_no_go !== 'GO')
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: go_no_go=' + snap.go_no_go + ' (esperado GO)',
+          }
+      } else if (expectedClassification === 'BLOCKED') {
+        if (snap.pass !== false)
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: pass=' + snap.pass + ' esperado=false (BLOCKED)',
+          }
+        if (snap.overall_status !== 'BLOCKED')
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: overall_status=' + snap.overall_status + ' (BLOCKED)',
+          }
+        if (snap.go_no_go !== 'NO-GO')
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: go_no_go=' + snap.go_no_go + ' (esperado NO-GO)',
+          }
+      } else if (expectedClassification === 'FAIL') {
+        if (snap.pass !== false)
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: pass=' + snap.pass + ' esperado=false (FAIL)',
+          }
+        if (snap.overall_status !== 'STOP' && snap.overall_status !== 'FAIL')
+          return {
+            ok: false,
+            error:
+              'G19_CONFIRMATION_FAILED: overall_status=' +
+              snap.overall_status +
+              ' (esperado STOP/FAIL)',
+          }
+        if (snap.go_no_go !== 'NO-GO')
+          return {
+            ok: false,
+            error: 'G19_CONFIRMATION_FAILED: go_no_go=' + snap.go_no_go + ' (esperado NO-GO)',
           }
       }
       return { ok: true, error: null, snapshot: snap }
@@ -1575,6 +1958,120 @@ routerAdd(
         return { saved: false, reread: null, error: String(er).substring(0, 200) }
       }
     }
+
+    // ─── G19 (ponto 2): terminalização BLOCKED/FAIL com projeção
+    //     validada ANTES do save. Helper único
+    //     buildAndValidateTerminalProjection cobre os três caminhos.
+    //     Não chama validateCore sobre execução running/started; monta a
+    //     projeção terminal em memória, valida, exige pass===false e
+    //     classification coerente ANTES do save; após safeUpdateExec
+    //     relê e confirma estado e snapshot completos; se
+    //     confirmTerminalSnapshot falhar, não reporta o registro terminal
+    //     como confirmado (terminalSaved=false).
+    function terminalizeBlockedOrFail(opts) {
+      var termEstado = opts.termEstado // 'blocked' ou 'fail'
+      var expectedClass = opts.expectedClass // 'BLOCKED' ou 'FAIL'
+      var overallStat = opts.overallStatus // 'BLOCKED' ou 'STOP'
+      var stopReasonArg = opts.stopReason
+      var transactionError = opts.transactionError || null
+
+      // Reler etapas persistidas (não a execução running/started).
+      var steps = []
+      try {
+        var stepRecs = $app.findRecordsByFilter(
+          'com_etapas_porta_2d2b',
+          "execucao_id = '" + execId + "'",
+          'ordem',
+          200,
+          0,
+        )
+        for (var s = 0; s < stepRecs.length; s++) steps.push(normalizeStepRecord(stepRecs[s]))
+      } catch (er) {
+        // Erro de leitura impede classificação; não persiste snapshot
+        // confirmado.
+        overallStatus = 'BLOCKED'
+        stopReason = 'STEP_READ_ERROR ao terminalizar: ' + String(er).substring(0, 150)
+        terminalSaved = false
+        return
+      }
+
+      // Montar e validar a projeção terminal ANTES do save.
+      var projectionResult = buildAndValidateTerminalProjection({
+        termEstado: termEstado,
+        expectedClass: expectedClass,
+        steps: steps,
+        execId: execId,
+        versaoCommit: expectedVersion,
+        countsBeforeStr: JSON.stringify(countsBefore),
+        countsAfterStr: JSON.stringify(countsAfter || gc()),
+        flagFinalStr: JSON.stringify(flagFinal || readFlag()),
+        allowedInternalCalls: allowedInternalCalls,
+        blockedExternalAttempts: blockedExternalAttempts,
+        activecampaignCalls: activecampaignCalls,
+        decisaoStr: JSON.stringify({
+          overall_status: overallStat,
+          total_calls: callResults.length,
+        }),
+      })
+      if (!projectionResult.ok) {
+        // A projeção não produziu pass===false/classification coerente:
+        // não persistir snapshot terminal confirmado.
+        overallStatus = 'BLOCKED'
+        stopReason = projectionResult.error
+        terminalSaved = false
+        return
+      }
+
+      // Construir o snapshot canônico a partir da validação da projeção.
+      var fullSnapshot = buildTerminalSnapshot({
+        validation: projectionResult.validation,
+        overallStatus: overallStat,
+        goNoGo: 'NO-GO',
+        stopReason: stopReasonArg,
+        totalCalls: callResults.length,
+        deltaMatch: deltaMatch,
+        persistFailure: persistFailure,
+        transactionError: transactionError,
+      })
+
+      // Persistir via safeUpdateExec.
+      var termSave = safeUpdateExec({
+        estado: termEstado,
+        finished_at: new Date().toISOString(),
+        counts_after: JSON.stringify(countsAfter || {}),
+        flag_final: JSON.stringify(flagFinal || readFlag()),
+        prova_zero_chamadas_externas: blockedExternalAttempts === 0,
+        allowed_internal_calls: allowedInternalCalls,
+        blocked_external_attempts: blockedExternalAttempts,
+        activecampaign_calls: activecampaignCalls,
+        decisao: JSON.stringify(fullSnapshot),
+      })
+
+      if (termSave.saved && termSave.reread) {
+        var tsv = termSave.reread.getString('estado')
+        if (tsv === termEstado) {
+          // Confirmar estado e snapshot completos por releitura.
+          var termConfirm = confirmTerminalSnapshot(termSave.reread, expectedClass, $app)
+          if (!termConfirm.ok) {
+            // Não reportar registro terminal como confirmado.
+            terminalSaved = false
+            overallStatus = 'BLOCKED'
+            stopReason = termConfirm.error
+          } else {
+            terminalSaved = true
+          }
+        } else {
+          terminalSaved = false
+          overallStatus = 'BLOCKED'
+          stopReason = 'Terminal save reread mismatch: estado=' + tsv + ' expected=' + termEstado
+        }
+      } else {
+        terminalSaved = false
+        overallStatus = 'BLOCKED'
+        stopReason = 'Terminal save failed: ' + (termSave.error || 'unknown')
+      }
+    }
+
     function checkTerminal() {
       if (!execRecord || terminalSaved) return
       if (!runningSet) {
@@ -1586,67 +2083,20 @@ routerAdd(
         }
       }
       if (overallStatus === 'STOP' || overallStatus === 'BLOCKED') {
-        // G18 (2d): BLOCKED/FAIL — executar validateCore sobre os dados
-        // atuais (execução + etapas já persistidas) para produzir o
-        // snapshot canônico, persistir via safeUpdateExec e confirmar por
-        // releitura.
+        // G19 (ponto 2): BLOCKED/FAIL — montar projeção terminal em
+        // memória com estado terminal pretendido, validar com
+        // validateCore, exigir pass===false e classification coerente
+        // ANTES do save, persistir e confirmar por releitura.
         var termEstado = overallStatus === 'BLOCKED' ? 'blocked' : 'fail'
         var expectedClass = overallStatus === 'BLOCKED' ? 'BLOCKED' : 'FAIL'
-        // Reler execução + etapas para validateCore
-        var curExec = null
-        var curSteps = []
-        try {
-          curExec = normalizeExecRecord(
-            $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId),
-          )
-        } catch (_) {}
-        try {
-          var curStepRecs = $app.findRecordsByFilter(
-            'com_etapas_porta_2d2b',
-            "execucao_id = '" + execId + "'",
-            'ordem',
-            200,
-            0,
-          )
-          for (var cs = 0; cs < curStepRecs.length; cs++)
-            curSteps.push(normalizeStepRecord(curStepRecs[cs]))
-        } catch (_) {}
-        var termValidation = validateCore(curExec || { estado: '' }, curSteps)
-        var fullTermSnapshot = buildTerminalSnapshot({
-          validation: termValidation,
-          overallStatus: overallStatus,
-          goNoGo: 'NO-GO',
+        var overallStat = overallStatus === 'BLOCKED' ? 'BLOCKED' : 'STOP'
+        terminalizeBlockedOrFail({
+          termEstado: termEstado,
+          expectedClass: expectedClass,
+          overallStatus: overallStat,
           stopReason: stopReason,
-          totalCalls: callResults.length,
-          deltaMatch: deltaMatch,
-          persistFailure: persistFailure,
+          transactionError: null,
         })
-        var termRes = safeUpdateExec({
-          estado: termEstado,
-          finished_at: new Date().toISOString(),
-          counts_after: JSON.stringify(countsAfter || gc()),
-          flag_final: JSON.stringify(flagFinal || readFlag()),
-          decisao: JSON.stringify(fullTermSnapshot),
-        })
-        if (termRes.saved && termRes.reread) {
-          var ts = termRes.reread.getString('estado')
-          if (ts === termEstado) {
-            var termConfirm = confirmTerminalSnapshot(termRes.reread, expectedClass, $app)
-            if (!termConfirm.ok) {
-              overallStatus = 'BLOCKED'
-              stopReason = termConfirm.error
-              terminalSaved = false
-            } else {
-              terminalSaved = true
-            }
-          } else {
-            overallStatus = 'BLOCKED'
-            stopReason = 'Terminal save reread mismatch: estado=' + ts + ' expected=' + termEstado
-          }
-        } else {
-          overallStatus = 'BLOCKED'
-          stopReason = 'Terminal save failed: ' + (termRes.error || 'unknown')
-        }
       }
     }
 
@@ -2568,8 +3018,11 @@ routerAdd(
       //     validação provoca rollback integral do pass — a execução
       //     permanece não-terminal (running) — e então fazemos UMA ÚNICA
       //     transição running → blocked fora da transação.
-      //   - Se terminalEstado !== 'pass' (fail/blocked): mantém a lógica
-      //     atual de safeUpdateExec (sem transação).
+      //   - Se terminalEstado !== 'pass' (fail/blocked): G19 usa o helper
+      //     mecânico único buildAndValidateTerminalProjection (via
+      //     terminalizeBlockedOrFail) — monta a projeção terminal em
+      //     memória, valida com validateCore, exige pass===false e
+      //     classification coerente ANTES do save.
       //   - Nenhum caminho altera registro depois de terminalizado.
       //   - terminalSaved=true e GO SOMENTE após a transação de pass
       //     concluir com sucesso.
@@ -2591,6 +3044,7 @@ routerAdd(
           // canônico completo (formato 2a), persiste em `decisao` e faz a
           // releitura confirmatória DENTRO da transação. Somente após a
           // confirmação transactionSucceeded=true.
+          // G19 (ponto 3): confirmTerminalSnapshot integral.
           var transactionSucceeded = false
           var transactionError = ''
           var passPostSaveResult = null
@@ -2745,9 +3199,11 @@ routerAdd(
               txExec.set('decisao', JSON.stringify(fullSnapshot))
               txApp.save(txExec)
 
-              // ── G18 (2c): confirmação obrigatória do PASS ──
+              // ── G19 (ponto 3): confirmação integral do PASS ──
               // Releitura dentro de txApp, parse e validação de TODOS os
-              // campos obrigatórios. Qualquer divergência → throw → rollback.
+              // campos obrigatórios (18), tipos estritos, versões,
+              // igualdade literal do conteúdo crítico e coerência. Qualquer
+              // divergência → throw → rollback.
               var confirmExec = txApp.findRecordById('com_execucoes_porta_2d2b', txExec.id)
               var passConfirm = confirmTerminalSnapshot(confirmExec, 'PASS', txApp)
               if (!passConfirm.ok) {
@@ -2774,77 +3230,17 @@ routerAdd(
             overallStatus = 'BLOCKED'
             stopReason = 'Transação de pass falhou (rollback): ' + transactionError
 
-            // G18 (2d): executar validateCore sobre os dados atuais
-            // (execução + etapas já persistidas) para produzir o snapshot
-            // canônico BLOCKED.
-            var postRollbackExec = null
-            var postRollbackSteps = []
-            try {
-              postRollbackExec = normalizeExecRecord(
-                $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId),
-              )
-            } catch (_) {}
-            try {
-              var prStepRecs = $app.findRecordsByFilter(
-                'com_etapas_porta_2d2b',
-                "execucao_id = '" + execId + "'",
-                'ordem',
-                200,
-                0,
-              )
-              for (var pr = 0; pr < prStepRecs.length; pr++)
-                postRollbackSteps.push(normalizeStepRecord(prStepRecs[pr]))
-            } catch (_) {}
-            var blockedValidation = validateCore(
-              postRollbackExec || { estado: '' },
-              postRollbackSteps,
-            )
-            var fullBlockedSnapshot = buildTerminalSnapshot({
-              validation: blockedValidation,
+            // G19 (ponto 2): terminalizar blocked com projeção validada
+            // ANTES do save (helper único
+            // buildAndValidateTerminalProjection via
+            // terminalizeBlockedOrFail).
+            terminalizeBlockedOrFail({
+              termEstado: 'blocked',
+              expectedClass: 'BLOCKED',
               overallStatus: 'BLOCKED',
-              goNoGo: 'NO-GO',
               stopReason: stopReason,
-              totalCalls: callResults.length,
-              deltaMatch: deltaMatch,
-              persistFailure: persistFailure,
               transactionError: transactionError,
             })
-
-            var blockedSave = safeUpdateExec({
-              estado: 'blocked',
-              finished_at: new Date().toISOString(),
-              counts_after: JSON.stringify(countsAfter || {}),
-              flag_final: JSON.stringify(flagFinal || readFlag()),
-              prova_zero_chamadas_externas: blockedExternalAttempts === 0,
-              allowed_internal_calls: allowedInternalCalls,
-              blocked_external_attempts: blockedExternalAttempts,
-              activecampaign_calls: activecampaignCalls,
-              decisao: JSON.stringify(fullBlockedSnapshot),
-            })
-
-            if (blockedSave.saved && blockedSave.reread) {
-              var bts = blockedSave.reread.getString('estado')
-              if (bts === 'blocked') {
-                // G18 (2d): confirmação por releitura do snapshot BLOCKED
-                var blockedConfirm = confirmTerminalSnapshot(blockedSave.reread, 'BLOCKED', $app)
-                if (!blockedConfirm.ok) {
-                  overallStatus = 'BLOCKED'
-                  stopReason = blockedConfirm.error
-                  terminalSaved = false
-                } else {
-                  terminalSaved = true
-                }
-              } else {
-                overallStatus = 'BLOCKED'
-                stopReason = 'Falha ao confirmar blocked após rollback: estado=' + bts
-                terminalSaved = false
-              }
-            } else {
-              overallStatus = 'BLOCKED'
-              stopReason =
-                'Falha ao gravar blocked após rollback: ' + (blockedSave.error || 'unknown')
-              terminalSaved = false
-            }
           }
 
           // GO só quando pass confirmado após transação. Se a transação
@@ -2856,81 +3252,20 @@ routerAdd(
           }
         } else {
           // ─── CAMINHO FAIL/BLOCKED: sem transação, mantém safeUpdateExec ──
-          // G18 (2d): executar validateCore sobre os dados atuais
-          // (execução + etapas já persistidas) para produzir o snapshot
-          // canônico terminal (FAIL/BLOCKED), persistir via safeUpdateExec
-          // e confirmar por releitura.
+          // G19 (ponto 2): terminalizar fail/blocked com projeção validada
+          // ANTES do save (helper único
+          // buildAndValidateTerminalProjection via
+          // terminalizeBlockedOrFail).
           var finalTerminalEstado = terminalEstado
           var terminalExpectedClass = finalTerminalEstado === 'blocked' ? 'BLOCKED' : 'FAIL'
-
-          var failExec = null
-          var failSteps = []
-          try {
-            failExec = normalizeExecRecord(
-              $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId),
-            )
-          } catch (_) {}
-          try {
-            var failStepRecs = $app.findRecordsByFilter(
-              'com_etapas_porta_2d2b',
-              "execucao_id = '" + execId + "'",
-              'ordem',
-              200,
-              0,
-            )
-            for (var fs = 0; fs < failStepRecs.length; fs++)
-              failSteps.push(normalizeStepRecord(failStepRecs[fs]))
-          } catch (_) {}
-          var failValidation = validateCore(failExec || { estado: '' }, failSteps)
-          var fullFailSnapshot = buildTerminalSnapshot({
-            validation: failValidation,
-            overallStatus: overallStatus,
-            goNoGo: 'NO-GO',
+          var overallStatTerm = finalTerminalEstado === 'blocked' ? 'BLOCKED' : 'STOP'
+          terminalizeBlockedOrFail({
+            termEstado: finalTerminalEstado,
+            expectedClass: terminalExpectedClass,
+            overallStatus: overallStatTerm,
             stopReason: stopReason,
-            totalCalls: callResults.length,
-            deltaMatch: deltaMatch,
-            persistFailure: persistFailure,
+            transactionError: null,
           })
-
-          var termSave = safeUpdateExec({
-            estado: finalTerminalEstado,
-            finished_at: new Date().toISOString(),
-            counts_after: JSON.stringify(countsAfter || {}),
-            flag_final: JSON.stringify(flagFinal || readFlag()),
-            prova_zero_chamadas_externas: blockedExternalAttempts === 0,
-            allowed_internal_calls: allowedInternalCalls,
-            blocked_external_attempts: blockedExternalAttempts,
-            activecampaign_calls: activecampaignCalls,
-            decisao: JSON.stringify(fullFailSnapshot),
-          })
-
-          if (termSave.saved && termSave.reread) {
-            var tsv = termSave.reread.getString('estado')
-            if (tsv === finalTerminalEstado) {
-              // G18 (2d): confirmação por releitura do snapshot FAIL/BLOCKED
-              var termConfirm = confirmTerminalSnapshot(
-                termSave.reread,
-                terminalExpectedClass,
-                $app,
-              )
-              if (!termConfirm.ok) {
-                terminalSaved = false
-                overallStatus = 'BLOCKED'
-                stopReason = termConfirm.error
-              } else {
-                terminalSaved = true
-              }
-            } else {
-              terminalSaved = false
-              overallStatus = 'BLOCKED'
-              stopReason =
-                'Terminal save reread mismatch: estado=' + tsv + ' expected=' + finalTerminalEstado
-            }
-          } else {
-            terminalSaved = false
-            overallStatus = 'BLOCKED'
-            stopReason = 'Terminal save failed: ' + (termSave.error || 'unknown')
-          }
 
           if (terminalSaved && finalTerminalEstado !== 'pass') {
             // fail/blocked terminalizado com sucesso, mas não é GO.
