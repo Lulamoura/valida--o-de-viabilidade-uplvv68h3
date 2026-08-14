@@ -28,7 +28,7 @@
 // counters. external_calls não é constante sem qualificação.
 // ════════════════════════════════════════════════════════════════════
 
-var PORTA2D2B_EXPECTED_VERSION = 'v0.0.147'
+var PORTA2D2B_EXPECTED_VERSION = 'v0.0.148'
 
 var PORTA2D2B_CANONICAL_ORDERS = [
   'A1',

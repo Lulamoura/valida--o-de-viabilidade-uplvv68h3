@@ -75,7 +75,7 @@ routerAdd(
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
     // ─── Precondição de evidência ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.147'
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.148'
     var execCol = null
     var evidenceCol = null
     try {
@@ -1619,10 +1619,10 @@ routerAdd(
 
               // (4) EXECUTAR validação canônica completa sobre projeção + etapas relidas
               var valResult = validator.validateProjection(txApp, execId, projection, txSteps)
-              if (!valResult.pass)
-                throw new Error(
-                  'Pre-GO canonical validation failed: ' + (valResult.reason || 'unknown'),
-                )
+              if (!valResult || valResult.pass !== true) {
+                var preReason = valResult && valResult.reason ? valResult.reason : 'unknown'
+                throw new Error('Pre-GO canonical validation failed: ' + preReason)
+              }
 
               // (5) APLICAR campos finais e transição running → pass no registro transacional
               txExec.set('estado', 'pass')
@@ -1696,10 +1696,11 @@ routerAdd(
               //      mensagens específicas; validateCore é a guarda final.
               //      Se falhar, throw → rollback integral da transação.
               var postSaveResult = validator.validateRecords(savedExec, txSteps)
-              if (postSaveResult.pass === false)
-                throw new Error(
-                  'Post-save canonical validation failed: ' + (postSaveResult.reason || 'unknown'),
-                )
+              if (!postSaveResult || postSaveResult.pass !== true) {
+                var postReason =
+                  postSaveResult && postSaveResult.reason ? postSaveResult.reason : 'unknown'
+                throw new Error('Post-save canonical validation failed: ' + postReason)
+              }
 
               // Se chegou aqui, transação comita com sucesso
               transactionSucceeded = true
