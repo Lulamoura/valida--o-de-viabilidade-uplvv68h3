@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Validador CANÔNICO compartilhado (v0.0.145)
+// Porta 2D.2B — Validador CANÔNICO compartilhado (v0.0.150)
 // ════════════════════════════════════════════════════════════════════
 // SEGMENTO 2A — FALHA 2: Validador canônico ÚNICO.
 // Toda a lógica de validação canônica vive em UMA ÚNICA função interna
@@ -28,7 +28,7 @@
 // counters. external_calls não é constante sem qualificação.
 // ════════════════════════════════════════════════════════════════════
 
-var PORTA2D2B_EXPECTED_VERSION = 'v0.0.149'
+var PORTA2D2B_EXPECTED_VERSION = 'v0.0.150'
 
 var PORTA2D2B_CANONICAL_ORDERS = [
   'A1',
@@ -257,6 +257,15 @@ function validateCore(execution, steps) {
       anomalies.push({ type: 'RAW_ORIGINAL_SHA256_INVALID', step: ord })
     if (!st.raw_body_sanitized_sha256 || !hexRe.test(st.raw_body_sanitized_sha256))
       anomalies.push({ type: 'RAW_SANITIZED_SHA256_INVALID', step: ord })
+    // SEGMENTO F2 (v0.0.150): verificação real dos hashes do corpo.
+    // 1a. Recomputar SHA-256 sobre a string exata de raw_body_sanitized e
+    //     comparar com raw_body_sanitized_sha256.
+    var recomputedSanitizedHash = $security.sha256(st.raw_body_sanitized || '')
+    if (recomputedSanitizedHash !== st.raw_body_sanitized_sha256)
+      anomalies.push({ type: 'RAW_SANITIZED_SHA256_MISMATCH', step: ord })
+    // 1b. Exigir igualdade entre os dois hashes do corpo original.
+    if (st.sha256_corpo_bruto !== st.raw_body_original_sha256)
+      anomalies.push({ type: 'RAW_ORIGINAL_SHA256_MISMATCH', step: ord })
     // sanitização (CORREÇÃO 7)
     if (st.sanitized !== true) anomalies.push({ type: 'SANITIZED_FALSE', step: ord })
     if (st.resposta_truncated === true) {
