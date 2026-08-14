@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-// SEGMENTO G12 (v0.0.156) — Matriz mínima de deploy de módulos.
+// SEGMENTO G12 (v0.0.158) — Matriz mínima de deploy de módulos.
 // Experimento diagnóstico ISOLADO. Não altera validador, runner, evidence
 // nem qualquer regra da Porta 2D.2B. UMA ÚNICA rota autenticada, somente
 // leitura, que carrega o módulo CommonJS puro em /lib via require() dentro
