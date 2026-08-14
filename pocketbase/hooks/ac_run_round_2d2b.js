@@ -75,7 +75,7 @@ routerAdd(
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
     // ─── Precondição de evidência ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.148'
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.149'
     var execCol = null
     var evidenceCol = null
     try {
@@ -404,7 +404,7 @@ routerAdd(
         var rb0 = j.rolled_back && j.rolled_back[0] ? j.rolled_back[0] : {}
         return {
           success: j.success === true,
-          idempotent: j.idempotent === false,
+          idempotent: j.idempotent,
           rolled_back_action: rb0.action || null,
           rolled_back_collection: rb0.collection || null,
           rolled_back_record_id: rb0.record_id ? true : false,
@@ -431,7 +431,7 @@ routerAdd(
       if (ordem === 'C1') {
         return (
           contrato.success === true &&
-          contrato.idempotent === true &&
+          contrato.idempotent === false &&
           contrato.rolled_back_action === 'restored_from_snapshot' &&
           contrato.rolled_back_collection === 'com_negocios' &&
           contrato.rolled_back_record_id === true &&

@@ -28,7 +28,7 @@
 // counters. external_calls não é constante sem qualificação.
 // ════════════════════════════════════════════════════════════════════
 
-var PORTA2D2B_EXPECTED_VERSION = 'v0.0.148'
+var PORTA2D2B_EXPECTED_VERSION = 'v0.0.149'
 
 var PORTA2D2B_CANONICAL_ORDERS = [
   'A1',
@@ -110,17 +110,17 @@ function $porta2d2bParseContract(ordem, contratoStr, deltasStr) {
   }
   if (ordem === 'C1') {
     var rb0 = c.rolled_back && c.rolled_back[0] ? c.rolled_back[0] : {}
-    // Nota: o contrato persistido usa idempotent=false → c.idempotent===false
-    // O contrato canônico C1 exige idempotent=false. Aceitamos ambos os
-    // esquemas de nomenclatura (false ou ausente) desde que rolled_back
-    // esteja presente com length 1 e ação restaurada.
+    // Contrato canônico C1 exige estritamente idempotent === false
+    // (não aceita campo ausente). Demais exigências: success=true,
+    // exatamente um item em rolled_back, ação restored_from_snapshot,
+    // coleção com_negocios e record_id presente.
     var ok =
       c.success === true &&
       c.rolled_back_length === 1 &&
       rb0.action === 'restored_from_snapshot' &&
       rb0.collection === 'com_negocios' &&
       !!rb0.record_id &&
-      c.idempotent !== true
+      c.idempotent === false
     return { ok: ok, detail: c }
   }
   if (ordem === 'C2') {
