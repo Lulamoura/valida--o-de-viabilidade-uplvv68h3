@@ -1,5 +1,15 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Hook consolidado (v0.0.162)
+// Porta 2D.2B — Hook consolidado (v0.0.163)
+// ════════════════════════════════════════════════════════════════════
+// SEGMENTO G21 (v0.0.163) — DOIS AJUSTES FINAIS.
+//   1. persist_failure com conversão booleana estrita: false para
+//      null/undefined/false/''; true para true ou string de erro não
+//      vazia. Causa textual preservada em stop_reason e transaction_error.
+//   2. Removida a declaração mínima de validatorCanonical da evidence;
+//      reconstruction_note passa a usar snapshot.expected_version (já
+//      validado antes do HTTP 200). Exatamente uma declaração de
+//      validatorCanonical permanece, somente no runner.
+// Preservações G19/G20 integralmente mantidas.
 // ════════════════════════════════════════════════════════════════════
 // SEGMENTO G20 (v0.0.162) — CORREÇÃO CONTRATUAL FINAL DO SNAPSHOT.
 //   1. persist_failure estritamente booleano em buildTerminalSnapshot
@@ -108,7 +118,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/validator-2d2b-health',
   function (e) {
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.162'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.163'
     return e.json(200, {
       ok: true,
       module: 'ac_validate_2d2b',
@@ -550,10 +560,8 @@ routerAdd(
     }
 
     // ─── Sucesso: devolver snapshot literal (sem adicionar pass) ───
-    // G20: reconstruction_note com validatorCanonical.expectedVersion.
-    // validatorCanonical mínimo declarado no escopo da evidence (cada
-    // routerAdd é isolado no JSVM).
-    var validatorCanonical = { expectedVersion: 'v0.0.162' }
+    // G21: reconstruction_note usa snapshot.expected_version (já validado
+    // antes do HTTP 200). Evidence sem validatorCanonical.
     return e.json(200, {
       route: 'GET /backend/v1/integracao/ac/evidence-porta-2d2b/{execId}',
       route_version: 'R2-EVIDENCE-2D2B-20260813-FAILCLOSED-v0.0.137',
@@ -586,7 +594,7 @@ routerAdd(
       validation_shared_with_runner: true,
       reconstruction_note:
         'PASS somente se TODOS os critérios satisfeitos pela função compartilhada $porta2d2bValidate: estado=pass, 16 etapas únicas A1–D1, contratos estruturados (A7 missing_signature, B2 duplicate, B4 snapshots+1, B5 ocorrencias+1, C1 idempotent=false com rolled_back restaurado, C2 idempotent=true rolled_back vazio, D1 HTTP 503), deltas por etapa/finais, flag_final=false, hashes verificáveis (original + sanitizado recomputável), sanitização, versão ' +
-        validatorCanonical.expectedVersion +
+        snapshot.expected_version +
         ', counters qualificados (activecampaign=0). Anomalias cobrem conteúdo, delta, hash, truncamento, estado e counters. Qualquer divergência → nunca PASS.',
     })
   },
@@ -618,7 +626,7 @@ routerAdd(
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
     // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.162'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.163'
     var PORTA2D2B_CANONICAL_ORDERS = [
       'A1',
       'A2',
@@ -1126,7 +1134,9 @@ routerAdd(
         stop_reason: o.stopReason || '',
         total_calls: o.totalCalls,
         delta_match: o.deltaMatch,
-        persist_failure: o.persistFailure === true,
+        persist_failure:
+          o.persistFailure === true ||
+          (typeof o.persistFailure === 'string' && o.persistFailure.length > 0),
         pass: v.pass,
         classification: v.classification,
         classification_justification: v.justification,
