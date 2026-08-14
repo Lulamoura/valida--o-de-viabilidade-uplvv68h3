@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T20:44:03.291Z",
+  "generatedAt": "2026-08-14T14:37:11.244Z",
   "collections": [
     {
       "name": "users",
@@ -1548,24 +1548,6 @@
           "system": false
         },
         {
-          "name": "allowed_internal_calls",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "blocked_external_attempts",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "activecampaign_calls",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
           "name": "versao_commit",
           "type": "text",
           "required": false,
@@ -1590,6 +1572,24 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "allowed_internal_calls",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "blocked_external_attempts",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "activecampaign_calls",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1700,8 +1700,40 @@
           "system": false
         },
         {
-          "name": "raw_body_original_sha256",
+          "name": "resposta_sanitizada",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "erro_real",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "resposta_truncated",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resposta_original_length",
+          "type": "number",
           "required": false,
           "system": false
         },
@@ -1730,20 +1762,8 @@
           "system": false
         },
         {
-          "name": "resposta_sanitizada",
+          "name": "raw_body_original_sha256",
           "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "resposta_truncated",
-          "type": "bool",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "resposta_original_length",
-          "type": "number",
           "required": false,
           "system": false
         },
@@ -1758,26 +1778,6 @@
           "type": "bool",
           "required": false,
           "system": false
-        },
-        {
-          "name": "erro_real",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "created",
-          "type": "autodate",
-          "required": false,
-          "system": false,
-          "autodateTriggers": ["onCreate"]
-        },
-        {
-          "name": "updated",
-          "type": "autodate",
-          "required": false,
-          "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
