@@ -28,7 +28,7 @@
 // counters. external_calls não é constante sem qualificação.
 // ════════════════════════════════════════════════════════════════════
 
-var PORTA2D2B_EXPECTED_VERSION = 'v0.0.146'
+var PORTA2D2B_EXPECTED_VERSION = 'v0.0.147'
 
 var PORTA2D2B_CANONICAL_ORDERS = [
   'A1',
@@ -469,7 +469,7 @@ function normalizeStepRecord(s) {
 // ════════════════════════════════════════════════════════════════════
 // $porta2d2bValidate(app, execId) — lê do disco e delega a validateCore.
 // ════════════════════════════════════════════════════════════════════
-globalThis.$porta2d2bValidate = function (app, execId) {
+function $porta2d2bValidate(app, execId) {
   var execution = null
   var steps = []
 
@@ -526,7 +526,7 @@ globalThis.$porta2d2bValidate = function (app, execId) {
 // seguro para uso dentro de uma transação: o caller passa txApp mas
 // validateCore não toca em app.
 // ════════════════════════════════════════════════════════════════════
-globalThis.$porta2d2bValidateProjection = function (app, execId, projection, stepRecords) {
+function $porta2d2bValidateProjection(app, execId, projection, stepRecords) {
   // ─── execução vem da projeção (memória) ───
   if (!projection) {
     return {
@@ -585,7 +585,7 @@ globalThis.$porta2d2bValidateProjection = function (app, execId, projection, ste
 // núcleo validateCore usado pelas demais entradas. Não duplica regras.
 // Retorna integralmente o resultado canônico de validateCore.
 // ════════════════════════════════════════════════════════════════════
-globalThis.$porta2d2bValidateRecords = function (savedExec, stepRecords) {
+function $porta2d2bValidateRecords(savedExec, stepRecords) {
   var execution = normalizeExecRecord(savedExec)
   var steps = []
   if (stepRecords && stepRecords.length > 0) {
@@ -596,7 +596,11 @@ globalThis.$porta2d2bValidateRecords = function (savedExec, stepRecords) {
   return validateCore(execution, steps)
 }
 
-// Exporta constantes para reuso em hooks que precisem do mapa canônico
-globalThis.$porta2d2bCanonical = PORTA2D2B_CANONICAL
-globalThis.$porta2d2bCanonicalOrders = PORTA2D2B_CANONICAL_ORDERS
-globalThis.$porta2d2bExpectedVersion = PORTA2D2B_EXPECTED_VERSION
+module.exports = {
+  validate: $porta2d2bValidate,
+  validateProjection: $porta2d2bValidateProjection,
+  validateRecords: $porta2d2bValidateRecords,
+  canonical: PORTA2D2B_CANONICAL,
+  canonicalOrders: PORTA2D2B_CANONICAL_ORDERS,
+  expectedVersion: PORTA2D2B_EXPECTED_VERSION,
+}

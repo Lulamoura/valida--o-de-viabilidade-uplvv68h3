@@ -16,6 +16,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/evidence-porta-2d2b/:execId',
   (e) => {
+    var validator = require(__hooks + '/ac_validate_2d2b.js')
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')
     var isSA = false
@@ -42,7 +43,7 @@ routerAdd(
     if (!execId) return e.json(400, { error: 'missing_exec_id' })
 
     // ─── CORREÇÃO 9: validação canônica compartilhada ───
-    var validation = $porta2d2bValidate($app, execId)
+    var validation = validator.validate($app, execId)
 
     if (!validation.execution) {
       return e.json(404, { error: 'execution_not_found', execId: execId })
@@ -114,10 +115,10 @@ routerAdd(
       hash_declaration: hashDeclaration,
       expected_contracts: expectedContracts,
       queried_at: new Date().toISOString(),
-      schema_version_expected: $porta2d2bExpectedVersion,
+      schema_version_expected: validator.expectedVersion,
       execution: exec,
       steps: steps,
-      canonical_map: $porta2d2bCanonical,
+      canonical_map: validator.canonical,
       classification: validation.classification,
       classification_justification: validation.justification,
       total_steps_expected: 16,
@@ -126,7 +127,7 @@ routerAdd(
       validation_shared_with_runner: true,
       reconstruction_note:
         'PASS somente se TODOS os critérios satisfeitos pela função compartilhada $porta2d2bValidate: estado=pass, 16 etapas únicas A1–D1, contratos estruturados (A7 missing_signature, B2 duplicate, B4 snapshots+1, B5 ocorrencias+1, C1 idempotent=false com rolled_back restaurado, C2 idempotent=true rolled_back vazio, D1 HTTP 503), deltas por etapa/finais, flag_final=false, hashes verificáveis (original + sanitizado recomputável), sanitização, versão ' +
-        $porta2d2bExpectedVersion +
+        validator.expectedVersion +
         ', counters qualificados (activecampaign=0). Anomalias cobrem conteúdo, delta, hash, truncamento, estado e counters. Qualquer divergência → nunca PASS.',
     }
 

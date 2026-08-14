@@ -43,6 +43,7 @@ routerAdd(
   'POST',
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
+    var validator = require(__hooks + '/ac_validate_2d2b.js')
     // ─── Auth + superadmin PRIMEIRO ───
     var authId = e.auth ? e.auth.id : ''
     if (!authId) return e.unauthorizedError('Autenticacao necessaria')
@@ -74,7 +75,7 @@ routerAdd(
     if (!whSecret) return e.json(500, { error: 'AC_WEBHOOK_SECRET not configured' })
 
     // ─── Precondição de evidência ───
-    var EXPECTED_SCHEMA_VERSION = 'v0.0.146'
+    var EXPECTED_SCHEMA_VERSION = 'v0.0.147'
     var execCol = null
     var evidenceCol = null
     try {
@@ -1617,7 +1618,7 @@ routerAdd(
               }
 
               // (4) EXECUTAR validação canônica completa sobre projeção + etapas relidas
-              var valResult = $porta2d2bValidateProjection(txApp, execId, projection, txSteps)
+              var valResult = validator.validateProjection(txApp, execId, projection, txSteps)
               if (!valResult.pass)
                 throw new Error(
                   'Pre-GO canonical validation failed: ' + (valResult.reason || 'unknown'),
@@ -1694,7 +1695,7 @@ routerAdd(
               //      mesma função. As verificações manuais acima fornecem
               //      mensagens específicas; validateCore é a guarda final.
               //      Se falhar, throw → rollback integral da transação.
-              var postSaveResult = $porta2d2bValidateRecords(savedExec, txSteps)
+              var postSaveResult = validator.validateRecords(savedExec, txSteps)
               if (postSaveResult.pass === false)
                 throw new Error(
                   'Post-save canonical validation failed: ' + (postSaveResult.reason || 'unknown'),
