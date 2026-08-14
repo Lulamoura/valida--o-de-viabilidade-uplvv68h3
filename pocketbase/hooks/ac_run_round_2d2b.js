@@ -62,477 +62,11 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/validator-2d2b-health',
   function (e) {
-    // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.159'
-    var PORTA2D2B_CANONICAL_ORDERS = [
-      'A1',
-      'A2',
-      'A3',
-      'A4',
-      'A5',
-      'A6',
-      'A7',
-      'A8',
-      'B1',
-      'B2',
-      'B3',
-      'B4',
-      'B5',
-      'C1',
-      'C2',
-      'D1',
-    ]
-    var PORTA2D2B_CANONICAL = {
-      A1: { codigo: 'A1', metodo: 'POST', http: 503 },
-      A2: { codigo: 'A2', metodo: 'GET', http: 405 },
-      A3: { codigo: 'A3', metodo: 'POST', http: 400 },
-      A4: { codigo: 'A4', metodo: 'POST', http: 400 },
-      A5: { codigo: 'A5', metodo: 'POST', http: 400 },
-      A6: { codigo: 'A6', metodo: 'POST', http: 400 },
-      A7: { codigo: 'A7', metodo: 'POST', http: 401 },
-      A8: { codigo: 'A8', metodo: 'POST', http: 401 },
-      B1: { codigo: 'B1_contato_criado', metodo: 'POST', http: 200 },
-      B2: { codigo: 'B2_duplicidade_sem_efeito', metodo: 'POST', http: 409 },
-      B3: { codigo: 'B3_negocio_criado', metodo: 'POST', http: 200 },
-      B4: { codigo: 'B4_snapshot_e_atualizacao', metodo: 'POST', http: 200 },
-      B5: { codigo: 'B5_negocio_e_ocorrencia_qualidade', metodo: 'POST', http: 200 },
-      C1: { codigo: 'C1_rollback', metodo: 'POST', http: 200 },
-      C2: { codigo: 'C2_repeticao_idempotente', metodo: 'POST', http: 200 },
-      D1: { codigo: 'D1', metodo: 'POST', http: 503 },
-    }
-    var PORTA2D2B_EXPECTED_FINAL_DELTAS = {
-      contatos: 1,
-      negocios: 2,
-      eventos: 5,
-      execucoes: 4,
-      vinculos: 3,
-      snapshots: 1,
-      ocorrencias: 1,
-      auditoria: 0,
-    }
-    // ─── funções privadas do validador (escopo do callback) ───
-    function $porta2d2bParseContract(ordem, contratoStr, deltasStr) {
-      var c = {}
-      try {
-        c = JSON.parse(contratoStr || '{}')
-      } catch (_) {
-        c = {}
-      }
-      var d = {}
-      try {
-        d = JSON.parse(deltasStr || '{}')
-      } catch (_) {
-        d = {}
-      }
-      if (ordem === 'A7') return { ok: c.error === 'missing_signature', detail: c }
-      if (ordem === 'B2') return { ok: c.duplicate === true, detail: c }
-      if (ordem === 'B4') {
-        var snapDelta = d.snapshots !== undefined ? d.snapshots : c.delta_snapshots
-        return { ok: snapDelta === 1, detail: c, delta: snapDelta }
-      }
-      if (ordem === 'B5') {
-        var ocoDelta = d.ocorrencias !== undefined ? d.ocorrencias : c.delta_ocorrencias
-        return { ok: ocoDelta === 1, detail: c, delta: ocoDelta }
-      }
-      if (ordem === 'C1') {
-        var rb0 = c.rolled_back && c.rolled_back[0] ? c.rolled_back[0] : {}
-        var ok =
-          c.success === true &&
-          c.rolled_back_length === 1 &&
-          rb0.action === 'restored_from_snapshot' &&
-          rb0.collection === 'com_negocios' &&
-          !!rb0.record_id &&
-          c.idempotent === false
-        return { ok: ok, detail: c }
-      }
-      if (ordem === 'C2') {
-        return {
-          ok: c.success === true && c.idempotent === true && c.rolled_back_length === 0,
-          detail: c,
-        }
-      }
-      if (ordem === 'D1') return { ok: true, detail: c }
-      return { ok: true, detail: c }
-    }
-    function validateCore(execution, steps) {
-      var anomalies = []
-      var classification = 'ESTADO_INDETERMINADO'
-      var justification = ''
-      if (!steps || steps.length === 0) {
-        classification = 'NAO_ENCONTRADA'
-        justification = 'Nenhuma etapa persistida.'
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps || [],
-        }
-      }
-      if (execution.estado !== 'pass') {
-        classification =
-          execution.estado === 'blocked'
-            ? 'BLOCKED'
-            : execution.estado === 'fail'
-              ? 'FAIL'
-              : execution.estado === 'aborted'
-                ? 'ABORTED'
-                : 'ESTADO_INDETERMINADO'
-        justification = 'estado=' + execution.estado + ' (esperado pass)'
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps,
-        }
-      }
-      if (steps.length !== 16) {
-        classification = 'INCOMPLETA'
-        justification = 'Persistidas ' + steps.length + ' de 16 etapas.'
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps,
-        }
-      }
-      var byOrder = {}
-      var seenOrders = {}
-      var hexRe = /^[0-9a-f]{64}$/
-      for (var si = 0; si < steps.length; si++) {
-        var st = steps[si]
-        var ord = st.ordem
-        if (seenOrders[ord]) anomalies.push({ type: 'DUPLICATE_ORDER', step: ord })
-        seenOrders[ord] = true
-        byOrder[ord] = st
-        var canon = PORTA2D2B_CANONICAL[ord]
-        if (!canon) {
-          anomalies.push({ type: 'UNKNOWN_ORDER', step: ord })
-          continue
-        }
-        if (st.codigo !== canon.codigo)
-          anomalies.push({
-            type: 'CODIGO_MISMATCH',
-            step: ord,
-            description: 'esperado=' + canon.codigo + ' real=' + st.codigo,
-          })
-        if (st.metodo !== canon.metodo) anomalies.push({ type: 'METODO_MISMATCH', step: ord })
-        if (st.http_status_esperado !== canon.http)
-          anomalies.push({ type: 'HTTP_ESPERADO_MISMATCH', step: ord })
-        if (st.http_status_real !== st.http_status_esperado)
-          anomalies.push({
-            type: 'HTTP_REAL_CONTRACT_FAIL',
-            step: ord,
-            description: st.http_status_real + '!=' + st.http_status_esperado,
-          })
-        if (st.resultado !== 'PASS')
-          anomalies.push({ type: 'RESULTADO_NOT_PASS', step: ord, description: st.resultado })
-        if (!st.started_at || !st.finished_at)
-          anomalies.push({ type: 'TIMESTAMP_MISSING', step: ord })
-        else {
-          var sT = new Date(st.started_at).getTime()
-          var fT = new Date(st.finished_at).getTime()
-          if (isNaN(sT) || isNaN(fT)) anomalies.push({ type: 'TIMESTAMP_INVALID', step: ord })
-          else if (sT > fT) anomalies.push({ type: 'TIMESTAMP_ORDER', step: ord })
-        }
-        if (!st.sha256_corpo_bruto || !hexRe.test(st.sha256_corpo_bruto))
-          anomalies.push({ type: 'SHA256_INVALID', step: ord })
-        if (!st.raw_body_original_sha256 || !hexRe.test(st.raw_body_original_sha256))
-          anomalies.push({ type: 'RAW_ORIGINAL_SHA256_INVALID', step: ord })
-        if (!st.raw_body_sanitized_sha256 || !hexRe.test(st.raw_body_sanitized_sha256))
-          anomalies.push({ type: 'RAW_SANITIZED_SHA256_INVALID', step: ord })
-        var recomputedSanitizedHash = $security.sha256(st.raw_body_sanitized || '')
-        if (recomputedSanitizedHash !== st.raw_body_sanitized_sha256)
-          anomalies.push({ type: 'RAW_SANITIZED_SHA256_MISMATCH', step: ord })
-        if (st.sha256_corpo_bruto !== st.raw_body_original_sha256)
-          anomalies.push({ type: 'RAW_ORIGINAL_SHA256_MISMATCH', step: ord })
-        if (st.sanitized !== true) anomalies.push({ type: 'SANITIZED_FALSE', step: ord })
-        if (st.resposta_truncated === true) {
-          try {
-            var env = JSON.parse(st.resposta_sanitizada || '{}')
-            if (
-              env.truncated !== true ||
-              typeof env.original_length !== 'number' ||
-              typeof env.preview !== 'string'
-            )
-              anomalies.push({ type: 'TRUNCATED_ENVELOPE_INVALID', step: ord })
-            if (env.original_length !== st.resposta_original_length)
-              anomalies.push({ type: 'TRUNCATED_LENGTH_MISMATCH', step: ord })
-          } catch (_) {
-            anomalies.push({ type: 'TRUNCATED_ENVELOPE_PARSE', step: ord })
-          }
-        }
-        try {
-          JSON.parse(st.deltas || '{}')
-        } catch (_) {
-          anomalies.push({ type: 'DELTA_PARSE_ERROR', step: ord })
-        }
-        try {
-          JSON.parse(st.counts_antes || '{}')
-        } catch (_) {
-          anomalies.push({ type: 'COUNTS_ANTES_PARSE', step: ord })
-        }
-        try {
-          JSON.parse(st.counts_depois || '{}')
-        } catch (_) {
-          anomalies.push({ type: 'COUNTS_DEPOIS_PARSE', step: ord })
-        }
-        var cval = $porta2d2bParseContract(ord, st.contrato, st.deltas)
-        if (!cval.ok)
-          anomalies.push({
-            type: 'CONTRACT_FAIL',
-            step: ord,
-            description: JSON.stringify(cval.detail).substring(0, 150),
-          })
-        if (st.contrato_ok !== true) anomalies.push({ type: 'CONTRATO_OK_FALSE', step: ord })
-      }
-      var missing = []
-      for (var mi = 0; mi < PORTA2D2B_CANONICAL_ORDERS.length; mi++) {
-        if (!byOrder[PORTA2D2B_CANONICAL_ORDERS[mi]]) missing.push(PORTA2D2B_CANONICAL_ORDERS[mi])
-      }
-      if (missing.length > 0)
-        anomalies.push({ type: 'MISSING_STEPS', description: missing.join(', ') })
-      var flagFinalObj = null
-      try {
-        flagFinalObj = JSON.parse(execution.flag_final || '{}')
-      } catch (_) {}
-      if (!flagFinalObj || flagFinalObj.valor !== 'false')
-        anomalies.push({ type: 'FLAG_FINAL_NOT_FALSE' })
-      if (!execution.counts_after) anomalies.push({ type: 'COUNTS_AFTER_MISSING' })
-      if (execution.versao_commit !== PORTA2D2B_EXPECTED_VERSION)
-        anomalies.push({
-          type: 'VERSION_MISMATCH',
-          description: execution.versao_commit + '!=' + PORTA2D2B_EXPECTED_VERSION,
-        })
-      if (execution.activecampaign_calls !== 0)
-        anomalies.push({
-          type: 'ACTIVECAMPAIGN_CALLS_NONZERO',
-          description: String(execution.activecampaign_calls),
-        })
-      if (execution.blocked_external_attempts !== 0)
-        anomalies.push({
-          type: 'BLOCKED_EXTERNAL_NONZERO',
-          description: String(execution.blocked_external_attempts),
-        })
-      if (execution.allowed_internal_calls <= 0)
-        anomalies.push({
-          type: 'ALLOWED_INTERNAL_ZERO',
-          description: 'nenhuma chamada interna permitida registrada',
-        })
-      try {
-        var cbFinal = JSON.parse(execution.counts_before || '{}')
-        var caFinal = JSON.parse(execution.counts_after || '{}')
-        for (var dk in PORTA2D2B_EXPECTED_FINAL_DELTAS) {
-          var actualDelta = (caFinal[dk] || 0) - (cbFinal[dk] || 0)
-          if (actualDelta !== PORTA2D2B_EXPECTED_FINAL_DELTAS[dk])
-            anomalies.push({
-              type: 'FINAL_DELTA_MISMATCH',
-              description:
-                dk +
-                ': esperado +' +
-                PORTA2D2B_EXPECTED_FINAL_DELTAS[dk] +
-                ' obtido +' +
-                actualDelta,
-            })
-        }
-      } catch (_) {
-        anomalies.push({ type: 'FINAL_DELTA_PARSE' })
-      }
-      var decisaoObj = null
-      try {
-        decisaoObj = JSON.parse(execution.decisao || '{}')
-      } catch (_) {}
-      if (!decisaoObj || decisaoObj.overall_status !== 'PASS' || decisaoObj.total_calls !== 16)
-        anomalies.push({ type: 'DECISAO_INCOERENTE' })
-      if (anomalies.length > 0) {
-        classification = 'FAIL'
-        justification =
-          'Divergências (' +
-          anomalies.length +
-          '): ' +
-          anomalies
-            .slice(0, 5)
-            .map(function (a) {
-              return a.type
-            })
-            .join(', ')
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps,
-        }
-      }
-      classification = 'PASS'
-      justification =
-        '16 etapas A1–D1 canônicas, PASS, contratos estruturais válidos, deltas por etapa/finais, flag_final=false, hashes verificáveis (original+sanitizado), sanitização confirmada, versão ' +
-        PORTA2D2B_EXPECTED_VERSION +
-        ', counters qualificados (activecampaign=0, blocked_external=0, allowed_internal>0).'
-      return {
-        pass: true,
-        reason: '',
-        anomalies: [],
-        classification: classification,
-        justification: justification,
-        execution: execution,
-        steps: steps,
-      }
-    }
-    function normalizeExecRecord(rec) {
-      return {
-        id: rec.getString('id'),
-        estado: rec.getString('estado'),
-        versao_commit: rec.getString('versao_commit'),
-        flag_final: rec.getString('flag_final'),
-        decisao: rec.getString('decisao'),
-        counts_before: rec.getString('counts_before'),
-        counts_after: rec.getString('counts_after'),
-        allowed_internal_calls: rec.getInt('allowed_internal_calls'),
-        blocked_external_attempts: rec.getInt('blocked_external_attempts'),
-        activecampaign_calls: rec.getInt('activecampaign_calls'),
-        prova_zero_chamadas_externas: rec.getBool('prova_zero_chamadas_externas'),
-      }
-    }
-    function normalizeStepRecord(s) {
-      return {
-        ordem: s.getString('ordem'),
-        codigo: s.getString('codigo'),
-        metodo: s.getString('metodo'),
-        rota_sanitizada: s.getString('rota_sanitizada'),
-        http_status_real: s.getInt('http_status_real'),
-        http_status_esperado: s.getInt('http_status_esperado'),
-        resultado: s.getString('resultado'),
-        started_at: s.getString('started_at'),
-        finished_at: s.getString('finished_at'),
-        counts_antes: s.getString('counts_antes'),
-        counts_depois: s.getString('counts_depois'),
-        deltas: s.getString('deltas'),
-        sha256_corpo_bruto: s.getString('sha256_corpo_bruto'),
-        raw_body_original_sha256: s.getString('raw_body_original_sha256'),
-        raw_body_sanitized: s.getString('raw_body_sanitized'),
-        raw_body_sanitized_sha256: s.getString('raw_body_sanitized_sha256'),
-        raw_body_size: s.getInt('raw_body_size'),
-        sanitized: s.getBool('sanitized'),
-        resposta_sanitizada: s.getString('resposta_sanitizada'),
-        resposta_truncated: s.getBool('resposta_truncated'),
-        resposta_original_length: s.getInt('resposta_original_length'),
-        contrato: s.getString('contrato'),
-        contrato_ok: s.getBool('contrato_ok'),
-        erro_real: s.getString('erro_real'),
-      }
-    }
-    function $porta2d2bValidate(app, execId) {
-      var execution = null
-      var steps = []
-      try {
-        var execRec = app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
-        execution = normalizeExecRecord(execRec)
-      } catch (er) {
-        return {
-          pass: false,
-          reason: 'exec not found: ' + String(er).substring(0, 120),
-          anomalies: [{ type: 'EXEC_NOT_FOUND' }],
-          classification: 'NAO_ENCONTRADA',
-          justification: 'Execução não encontrada.',
-          execution: null,
-          steps: [],
-        }
-      }
-      try {
-        var stepRecs = app.findRecordsByFilter(
-          'com_etapas_porta_2d2b',
-          "execucao_id = '" + execId + "'",
-          'ordem',
-          200,
-          0,
-        )
-        for (var i = 0; i < stepRecs.length; i++) steps.push(normalizeStepRecord(stepRecs[i]))
-      } catch (er) {
-        return {
-          pass: false,
-          reason: 'step read error: ' + String(er).substring(0, 200),
-          anomalies: [{ type: 'STEP_READ_ERROR', description: String(er).substring(0, 200) }],
-          classification: 'ESTADO_INDETERMINADO',
-          justification: 'Erro de leitura impede classificação.',
-          execution: execution,
-          steps: [],
-        }
-      }
-      return validateCore(execution, steps)
-    }
-    function $porta2d2bValidateProjection(app, execId, projection, stepRecords) {
-      if (!projection)
-        return {
-          pass: false,
-          reason: 'projection missing',
-          anomalies: [{ type: 'PROJECTION_MISSING' }],
-          classification: 'NAO_ENCONTRADA',
-          justification: 'Projeção ausente.',
-          execution: null,
-          steps: [],
-        }
-      var execution = {
-        id: projection.id || execId,
-        estado: projection.estado || '',
-        versao_commit: projection.versao_commit || '',
-        flag_final: projection.flag_final || '',
-        decisao: projection.decisao || '',
-        counts_before: projection.counts_before || '',
-        counts_after: projection.counts_after || '',
-        allowed_internal_calls: projection.allowed_internal_calls || 0,
-        blocked_external_attempts: projection.blocked_external_attempts || 0,
-        activecampaign_calls: projection.activecampaign_calls || 0,
-        prova_zero_chamadas_externas: !!projection.prova_zero_chamadas_externas,
-      }
-      var steps = []
-      if (!stepRecords || stepRecords.length === 0) return validateCore(execution, steps)
-      try {
-        for (var i = 0; i < stepRecords.length; i++) steps.push(normalizeStepRecord(stepRecords[i]))
-      } catch (er) {
-        return {
-          pass: false,
-          reason: 'step read error: ' + String(er).substring(0, 200),
-          anomalies: [{ type: 'STEP_READ_ERROR', description: String(er).substring(0, 200) }],
-          classification: 'ESTADO_INDETERMINADO',
-          justification: 'Erro de leitura impede classificação.',
-          execution: execution,
-          steps: [],
-        }
-      }
-      return validateCore(execution, steps)
-    }
-    function $porta2d2bValidateRecords(savedExec, stepRecords) {
-      var execution = normalizeExecRecord(savedExec)
-      var steps = []
-      if (stepRecords && stepRecords.length > 0) {
-        for (var i = 0; i < stepRecords.length; i++) steps.push(normalizeStepRecord(stepRecords[i]))
-      }
-      return validateCore(execution, steps)
-    }
-    // ─── objeto local validatorCanonical (seis membros) ───
-    var validatorCanonical = {
-      validate: $porta2d2bValidate,
-      validateProjection: $porta2d2bValidateProjection,
-      validateRecords: $porta2d2bValidateRecords,
-      canonical: PORTA2D2B_CANONICAL,
-      canonicalOrders: PORTA2D2B_CANONICAL_ORDERS,
-      expectedVersion: PORTA2D2B_EXPECTED_VERSION,
-    }
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.160'
     return e.json(200, {
       ok: true,
       module: 'ac_validate_2d2b',
-      version: validatorCanonical.expectedVersion,
+      version: PORTA2D2B_EXPECTED_VERSION,
     })
   },
   $apis.requireAuth('users'),
@@ -557,333 +91,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/evidence-porta-2d2b/{execId}',
   (e) => {
-    // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.159'
-    var PORTA2D2B_CANONICAL_ORDERS = [
-      'A1',
-      'A2',
-      'A3',
-      'A4',
-      'A5',
-      'A6',
-      'A7',
-      'A8',
-      'B1',
-      'B2',
-      'B3',
-      'B4',
-      'B5',
-      'C1',
-      'C2',
-      'D1',
-    ]
-    var PORTA2D2B_CANONICAL = {
-      A1: { codigo: 'A1', metodo: 'POST', http: 503 },
-      A2: { codigo: 'A2', metodo: 'GET', http: 405 },
-      A3: { codigo: 'A3', metodo: 'POST', http: 400 },
-      A4: { codigo: 'A4', metodo: 'POST', http: 400 },
-      A5: { codigo: 'A5', metodo: 'POST', http: 400 },
-      A6: { codigo: 'A6', metodo: 'POST', http: 400 },
-      A7: { codigo: 'A7', metodo: 'POST', http: 401 },
-      A8: { codigo: 'A8', metodo: 'POST', http: 401 },
-      B1: { codigo: 'B1_contato_criado', metodo: 'POST', http: 200 },
-      B2: { codigo: 'B2_duplicidade_sem_efeito', metodo: 'POST', http: 409 },
-      B3: { codigo: 'B3_negocio_criado', metodo: 'POST', http: 200 },
-      B4: { codigo: 'B4_snapshot_e_atualizacao', metodo: 'POST', http: 200 },
-      B5: { codigo: 'B5_negocio_e_ocorrencia_qualidade', metodo: 'POST', http: 200 },
-      C1: { codigo: 'C1_rollback', metodo: 'POST', http: 200 },
-      C2: { codigo: 'C2_repeticao_idempotente', metodo: 'POST', http: 200 },
-      D1: { codigo: 'D1', metodo: 'POST', http: 503 },
-    }
-    var PORTA2D2B_EXPECTED_FINAL_DELTAS = {
-      contatos: 1,
-      negocios: 2,
-      eventos: 5,
-      execucoes: 4,
-      vinculos: 3,
-      snapshots: 1,
-      ocorrencias: 1,
-      auditoria: 0,
-    }
-    // ─── funções privadas do validador (escopo do callback) ───
-    function $porta2d2bParseContract(ordem, contratoStr, deltasStr) {
-      var c = {}
-      try {
-        c = JSON.parse(contratoStr || '{}')
-      } catch (_) {
-        c = {}
-      }
-      var d = {}
-      try {
-        d = JSON.parse(deltasStr || '{}')
-      } catch (_) {
-        d = {}
-      }
-      if (ordem === 'A7') return { ok: c.error === 'missing_signature', detail: c }
-      if (ordem === 'B2') return { ok: c.duplicate === true, detail: c }
-      if (ordem === 'B4') {
-        var snapDelta = d.snapshots !== undefined ? d.snapshots : c.delta_snapshots
-        return { ok: snapDelta === 1, detail: c, delta: snapDelta }
-      }
-      if (ordem === 'B5') {
-        var ocoDelta = d.ocorrencias !== undefined ? d.ocorrencias : c.delta_ocorrencias
-        return { ok: ocoDelta === 1, detail: c, delta: ocoDelta }
-      }
-      if (ordem === 'C1') {
-        var rb0 = c.rolled_back && c.rolled_back[0] ? c.rolled_back[0] : {}
-        var ok =
-          c.success === true &&
-          c.rolled_back_length === 1 &&
-          rb0.action === 'restored_from_snapshot' &&
-          rb0.collection === 'com_negocios' &&
-          !!rb0.record_id &&
-          c.idempotent === false
-        return { ok: ok, detail: c }
-      }
-      if (ordem === 'C2') {
-        return {
-          ok: c.success === true && c.idempotent === true && c.rolled_back_length === 0,
-          detail: c,
-        }
-      }
-      if (ordem === 'D1') return { ok: true, detail: c }
-      return { ok: true, detail: c }
-    }
-    function validateCore(execution, steps) {
-      var anomalies = []
-      var classification = 'ESTADO_INDETERMINADO'
-      var justification = ''
-      if (!steps || steps.length === 0) {
-        classification = 'NAO_ENCONTRADA'
-        justification = 'Nenhuma etapa persistida.'
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps || [],
-        }
-      }
-      if (execution.estado !== 'pass') {
-        classification =
-          execution.estado === 'blocked'
-            ? 'BLOCKED'
-            : execution.estado === 'fail'
-              ? 'FAIL'
-              : execution.estado === 'aborted'
-                ? 'ABORTED'
-                : 'ESTADO_INDETERMINADO'
-        justification = 'estado=' + execution.estado + ' (esperado pass)'
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps,
-        }
-      }
-      if (steps.length !== 16) {
-        classification = 'INCOMPLETA'
-        justification = 'Persistidas ' + steps.length + ' de 16 etapas.'
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps,
-        }
-      }
-      var byOrder = {}
-      var seenOrders = {}
-      var hexRe = /^[0-9a-f]{64}$/
-      for (var si = 0; si < steps.length; si++) {
-        var st = steps[si]
-        var ord = st.ordem
-        if (seenOrders[ord]) anomalies.push({ type: 'DUPLICATE_ORDER', step: ord })
-        seenOrders[ord] = true
-        byOrder[ord] = st
-        var canon = PORTA2D2B_CANONICAL[ord]
-        if (!canon) {
-          anomalies.push({ type: 'UNKNOWN_ORDER', step: ord })
-          continue
-        }
-        if (st.codigo !== canon.codigo)
-          anomalies.push({
-            type: 'CODIGO_MISMATCH',
-            step: ord,
-            description: 'esperado=' + canon.codigo + ' real=' + st.codigo,
-          })
-        if (st.metodo !== canon.metodo) anomalies.push({ type: 'METODO_MISMATCH', step: ord })
-        if (st.http_status_esperado !== canon.http)
-          anomalies.push({ type: 'HTTP_ESPERADO_MISMATCH', step: ord })
-        if (st.http_status_real !== st.http_status_esperado)
-          anomalies.push({
-            type: 'HTTP_REAL_CONTRACT_FAIL',
-            step: ord,
-            description: st.http_status_real + '!=' + st.http_status_esperado,
-          })
-        if (st.resultado !== 'PASS')
-          anomalies.push({ type: 'RESULTADO_NOT_PASS', step: ord, description: st.resultado })
-        if (!st.started_at || !st.finished_at)
-          anomalies.push({ type: 'TIMESTAMP_MISSING', step: ord })
-        else {
-          var sT = new Date(st.started_at).getTime()
-          var fT = new Date(st.finished_at).getTime()
-          if (isNaN(sT) || isNaN(fT)) anomalies.push({ type: 'TIMESTAMP_INVALID', step: ord })
-          else if (sT > fT) anomalies.push({ type: 'TIMESTAMP_ORDER', step: ord })
-        }
-        if (!st.sha256_corpo_bruto || !hexRe.test(st.sha256_corpo_bruto))
-          anomalies.push({ type: 'SHA256_INVALID', step: ord })
-        if (!st.raw_body_original_sha256 || !hexRe.test(st.raw_body_original_sha256))
-          anomalies.push({ type: 'RAW_ORIGINAL_SHA256_INVALID', step: ord })
-        if (!st.raw_body_sanitized_sha256 || !hexRe.test(st.raw_body_sanitized_sha256))
-          anomalies.push({ type: 'RAW_SANITIZED_SHA256_INVALID', step: ord })
-        var recomputedSanitizedHash = $security.sha256(st.raw_body_sanitized || '')
-        if (recomputedSanitizedHash !== st.raw_body_sanitized_sha256)
-          anomalies.push({ type: 'RAW_SANITIZED_SHA256_MISMATCH', step: ord })
-        if (st.sha256_corpo_bruto !== st.raw_body_original_sha256)
-          anomalies.push({ type: 'RAW_ORIGINAL_SHA256_MISMATCH', step: ord })
-        if (st.sanitized !== true) anomalies.push({ type: 'SANITIZED_FALSE', step: ord })
-        if (st.resposta_truncated === true) {
-          try {
-            var env = JSON.parse(st.resposta_sanitizada || '{}')
-            if (
-              env.truncated !== true ||
-              typeof env.original_length !== 'number' ||
-              typeof env.preview !== 'string'
-            )
-              anomalies.push({ type: 'TRUNCATED_ENVELOPE_INVALID', step: ord })
-            if (env.original_length !== st.resposta_original_length)
-              anomalies.push({ type: 'TRUNCATED_LENGTH_MISMATCH', step: ord })
-          } catch (_) {
-            anomalies.push({ type: 'TRUNCATED_ENVELOPE_PARSE', step: ord })
-          }
-        }
-        try {
-          JSON.parse(st.deltas || '{}')
-        } catch (_) {
-          anomalies.push({ type: 'DELTA_PARSE_ERROR', step: ord })
-        }
-        try {
-          JSON.parse(st.counts_antes || '{}')
-        } catch (_) {
-          anomalies.push({ type: 'COUNTS_ANTES_PARSE', step: ord })
-        }
-        try {
-          JSON.parse(st.counts_depois || '{}')
-        } catch (_) {
-          anomalies.push({ type: 'COUNTS_DEPOIS_PARSE', step: ord })
-        }
-        var cval = $porta2d2bParseContract(ord, st.contrato, st.deltas)
-        if (!cval.ok)
-          anomalies.push({
-            type: 'CONTRACT_FAIL',
-            step: ord,
-            description: JSON.stringify(cval.detail).substring(0, 150),
-          })
-        if (st.contrato_ok !== true) anomalies.push({ type: 'CONTRATO_OK_FALSE', step: ord })
-      }
-      var missing = []
-      for (var mi = 0; mi < PORTA2D2B_CANONICAL_ORDERS.length; mi++) {
-        if (!byOrder[PORTA2D2B_CANONICAL_ORDERS[mi]]) missing.push(PORTA2D2B_CANONICAL_ORDERS[mi])
-      }
-      if (missing.length > 0)
-        anomalies.push({ type: 'MISSING_STEPS', description: missing.join(', ') })
-      var flagFinalObj = null
-      try {
-        flagFinalObj = JSON.parse(execution.flag_final || '{}')
-      } catch (_) {}
-      if (!flagFinalObj || flagFinalObj.valor !== 'false')
-        anomalies.push({ type: 'FLAG_FINAL_NOT_FALSE' })
-      if (!execution.counts_after) anomalies.push({ type: 'COUNTS_AFTER_MISSING' })
-      if (execution.versao_commit !== PORTA2D2B_EXPECTED_VERSION)
-        anomalies.push({
-          type: 'VERSION_MISMATCH',
-          description: execution.versao_commit + '!=' + PORTA2D2B_EXPECTED_VERSION,
-        })
-      if (execution.activecampaign_calls !== 0)
-        anomalies.push({
-          type: 'ACTIVECAMPAIGN_CALLS_NONZERO',
-          description: String(execution.activecampaign_calls),
-        })
-      if (execution.blocked_external_attempts !== 0)
-        anomalies.push({
-          type: 'BLOCKED_EXTERNAL_NONZERO',
-          description: String(execution.blocked_external_attempts),
-        })
-      if (execution.allowed_internal_calls <= 0)
-        anomalies.push({
-          type: 'ALLOWED_INTERNAL_ZERO',
-          description: 'nenhuma chamada interna permitida registrada',
-        })
-      try {
-        var cbFinal = JSON.parse(execution.counts_before || '{}')
-        var caFinal = JSON.parse(execution.counts_after || '{}')
-        for (var dk in PORTA2D2B_EXPECTED_FINAL_DELTAS) {
-          var actualDelta = (caFinal[dk] || 0) - (cbFinal[dk] || 0)
-          if (actualDelta !== PORTA2D2B_EXPECTED_FINAL_DELTAS[dk])
-            anomalies.push({
-              type: 'FINAL_DELTA_MISMATCH',
-              description:
-                dk +
-                ': esperado +' +
-                PORTA2D2B_EXPECTED_FINAL_DELTAS[dk] +
-                ' obtido +' +
-                actualDelta,
-            })
-        }
-      } catch (_) {
-        anomalies.push({ type: 'FINAL_DELTA_PARSE' })
-      }
-      var decisaoObj = null
-      try {
-        decisaoObj = JSON.parse(execution.decisao || '{}')
-      } catch (_) {}
-      if (!decisaoObj || decisaoObj.overall_status !== 'PASS' || decisaoObj.total_calls !== 16)
-        anomalies.push({ type: 'DECISAO_INCOERENTE' })
-      if (anomalies.length > 0) {
-        classification = 'FAIL'
-        justification =
-          'Divergências (' +
-          anomalies.length +
-          '): ' +
-          anomalies
-            .slice(0, 5)
-            .map(function (a) {
-              return a.type
-            })
-            .join(', ')
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps,
-        }
-      }
-      classification = 'PASS'
-      justification =
-        '16 etapas A1–D1 canônicas, PASS, contratos estruturais válidos, deltas por etapa/finais, flag_final=false, hashes verificáveis (original+sanitizado), sanitização confirmada, versão ' +
-        PORTA2D2B_EXPECTED_VERSION +
-        ', counters qualificados (activecampaign=0, blocked_external=0, allowed_internal>0).'
-      return {
-        pass: true,
-        reason: '',
-        anomalies: [],
-        classification: classification,
-        justification: justification,
-        execution: execution,
-        steps: steps,
-      }
-    }
+    // ─── normalizadores (leitura dos registros persistidos) ───
     function normalizeExecRecord(rec) {
       return {
         id: rec.getString('id'),
@@ -926,103 +134,6 @@ routerAdd(
         contrato_ok: s.getBool('contrato_ok'),
         erro_real: s.getString('erro_real'),
       }
-    }
-    function $porta2d2bValidate(app, execId) {
-      var execution = null
-      var steps = []
-      try {
-        var execRec = app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
-        execution = normalizeExecRecord(execRec)
-      } catch (er) {
-        return {
-          pass: false,
-          reason: 'exec not found: ' + String(er).substring(0, 120),
-          anomalies: [{ type: 'EXEC_NOT_FOUND' }],
-          classification: 'NAO_ENCONTRADA',
-          justification: 'Execução não encontrada.',
-          execution: null,
-          steps: [],
-        }
-      }
-      try {
-        var stepRecs = app.findRecordsByFilter(
-          'com_etapas_porta_2d2b',
-          "execucao_id = '" + execId + "'",
-          'ordem',
-          200,
-          0,
-        )
-        for (var i = 0; i < stepRecs.length; i++) steps.push(normalizeStepRecord(stepRecs[i]))
-      } catch (er) {
-        return {
-          pass: false,
-          reason: 'step read error: ' + String(er).substring(0, 200),
-          anomalies: [{ type: 'STEP_READ_ERROR', description: String(er).substring(0, 200) }],
-          classification: 'ESTADO_INDETERMINADO',
-          justification: 'Erro de leitura impede classificação.',
-          execution: execution,
-          steps: [],
-        }
-      }
-      return validateCore(execution, steps)
-    }
-    function $porta2d2bValidateProjection(app, execId, projection, stepRecords) {
-      if (!projection)
-        return {
-          pass: false,
-          reason: 'projection missing',
-          anomalies: [{ type: 'PROJECTION_MISSING' }],
-          classification: 'NAO_ENCONTRADA',
-          justification: 'Projeção ausente.',
-          execution: null,
-          steps: [],
-        }
-      var execution = {
-        id: projection.id || execId,
-        estado: projection.estado || '',
-        versao_commit: projection.versao_commit || '',
-        flag_final: projection.flag_final || '',
-        decisao: projection.decisao || '',
-        counts_before: projection.counts_before || '',
-        counts_after: projection.counts_after || '',
-        allowed_internal_calls: projection.allowed_internal_calls || 0,
-        blocked_external_attempts: projection.blocked_external_attempts || 0,
-        activecampaign_calls: projection.activecampaign_calls || 0,
-        prova_zero_chamadas_externas: !!projection.prova_zero_chamadas_externas,
-      }
-      var steps = []
-      if (!stepRecords || stepRecords.length === 0) return validateCore(execution, steps)
-      try {
-        for (var i = 0; i < stepRecords.length; i++) steps.push(normalizeStepRecord(stepRecords[i]))
-      } catch (er) {
-        return {
-          pass: false,
-          reason: 'step read error: ' + String(er).substring(0, 200),
-          anomalies: [{ type: 'STEP_READ_ERROR', description: String(er).substring(0, 200) }],
-          classification: 'ESTADO_INDETERMINADO',
-          justification: 'Erro de leitura impede classificação.',
-          execution: execution,
-          steps: [],
-        }
-      }
-      return validateCore(execution, steps)
-    }
-    function $porta2d2bValidateRecords(savedExec, stepRecords) {
-      var execution = normalizeExecRecord(savedExec)
-      var steps = []
-      if (stepRecords && stepRecords.length > 0) {
-        for (var i = 0; i < stepRecords.length; i++) steps.push(normalizeStepRecord(stepRecords[i]))
-      }
-      return validateCore(execution, steps)
-    }
-    // ─── objeto local validatorCanonical (seis membros) ───
-    var validatorCanonical = {
-      validate: $porta2d2bValidate,
-      validateProjection: $porta2d2bValidateProjection,
-      validateRecords: $porta2d2bValidateRecords,
-      canonical: PORTA2D2B_CANONICAL,
-      canonicalOrders: PORTA2D2B_CANONICAL_ORDERS,
-      expectedVersion: PORTA2D2B_EXPECTED_VERSION,
     }
 
     var authId = e.auth ? e.auth.id : ''
@@ -1050,96 +161,176 @@ routerAdd(
     var execId = e.request.pathValue('execId') || ''
     if (!execId) return e.json(400, { error: 'missing_exec_id' })
 
-    // ─── CORREÇÃO 9: validação canônica compartilhada ───
-    var validation = validatorCanonical.validate($app, execId)
-
-    if (!validation.execution) {
+    // ─── Busca da execução ───
+    var execRec = null
+    try {
+      execRec = $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
+    } catch (_) {}
+    if (!execRec) {
       return e.json(404, { error: 'execution_not_found', execId: execId })
     }
 
-    var exec = validation.execution
-    var steps = validation.steps
+    var normalizedExec = normalizeExecRecord(execRec)
 
-    // CORREÇÃO 11: distinguir "GET não escreve" de "round realizou escritas"
-    var decisaoObj = null
+    var steps = []
     try {
-      decisaoObj = JSON.parse(exec.decisao || '{}')
+      var stepRecs = $app.findRecordsByFilter(
+        'com_etapas_porta_2d2b',
+        "execucao_id = '" + execId + "'",
+        'ordem',
+        200,
+        0,
+      )
+      for (var si = 0; si < stepRecs.length; si++) steps.push(normalizeStepRecord(stepRecs[si]))
     } catch (_) {}
-    var roundWrites = 0
+
+    // ─── Parse do snapshot persistido ───
+    var snapshot = null
     try {
-      roundWrites = decisaoObj && decisaoObj.total_calls ? decisaoObj.total_calls : steps.length
+      snapshot = JSON.parse(execRec.getString('decisao') || '{}')
     } catch (_) {}
-    var writesNote =
-      'Esta GET de consulta NÃO realiza escritas (writes_performed=0). O round que originou esta evidência realizou escritas sintéticas em coleções internas (round_writes=' +
-      roundWrites +
-      '). Não confundir.'
 
-    // external_calls qualificado (CORREÇÃO 9: não é constante sem qualificação)
-    var externalCallsQualified = {
-      activecampaign_calls: exec.activecampaign_calls,
-      blocked_external_attempts: exec.blocked_external_attempts,
-      allowed_internal_calls: exec.allowed_internal_calls,
-      note: 'external_calls não é uma constante: qualificado em allowed_internal_calls (chamadas internas permitidas realizadas), blocked_external_attempts (tentativas fora da allowlist bloqueadas) e activecampaign_calls (obrigatoriamente zero).',
+    if (!snapshot || !snapshot.snapshot_source || !snapshot.classification) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        pass: false,
+        classification: 'INDETERMINADO',
+        anomalies: [
+          {
+            type: 'SNAPSHOT_MALFORMED',
+            description: 'decisao ausente ou incompleta no registro de execucao',
+          },
+        ],
+      })
     }
 
-    // CORREÇÃO 6: declaração de hashes verificáveis
-    var hashDeclaration = {
-      raw_body_original_sha256:
-        'Hash SHA-256 do raw body ORIGINAL (não exposto se contiver segredos). Refere-se ao conteúdo bruto real recebido pelo runner. NÃO pode ser recomputado do conteúdo devolvido pois o original pode conter Authorization/token/assinatura/email/telefone sanitizados.',
-      raw_body_sanitized_sha256:
-        'Hash SHA-256 do raw_body_sanitized (conteúdo sanitizado devolvido). PODE ser recomputado do conteúdo devolvido no campo raw_body_sanitized. Não afirma origem do hash — valida-se apenas o formato (64 hex) e a igualdade com o conteúdo sanitizado persistido.',
-      raw_body_size: 'Tamanho em bytes do raw body original (antes da sanitização).',
-      sanitized: 'Indica se o conteúdo persistido passou por sanitização de segredos.',
-      recomputable: 'raw_body_sanitized_sha256',
-      refers_to_original: 'raw_body_original_sha256',
+    // ─── Validar campos obrigatórios do snapshot ───
+    var requiredFields = [
+      'pass',
+      'classification',
+      'classification_justification',
+      'anomalies',
+      'canonical_map',
+      'expected_contracts',
+      'hash_declaration',
+      'expected_version',
+      'overall_status',
+      'total_calls',
+    ]
+    for (var ri = 0; ri < requiredFields.length; ri++) {
+      if (snapshot[requiredFields[ri]] === undefined) {
+        return e.json(409, {
+          error: 'evidence_incomplete',
+          pass: false,
+          classification: 'INDETERMINADO',
+          anomalies: [
+            {
+              type: 'SNAPSHOT_INCOMPLETO',
+              description: 'Campo obrigatório ausente no snapshot: ' + requiredFields[ri],
+            },
+          ],
+        })
+      }
     }
 
-    // mapa de contratos esperados por etapa (CORREÇÃO 5)
-    var expectedContracts = {
-      A7: { error: 'missing_signature' },
-      B2: { duplicate: true },
-      B4: { delta_snapshots: 1 },
-      B5: { delta_ocorrencias: 1 },
-      C1: {
-        success: true,
-        idempotent: false,
-        rolled_back_action: 'restored_from_snapshot',
-        rolled_back_collection: 'com_negocios',
-        rolled_back_record_id: true,
-        rolled_back_length: 1,
-      },
-      C2: { success: true, idempotent: true, rolled_back_length: 0 },
-      D1: { http: 503, flag_final: false },
+    // ─── Validar canonical_map contém A1–D1 ───
+    var canonicalKeys = [
+      'A1',
+      'A2',
+      'A3',
+      'A4',
+      'A5',
+      'A6',
+      'A7',
+      'B1',
+      'B2',
+      'B3',
+      'B4',
+      'B5',
+      'C1',
+      'C2',
+      'D1',
+    ]
+    for (var ci = 0; ci < canonicalKeys.length; ci++) {
+      if (!snapshot.canonical_map[canonicalKeys[ci]]) {
+        return e.json(409, {
+          error: 'evidence_incomplete',
+          pass: false,
+          classification: 'INDETERMINADO',
+          anomalies: [
+            {
+              type: 'CANONICAL_MAP_INCOMPLETO',
+              description: 'Chave ausente no canonical_map: ' + canonicalKeys[ci],
+            },
+          ],
+        })
+      }
     }
 
-    var canonical = {
+    // ─── Validar 16 etapas ───
+    if (steps.length !== 16) {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        pass: false,
+        classification: 'INDETERMINADO',
+        anomalies: [
+          {
+            type: 'STEP_COUNT_MISMATCH',
+            description: 'Esperadas 16 etapas, encontradas ' + steps.length,
+          },
+        ],
+      })
+    }
+
+    // ─── Validar coerência estado vs decisão ───
+    if (execRec.getString('estado') === 'pass' && snapshot.classification !== 'PASS') {
+      return e.json(409, {
+        error: 'evidence_incomplete',
+        pass: false,
+        classification: 'INDETERMINADO',
+        anomalies: [
+          {
+            type: 'STATE_CLASSIFICATION_MISMATCH',
+            description: 'estado=pass mas classification=' + snapshot.classification,
+          },
+        ],
+      })
+    }
+
+    // ─── Sucesso: devolver snapshot literal ───
+    return e.json(200, {
       route: 'GET /backend/v1/integracao/ac/evidence-porta-2d2b/{execId}',
       route_version: 'R2-EVIDENCE-2D2B-20260813-FAILCLOSED-v0.0.137',
       read_only: true,
       writes_performed: 0,
-      writes_note: writesNote,
-      round_writes: roundWrites,
-      external_calls_qualified: externalCallsQualified,
-      hash_declaration: hashDeclaration,
-      expected_contracts: expectedContracts,
+      writes_note:
+        'Evidencia lida do snapshot canonico persistido pelo runner. Nao recalcula, apenas expoe.',
+      round_writes: snapshot.total_calls,
+      external_calls_qualified: {
+        blocked_external_attempts: normalizedExec.blocked_external_attempts,
+        allowed_internal_calls: normalizedExec.allowed_internal_calls,
+        activecampaign_calls: normalizedExec.activecampaign_calls,
+        activecampaign_note:
+          normalizedExec.activecampaign_calls > 0
+            ? 'Foram executadas chamadas reais ao ActiveCampaign'
+            : 'Nenhuma chamada real ao ActiveCampaign',
+      },
+      hash_declaration: snapshot.hash_declaration,
+      expected_contracts: snapshot.expected_contracts,
       queried_at: new Date().toISOString(),
-      schema_version_expected: validatorCanonical.expectedVersion,
-      execution: exec,
+      schema_version_expected: snapshot.expected_version,
+      execution: normalizedExec,
       steps: steps,
-      canonical_map: validatorCanonical.canonical,
-      classification: validation.classification,
-      classification_justification: validation.justification,
+      canonical_map: snapshot.canonical_map,
+      classification: snapshot.classification,
+      classification_justification: snapshot.classification_justification,
       total_steps_expected: 16,
       total_steps_persisted: steps.length,
-      anomalies: validation.anomalies,
+      anomalies: snapshot.anomalies,
       validation_shared_with_runner: true,
       reconstruction_note:
-        'PASS somente se TODOS os critérios satisfeitos pela função compartilhada $porta2d2bValidate: estado=pass, 16 etapas únicas A1–D1, contratos estruturados (A7 missing_signature, B2 duplicate, B4 snapshots+1, B5 ocorrencias+1, C1 idempotent=false com rolled_back restaurado, C2 idempotent=true rolled_back vazio, D1 HTTP 503), deltas por etapa/finais, flag_final=false, hashes verificáveis (original + sanitizado recomputável), sanitização, versão ' +
-        validatorCanonical.expectedVersion +
-        ', counters qualificados (activecampaign=0). Anomalias cobrem conteúdo, delta, hash, truncamento, estado e counters. Qualquer divergência → nunca PASS.',
-    }
-
-    return e.json(200, canonical)
+        'Evidencia lida do snapshot canonico persistido pelo runner (validateCore). Nenhuma reclassificacao ou validacao executada nesta rota.',
+    })
   },
   $apis.requireAuth(),
 )
@@ -1196,7 +387,7 @@ routerAdd(
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
     // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.159'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.160'
     var PORTA2D2B_CANONICAL_ORDERS = [
       'A1',
       'A2',
@@ -1661,6 +852,191 @@ routerAdd(
       canonical: PORTA2D2B_CANONICAL,
       canonicalOrders: PORTA2D2B_CANONICAL_ORDERS,
       expectedVersion: PORTA2D2B_EXPECTED_VERSION,
+    }
+
+    // ─── catálogos canônicos do snapshot (constantes únicas no runner) ───
+    var expectedContracts = {
+      A7: { error: 'missing_signature' },
+      B2: { duplicate: true },
+      B4: { delta_snapshots: 1 },
+      B5: { delta_ocorrencias: 1 },
+      C1: {
+        success: true,
+        idempotent: false,
+        rolled_back_action: 'restored_from_snapshot',
+        rolled_back_collection: 'com_negocios',
+        rolled_back_record_id: true,
+        rolled_back_length: 1,
+      },
+      C2: { success: true, idempotent: true, rolled_back_length: 0 },
+      D1: { http: 503, flag_final: false },
+    }
+    var hashDeclaration = {
+      raw_body_original_sha256:
+        'Hash SHA-256 do raw body ORIGINAL (nao exposto se contiver segredos). Refere-se ao conteudo bruto real recebido pelo runner. NAO pode ser recomputado do conteudo devolvido pois o original pode conter Authorization/token/assinatura/email/telefone sanitizados.',
+      raw_body_sanitized_sha256:
+        'Hash SHA-256 do raw_body_sanitized (conteudo sanitizado devolvido). PODE ser recomputado do conteudo devolvido no campo raw_body_sanitized. Valida-se o formato (64 hex) e a igualdade com o conteudo sanitizado persistido.',
+      raw_body_size: 'Tamanho em bytes do raw body original (antes da sanitizacao).',
+      sanitized: 'Indica se o conteudo persistido passou por sanitizacao de segredos.',
+      recomputable: 'raw_body_sanitized_sha256',
+      refers_to_original: 'raw_body_original_sha256',
+    }
+
+    // ─── Construtor do snapshot canônico completo ───
+    // G18: snapshot persistido em com_execucoes_porta_2d2b.decisao com
+    // todos os campos obrigatórios. Valores derivados de runtime (não
+    // placeholders). snapshot_source='validateCore'.
+    function buildTerminalSnapshot(o) {
+      var v = o.validation
+      var snapshot = {
+        porta: '2D.2B',
+        overall_status: o.overallStatus,
+        go_no_go: o.goNoGo,
+        stop_reason: o.stopReason || '',
+        total_calls: o.totalCalls,
+        delta_match: o.deltaMatch,
+        persist_failure: o.persistFailure || false,
+        pass: v.pass,
+        classification: v.classification,
+        classification_justification: v.justification,
+        anomalies: v.anomalies,
+        canonical_map: PORTA2D2B_CANONICAL,
+        expected_contracts: expectedContracts,
+        hash_declaration: hashDeclaration,
+        expected_version: PORTA2D2B_EXPECTED_VERSION,
+        snapshot_source: 'validateCore',
+        snapshot_version: PORTA2D2B_EXPECTED_VERSION,
+        snapshot_at: new Date().toISOString(),
+      }
+      if (o.transactionError) snapshot.transaction_error = o.transactionError
+      return snapshot
+    }
+
+    // ─── Confirmação obrigatória do snapshot persistido ───
+    // G18: relê o registro, faz parse do snapshot e valida TODOS os
+    // campos obrigatórios. Retorna { ok: bool, error: string }.
+    function confirmTerminalSnapshot(rec, expectedClassification, app) {
+      var snap = null
+      try {
+        snap = JSON.parse(rec.getString('decisao') || '{}')
+      } catch (er) {
+        return {
+          ok: false,
+          error: 'G18_CONFIRMATION_FAILED: parse error: ' + String(er).substring(0, 120),
+        }
+      }
+      if (!snap) return { ok: false, error: 'G18_CONFIRMATION_FAILED: snapshot nulo' }
+      if (snap.snapshot_source !== 'validateCore')
+        return {
+          ok: false,
+          error: 'G18_CONFIRMATION_FAILED: snapshot_source=' + snap.snapshot_source,
+        }
+      if (snap.expected_version !== PORTA2D2B_EXPECTED_VERSION)
+        return {
+          ok: false,
+          error: 'G18_CONFIRMATION_FAILED: expected_version=' + snap.expected_version,
+        }
+      if (snap.classification !== expectedClassification)
+        return {
+          ok: false,
+          error:
+            'G18_CONFIRMATION_FAILED: classification=' +
+            snap.classification +
+            ' esperado=' +
+            expectedClassification,
+        }
+      // PASS espera pass=true; BLOCKED/FAIL esperam pass=false
+      if (expectedClassification === 'PASS' && snap.pass !== true)
+        return {
+          ok: false,
+          error: 'G18_CONFIRMATION_FAILED: pass=' + snap.pass + ' esperado=true (PASS)',
+        }
+      if (
+        (expectedClassification === 'BLOCKED' || expectedClassification === 'FAIL') &&
+        snap.pass !== false
+      )
+        return {
+          ok: false,
+          error:
+            'G18_CONFIRMATION_FAILED: pass=' +
+            snap.pass +
+            ' esperado=false (' +
+            expectedClassification +
+            ')',
+        }
+      // PASS exige overall_status=PASS e total_calls=16
+      if (expectedClassification === 'PASS') {
+        if (snap.overall_status !== 'PASS')
+          return {
+            ok: false,
+            error: 'G18_CONFIRMATION_FAILED: overall_status=' + snap.overall_status,
+          }
+        if (snap.total_calls !== 16)
+          return { ok: false, error: 'G18_CONFIRMATION_FAILED: total_calls=' + snap.total_calls }
+      }
+      // tipos
+      if (!Array.isArray(snap.anomalies))
+        return { ok: false, error: 'G18_CONFIRMATION_FAILED: anomalies nao é array' }
+      if (typeof snap.canonical_map !== 'object' || snap.canonical_map === null)
+        return { ok: false, error: 'G18_CONFIRMATION_FAILED: canonical_map nao é objeto' }
+      if (typeof snap.expected_contracts !== 'object' || snap.expected_contracts === null)
+        return { ok: false, error: 'G18_CONFIRMATION_FAILED: expected_contracts nao é objeto' }
+      if (typeof snap.hash_declaration !== 'object' || snap.hash_declaration === null)
+        return { ok: false, error: 'G18_CONFIRMATION_FAILED: hash_declaration nao é objeto' }
+      // 16 chaves A1–D1
+      var canonicalKeys = [
+        'A1',
+        'A2',
+        'A3',
+        'A4',
+        'A5',
+        'A6',
+        'A7',
+        'B1',
+        'B2',
+        'B3',
+        'B4',
+        'B5',
+        'C1',
+        'C2',
+        'D1',
+      ]
+      for (var ci = 0; ci < canonicalKeys.length; ci++) {
+        if (!snap.canonical_map[canonicalKeys[ci]])
+          return {
+            ok: false,
+            error: 'G18_CONFIRMATION_FAILED: chave canonical_map ausente: ' + canonicalKeys[ci],
+          }
+      }
+      // campos obrigatórios do formato 2a
+      var requiredFields = [
+        'porta',
+        'overall_status',
+        'go_no_go',
+        'stop_reason',
+        'total_calls',
+        'delta_match',
+        'persist_failure',
+        'pass',
+        'classification',
+        'classification_justification',
+        'anomalies',
+        'canonical_map',
+        'expected_contracts',
+        'hash_declaration',
+        'expected_version',
+        'snapshot_source',
+        'snapshot_version',
+        'snapshot_at',
+      ]
+      for (var ri = 0; ri < requiredFields.length; ri++) {
+        if (snap[requiredFields[ri]] === undefined)
+          return {
+            ok: false,
+            error: 'G18_CONFIRMATION_FAILED: campo obrigatório ausente: ' + requiredFields[ri],
+          }
+      }
+      return { ok: true, error: null, snapshot: snap }
     }
 
     // ─── Auth + superadmin PRIMEIRO ───
@@ -2210,33 +1586,64 @@ routerAdd(
         }
       }
       if (overallStatus === 'STOP' || overallStatus === 'BLOCKED') {
-        // CORREÇÃO 4: gravação terminal com confirmação
+        // G18 (2d): BLOCKED/FAIL — executar validateCore sobre os dados
+        // atuais (execução + etapas já persistidas) para produzir o
+        // snapshot canônico, persistir via safeUpdateExec e confirmar por
+        // releitura.
         var termEstado = overallStatus === 'BLOCKED' ? 'blocked' : 'fail'
+        var expectedClass = overallStatus === 'BLOCKED' ? 'BLOCKED' : 'FAIL'
+        // Reler execução + etapas para validateCore
+        var curExec = null
+        var curSteps = []
+        try {
+          curExec = normalizeExecRecord(
+            $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId),
+          )
+        } catch (_) {}
+        try {
+          var curStepRecs = $app.findRecordsByFilter(
+            'com_etapas_porta_2d2b',
+            "execucao_id = '" + execId + "'",
+            'ordem',
+            200,
+            0,
+          )
+          for (var cs = 0; cs < curStepRecs.length; cs++)
+            curSteps.push(normalizeStepRecord(curStepRecs[cs]))
+        } catch (_) {}
+        var termValidation = validateCore(curExec || { estado: '' }, curSteps)
+        var fullTermSnapshot = buildTerminalSnapshot({
+          validation: termValidation,
+          overallStatus: overallStatus,
+          goNoGo: 'NO-GO',
+          stopReason: stopReason,
+          totalCalls: callResults.length,
+          deltaMatch: deltaMatch,
+          persistFailure: persistFailure,
+        })
         var termRes = safeUpdateExec({
           estado: termEstado,
           finished_at: new Date().toISOString(),
           counts_after: JSON.stringify(countsAfter || gc()),
           flag_final: JSON.stringify(flagFinal || readFlag()),
-          decisao: JSON.stringify({
-            porta: '2D.2B',
-            overall_status: overallStatus,
-            go_no_go: 'NO-GO',
-            stop_reason: stopReason,
-            total_calls: callResults.length,
-          }),
+          decisao: JSON.stringify(fullTermSnapshot),
         })
-        // CORREÇÃO 4: só marcar terminalSaved após confirmação de save + reread
         if (termRes.saved && termRes.reread) {
           var ts = termRes.reread.getString('estado')
           if (ts === termEstado) {
-            terminalSaved = true
+            var termConfirm = confirmTerminalSnapshot(termRes.reread, expectedClass, $app)
+            if (!termConfirm.ok) {
+              overallStatus = 'BLOCKED'
+              stopReason = termConfirm.error
+              terminalSaved = false
+            } else {
+              terminalSaved = true
+            }
           } else {
-            // falha na gravação terminal → BLOCKED/NO-GO
             overallStatus = 'BLOCKED'
             stopReason = 'Terminal save reread mismatch: estado=' + ts + ' expected=' + termEstado
           }
         } else {
-          // CORREÇÃO 4: gravação terminal falhou → BLOCKED/NO-GO
           overallStatus = 'BLOCKED'
           stopReason = 'Terminal save failed: ' + (termRes.error || 'unknown')
         }
@@ -3177,22 +2584,16 @@ routerAdd(
         if (overallStatus === 'STOP') terminalEstado = 'fail'
         else if (overallStatus === 'BLOCKED') terminalEstado = 'blocked'
 
-        var finalDecisao = JSON.stringify({
-          porta: '2D.2B',
-          overall_status: overallStatus,
-          go_no_go: overallStatus === 'PASS' ? 'GO' : 'NO-GO',
-          stop_reason: stopReason,
-          total_calls: callResults.length,
-          delta_match: deltaMatch,
-          persist_failure: persistFailure,
-        })
-
-        var decisaoFinal = finalDecisao
-
         if (terminalEstado === 'pass') {
           // ─── CAMINHO PASS: transação atômica ───
+          // G18 (2b/2c): após validateProjection (pré-save) e
+          // validateRecords (pós-save) aprovados, constrói o snapshot
+          // canônico completo (formato 2a), persiste em `decisao` e faz a
+          // releitura confirmatória DENTRO da transação. Somente após a
+          // confirmação transactionSucceeded=true.
           var transactionSucceeded = false
           var transactionError = ''
+          var passPostSaveResult = null
 
           try {
             $app.runInTransaction(function (txApp) {
@@ -3224,13 +2625,18 @@ routerAdd(
               if (txSteps.length !== 16)
                 throw new Error('Esperadas 16 etapas na transação, obtidas ' + txSteps.length)
 
-              // (3) MONTAR projeção em memória com TODOS os campos finais
+              // (3) MONTAR projeção em memória com TODOS os campos finais.
+              //     O campo decisao ainda é provisório aqui (snapshot é
+              //     persistido no passo 5b, após o pós-save). validateCore
+              //     exige decisao.overall_status='PASS' && total_calls=16
+              //     quando estado='pass', então preenchemos com um stub
+              //     coerente que será substituído pelo snapshot completo.
               var projection = {
                 id: execId,
                 estado: 'pass',
                 versao_commit: expectedVersion,
                 flag_final: JSON.stringify(flagFinal || readFlagWith(txApp)),
-                decisao: decisaoFinal,
+                decisao: JSON.stringify({ overall_status: 'PASS', total_calls: 16 }),
                 counts_before: JSON.stringify(countsBefore),
                 counts_after: JSON.stringify(countsAfter || {}),
                 allowed_internal_calls: allowedInternalCalls,
@@ -3260,16 +2666,17 @@ routerAdd(
               txExec.set('allowed_internal_calls', allowedInternalCalls)
               txExec.set('blocked_external_attempts', blockedExternalAttempts)
               txExec.set('activecampaign_calls', activecampaignCalls)
-              txExec.set('decisao', finalDecisao)
-
-              // (6) SALVAR com txApp
+              // decisao provisória coerente (overall_status=PASS,
+              // total_calls=16) para que validateRecords (pós-save) approve.
+              // O snapshot canônico completo é persistido no passo (5b).
+              txExec.set('decisao', projection.decisao)
               txApp.save(txExec)
 
-              // (7) RELER o registro salvo usando a instância transacional
+              // (6) RELER o registro salvo usando a instância transacional
               var savedExec = txApp.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId)
               if (!savedExec) throw new Error('Registro não encontrado após save transacional')
 
-              // (8) CONFIRMAR estado e campos críticos
+              // (7) CONFIRMAR estado e campos críticos
               if (savedExec.getString('estado') !== 'pass')
                 throw new Error(
                   'Estado pós-save: ' + savedExec.getString('estado') + ' (esperado pass)',
@@ -3293,13 +2700,6 @@ routerAdd(
                     ' (esperado >0)',
                 )
 
-              var savedDecisao = null
-              try {
-                savedDecisao = JSON.parse(savedExec.getString('decisao') || '{}')
-              } catch (_) {}
-              if (!savedDecisao || savedDecisao.overall_status !== 'PASS')
-                throw new Error('Decisão incoerente após save')
-
               var savedCountsAfter = null
               try {
                 savedCountsAfter = JSON.parse(savedExec.getString('counts_after') || '{}')
@@ -3314,22 +2714,47 @@ routerAdd(
               if (!savedFlagFinal || savedFlagFinal.valor !== 'false')
                 throw new Error('flag_final não é false após save')
 
-              // (8b) CORREÇÃO 2 (v0.0.145) — VALIDAÇÃO CANÔNICA COMPLETA PÓS-SAVE.
-              //      Após txApp.save(txExec) e a releitura de savedExec, normaliza
-              //      o registro relido e as 16 txSteps e chama o MESMO núcleo
-              //      validateCore usado na validação pré-save (via
-              //      validatorCanonical.validateRecords). Não duplica regras: é a
-              //      mesma função. As verificações manuais acima fornecem
-              //      mensagens específicas; validateCore é a guarda final.
-              //      Se falhar, throw → rollback integral da transação.
+              // (8) VALIDAÇÃO CANÔNICA COMPLETA PÓS-SAVE (validateRecords).
+              //     Após txApp.save(txExec) e a releitura de savedExec,
+              //     normaliza o registro relido e as 16 txSteps e chama o
+              //     MESMO núcleo validateCore usado na validação pré-save
+              //     (via validatorCanonical.validateRecords). Se falhar,
+              //     throw → rollback integral da transação.
               var postSaveResult = validatorCanonical.validateRecords(savedExec, txSteps)
               if (!postSaveResult || postSaveResult.pass !== true) {
                 var postReason =
                   postSaveResult && postSaveResult.reason ? postSaveResult.reason : 'unknown'
                 throw new Error('Post-save canonical validation failed: ' + postReason)
               }
+              passPostSaveResult = postSaveResult
 
-              // Se chegou aqui, transação comita com sucesso
+              // ── G18 (2b): persistência do snapshot canônico para PASS ──
+              // Após postSaveResult aprovado e ANTES de
+              // transactionSucceeded = true: construir fullSnapshot,
+              // txExec.set('decisao', JSON.stringify(fullSnapshot)) e
+              // txApp.save(txExec).
+              var fullSnapshot = buildTerminalSnapshot({
+                validation: postSaveResult,
+                overallStatus: 'PASS',
+                goNoGo: 'GO',
+                stopReason: '',
+                totalCalls: 16,
+                deltaMatch: deltaMatch,
+                persistFailure: persistFailure,
+              })
+              txExec.set('decisao', JSON.stringify(fullSnapshot))
+              txApp.save(txExec)
+
+              // ── G18 (2c): confirmação obrigatória do PASS ──
+              // Releitura dentro de txApp, parse e validação de TODOS os
+              // campos obrigatórios. Qualquer divergência → throw → rollback.
+              var confirmExec = txApp.findRecordById('com_execucoes_porta_2d2b', txExec.id)
+              var passConfirm = confirmTerminalSnapshot(confirmExec, 'PASS', txApp)
+              if (!passConfirm.ok) {
+                throw new Error(passConfirm.error)
+              }
+
+              // (9) Somente após a confirmação: transação comita com sucesso
               transactionSucceeded = true
             })
           } catch (txErr) {
@@ -3338,27 +2763,51 @@ routerAdd(
           }
 
           if (transactionSucceeded) {
-            // (9) terminalSaved=true e GO somente após transação concluir com sucesso
+            // GO somente após transação confirmar pass + snapshot
             terminalSaved = true
-            // overallStatus permanece 'PASS', decisaoFinal já tem go_no_go='GO'
+            // overallStatus permanece 'PASS'
           } else {
             // (10) Qualquer erro/divergência/ambiguidade/falha de validação
             //      provocou rollback integral do pass. Execução continua
             //      não-terminal (running). Agora faz UMA ÚNICA transição
-            //      running → blocked.
+            //      running → blocked com snapshot canônico BLOCKED.
             overallStatus = 'BLOCKED'
             stopReason = 'Transação de pass falhou (rollback): ' + transactionError
-            var finalTerminalEstado = 'blocked'
 
-            var blockedDecisao = JSON.stringify({
-              porta: '2D.2B',
-              overall_status: 'BLOCKED',
-              go_no_go: 'NO-GO',
-              stop_reason: stopReason,
-              total_calls: callResults.length,
-              delta_match: deltaMatch,
-              persist_failure: persistFailure,
-              transaction_error: transactionError,
+            // G18 (2d): executar validateCore sobre os dados atuais
+            // (execução + etapas já persistidas) para produzir o snapshot
+            // canônico BLOCKED.
+            var postRollbackExec = null
+            var postRollbackSteps = []
+            try {
+              postRollbackExec = normalizeExecRecord(
+                $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId),
+              )
+            } catch (_) {}
+            try {
+              var prStepRecs = $app.findRecordsByFilter(
+                'com_etapas_porta_2d2b',
+                "execucao_id = '" + execId + "'",
+                'ordem',
+                200,
+                0,
+              )
+              for (var pr = 0; pr < prStepRecs.length; pr++)
+                postRollbackSteps.push(normalizeStepRecord(prStepRecs[pr]))
+            } catch (_) {}
+            var blockedValidation = validateCore(
+              postRollbackExec || { estado: '' },
+              postRollbackSteps,
+            )
+            var fullBlockedSnapshot = buildTerminalSnapshot({
+              validation: blockedValidation,
+              overallStatus: 'BLOCKED',
+              goNoGo: 'NO-GO',
+              stopReason: stopReason,
+              totalCalls: callResults.length,
+              deltaMatch: deltaMatch,
+              persistFailure: persistFailure,
+              transactionError: transactionError,
             })
 
             var blockedSave = safeUpdateExec({
@@ -3370,13 +2819,21 @@ routerAdd(
               allowed_internal_calls: allowedInternalCalls,
               blocked_external_attempts: blockedExternalAttempts,
               activecampaign_calls: activecampaignCalls,
-              decisao: blockedDecisao,
+              decisao: JSON.stringify(fullBlockedSnapshot),
             })
 
             if (blockedSave.saved && blockedSave.reread) {
               var bts = blockedSave.reread.getString('estado')
               if (bts === 'blocked') {
-                terminalSaved = true
+                // G18 (2d): confirmação por releitura do snapshot BLOCKED
+                var blockedConfirm = confirmTerminalSnapshot(blockedSave.reread, 'BLOCKED', $app)
+                if (!blockedConfirm.ok) {
+                  overallStatus = 'BLOCKED'
+                  stopReason = blockedConfirm.error
+                  terminalSaved = false
+                } else {
+                  terminalSaved = true
+                }
               } else {
                 overallStatus = 'BLOCKED'
                 stopReason = 'Falha ao confirmar blocked após rollback: estado=' + bts
@@ -3398,8 +2855,43 @@ routerAdd(
             if (!stopReason) stopReason = 'Terminal state not persisted — cannot return GO'
           }
         } else {
-          // ─── CAMINHO FAIL/BLOCKED: sem transação, mantém safeUpdateExec ───
+          // ─── CAMINHO FAIL/BLOCKED: sem transação, mantém safeUpdateExec ──
+          // G18 (2d): executar validateCore sobre os dados atuais
+          // (execução + etapas já persistidas) para produzir o snapshot
+          // canônico terminal (FAIL/BLOCKED), persistir via safeUpdateExec
+          // e confirmar por releitura.
           var finalTerminalEstado = terminalEstado
+          var terminalExpectedClass = finalTerminalEstado === 'blocked' ? 'BLOCKED' : 'FAIL'
+
+          var failExec = null
+          var failSteps = []
+          try {
+            failExec = normalizeExecRecord(
+              $app.findFirstRecordByData('com_execucoes_porta_2d2b', 'id', execId),
+            )
+          } catch (_) {}
+          try {
+            var failStepRecs = $app.findRecordsByFilter(
+              'com_etapas_porta_2d2b',
+              "execucao_id = '" + execId + "'",
+              'ordem',
+              200,
+              0,
+            )
+            for (var fs = 0; fs < failStepRecs.length; fs++)
+              failSteps.push(normalizeStepRecord(failStepRecs[fs]))
+          } catch (_) {}
+          var failValidation = validateCore(failExec || { estado: '' }, failSteps)
+          var fullFailSnapshot = buildTerminalSnapshot({
+            validation: failValidation,
+            overallStatus: overallStatus,
+            goNoGo: 'NO-GO',
+            stopReason: stopReason,
+            totalCalls: callResults.length,
+            deltaMatch: deltaMatch,
+            persistFailure: persistFailure,
+          })
+
           var termSave = safeUpdateExec({
             estado: finalTerminalEstado,
             finished_at: new Date().toISOString(),
@@ -3409,13 +2901,25 @@ routerAdd(
             allowed_internal_calls: allowedInternalCalls,
             blocked_external_attempts: blockedExternalAttempts,
             activecampaign_calls: activecampaignCalls,
-            decisao: finalDecisao,
+            decisao: JSON.stringify(fullFailSnapshot),
           })
 
           if (termSave.saved && termSave.reread) {
             var tsv = termSave.reread.getString('estado')
             if (tsv === finalTerminalEstado) {
-              terminalSaved = true
+              // G18 (2d): confirmação por releitura do snapshot FAIL/BLOCKED
+              var termConfirm = confirmTerminalSnapshot(
+                termSave.reread,
+                terminalExpectedClass,
+                $app,
+              )
+              if (!termConfirm.ok) {
+                terminalSaved = false
+                overallStatus = 'BLOCKED'
+                stopReason = termConfirm.error
+              } else {
+                terminalSaved = true
+              }
             } else {
               terminalSaved = false
               overallStatus = 'BLOCKED'
