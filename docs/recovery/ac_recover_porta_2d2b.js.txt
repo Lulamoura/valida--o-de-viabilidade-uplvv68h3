@@ -1,6 +1,6 @@
 // ════════════════════════════════════════════════════════════════════
 // Hook TEMPORÁRIO de recuperação one-shot da Porta 2D.2B
-// Versão: v0.0.172-recovery (artefato inerte — NÃO publicado como hook)
+// Versão: v0.0.174-recovery (artefato inerte — NÃO publicado como hook)
 // ════════════════════════════════════════════════════════════════════
 //
 // ESTE ARQUIVO É UM ARTEFATO INERTE PARA INSPEÇÃO.
@@ -8,6 +8,16 @@
 // Estado atual: NÃO publicado, NÃO registrado, NÃO executado.
 // Nenhuma rota é registrada no momento; nenhuma coleção, migration, runner,
 // health, evidence, frontend ou teste é tocado por este artefato.
+//
+// Incorpora TODAS as correções do G35 e G35-R1:
+//  - Ordem das precondições dentro da transação (exec → lock → webhook → latch → create)
+//  - Ausência do latch via findRecordsByFilter fail-closed (sem catch genérico)
+//  - Releitura fail-closed completa dentro da transação (após save e releitura transacional)
+//  - Predicado pós-transação da POST com flag_final / flagFinalOk
+//  - Predicado recoveryCommitted da GET com flag_final / flagFinalOk
+//  - Catch externo com mensagem fixa sanitizada (nunca expor String(txErr))
+//  - RECOVER_LOCK_KEY na precondição do lock; removida do callback GET
+//  - transaction_committed: null + state_ambiguous: true no estado ambíguo
 // ════════════════════════════════════════════════════════════════════
 
 // ─── ROTA 1: POST /recover-2d2b ───────────────────────────────────────
@@ -18,6 +28,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
   var RECOVER_LOCK_KEY = 'ac_2d2b_execution_lock'
   var RECOVER_LATCH_KEY = 'ac_2d2b_recovery_executed'
   var RECOVER_WEBHOOK_KEY = 'ac_webhook_enabled'
+  var RECOVER_EXPECTED_VERSAO_COMMIT = 'v0.0.163'
 
   // ── VERIFICAÇÃO DE SUPERADMIN (idêntica ao runner ac_run_round_2d2b.js 228-248) ──
   var authId = e.auth ? e.auth.id : ''
@@ -47,50 +58,67 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
   var lockBefore = null
 
   // ── TRANSAÇÃO ÚNICA ──
+  // Catch externo com mensagem fixa sanitizada (G35 item 6): NUNCA expor String(txErr) ou detalhes internos.
   try {
     $app.runInTransaction(function (txApp) {
-      // (a) Reler dentro da transação
+      // (a) Localizar execução, lock, webhook dentro da transação
       var exec = txApp.findRecordById('com_execucoes_porta_2d2b', RECOVER_EXEC_ID)
       var lock = txApp.findRecordById('com_parametros', RECOVER_LOCK_ID)
       var whFlag = txApp.findFirstRecordByData('com_parametros', 'chave', RECOVER_WEBHOOK_KEY)
 
-      // (b) Trava one-shot (G31-R2 item 1 — new Record com coleção)
-      var latchColl = txApp.findCollectionByNameOrId('com_parametros')
-      var latch = null
-      try {
-        latch = txApp.findFirstRecordByData('com_parametros', 'chave', RECOVER_LATCH_KEY)
-      } catch (_) {
-        latch = null
-      }
-      if (latch && latch.getString('valor') === 'committed') {
-        throw new Error('RECOVER_PRECONDITION: recovery latch already committed')
-      }
-      var latchRecord = null
-      if (latch) {
-        latchRecord = latch
-      } else {
-        var newLatch = new Record(latchColl)
-        newLatch.set('chave', RECOVER_LATCH_KEY)
-        newLatch.set('tipo', 'lock')
-        newLatch.set('valor', 'pending')
-        newLatch.set('ativo', true)
-        newLatch.set('versao', 1)
-        txApp.save(newLatch)
-        latchRecord = newLatch
-      }
-
-      // (c) 9 PRECONDIÇÕES — verificar e lançar Error em caso de falha
+      // (b) Validar precondições da execução (G35-R1 item 1b)
       if (exec.id !== RECOVER_EXEC_ID) {
         throw new Error('RECOVER_PRECONDITION: exec.id mismatch')
       }
       if (exec.getString('estado') !== 'running') {
         throw new Error('RECOVER_PRECONDITION: exec.estado !== running')
       }
+      if (exec.getString('finished_at')) {
+        throw new Error('RECOVER_PRECONDITION: exec.finished_at deve estar vazio')
+      }
+      if (exec.getString('decisao')) {
+        throw new Error('RECOVER_PRECONDITION: exec.decisao deve estar vazia')
+      }
+      // flag_inicial (campo flag_before) presente e parseável
+      var flagInicialRaw = exec.getString('flag_before')
+      if (!flagInicialRaw) {
+        throw new Error('RECOVER_PRECONDITION: exec.flag_before (flag_inicial) ausente')
+      }
+      var flagInicial = null
+      try {
+        flagInicial = JSON.parse(flagInicialRaw)
+      } catch (fip) {
+        throw new Error('RECOVER_PRECONDITION: exec.flag_before (flag_inicial) nao parseable')
+      }
+      if (!flagInicial || typeof flagInicial.valor === 'undefined') {
+        throw new Error('RECOVER_PRECONDITION: exec.flag_before (flag_inicial) malformado')
+      }
+      // flag_final vazio
+      if (exec.getString('flag_final')) {
+        throw new Error('RECOVER_PRECONDITION: exec.flag_final deve estar vazio')
+      }
+      // zero etapas (findRecordsByFilter em com_etapas_porta_2d2b)
+      var etapas = txApp.findRecordsByFilter(
+        'com_etapas_porta_2d2b',
+        "execucao_id = '" + RECOVER_EXEC_ID + "'",
+        '',
+        1,
+        0,
+      )
+      if (etapas && etapas.length > 0) {
+        throw new Error('RECOVER_PRECONDITION: exec possui etapas persistidas (esperado 0)')
+      }
+      // versao_commit === 'v0.0.163'
+      if (exec.getString('versao_commit') !== RECOVER_EXPECTED_VERSAO_COMMIT) {
+        throw new Error('RECOVER_PRECONDITION: exec.versao_commit !== ' + RECOVER_EXPECTED_VERSAO_COMMIT)
+      }
+
+      // (c) Validar precondições do lock (G35-R1 item 1c, G35 item 7 — RECOVER_LOCK_KEY)
       if (lock.id !== RECOVER_LOCK_ID) {
         throw new Error('RECOVER_PRECONDITION: lock.id mismatch')
       }
-      if (lock.getString('chave') !== 'ac_2d2b_execution_lock') {
-        throw new Error('RECOVER_PRECONDITION: lock.chave mismatch')
+      if (lock.getString('chave') !== RECOVER_LOCK_KEY) {
+        throw new Error('RECOVER_PRECONDITION: lock.chave !== RECOVER_LOCK_KEY')
       }
       if (lock.getString('valor') !== 'locked') {
         throw new Error('RECOVER_PRECONDITION: lock.valor !== locked')
@@ -101,6 +129,11 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
       if (lock.getInt('versao') !== 1) {
         throw new Error('RECOVER_PRECONDITION: lock.versao !== 1')
       }
+
+      // (d) Validar precondições do webhook (G35-R1 item 1d)
+      if (whFlag.getString('chave') !== RECOVER_WEBHOOK_KEY) {
+        throw new Error('RECOVER_PRECONDITION: whFlag.chave !== RECOVER_WEBHOOK_KEY')
+      }
       if (whFlag.getString('valor') !== 'false') {
         throw new Error('RECOVER_PRECONDITION: whFlag.valor !== false')
       }
@@ -108,11 +141,34 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
         throw new Error('RECOVER_PRECONDITION: whFlag.ativo !== false')
       }
 
-      // (d) Captura before (G31-R4 item 1) — sem var, apenas atribuição
+      // (e) Só depois verificar ausência do latch (G35-R1 item 2 — fail-closed, sem catch genérico)
+      // Erros da consulta propagam, nunca capturados.
+      var existingLatches = txApp.findRecordsByFilter(
+        'com_parametros',
+        "chave = '" + RECOVER_LATCH_KEY + "'",
+        '',
+        1,
+        0,
+      )
+      if (existingLatches && existingLatches.length > 0) {
+        throw new Error('RECOVER_PRECONDITION: latch ja existe')
+      }
+
+      // (f) Só após lista vazia, criar new Record(latchColl) e save pending (G35-R1 item 1f)
+      var latchColl = txApp.findCollectionByNameOrId('com_parametros')
+      var latchRecord = new Record(latchColl)
+      latchRecord.set('chave', RECOVER_LATCH_KEY)
+      latchRecord.set('tipo', 'lock')
+      latchRecord.set('valor', 'pending')
+      latchRecord.set('ativo', true)
+      latchRecord.set('versao', 1)
+      txApp.save(latchRecord)
+
+      // (g) Capturar estadoBefore e lockBefore depois das precondições, antes das mutações (G35-R1 item 1g)
       estadoBefore = exec.getString('estado') // 'running'
       lockBefore = lock.getString('valor') // 'locked'
 
-      // (e) Mutações
+      // ── Mutações ──
       var now = new Date().toISOString()
       var versaoCommit = exec.getString('versao_commit')
 
@@ -135,9 +191,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
           'RECOVERY_MANUAL: execução bloqueada em A1 (v0.0.163). Fallback one-shot autorizado por superadmin. 0 etapas persistidas — chamadas originais não reconstruíveis.',
         classification: 'BLOCKED',
         classification_justification:
-          'Recuperação manual honesta. snapshot_source=recovery_manual. Execução original running com 0 etapas, versao_commit=' +
-          versaoCommit +
-          '. validateCore não foi executado — classificação atribuída diretamente.',
+          'Recuperação manual honesta. snapshot_source=recovery_manual. Execução original running com 0 etapas, decisao vazia e lock ativo. Motivo raiz: falha de persistência na etapa A1. validateCore não foi executado — classificação atribuída diretamente.',
         expected_version: versaoCommit,
         snapshot_source: 'recovery_manual',
         snapshot_version: versaoCommit,
@@ -180,7 +234,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
         },
         expected_contracts: { status: 'not_evaluated', source: 'recovery_manual' },
         hash_declaration: { status: 'not_available', source: 'recovery_manual' },
-        recovery_tool_version: 'v0.0.172-recovery',
+        recovery_tool_version: 'v0.0.174-recovery',
       }
       exec.set('decisao', JSON.stringify(snapshot))
 
@@ -194,57 +248,105 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
       txApp.save(lock)
       txApp.save(latchRecord)
 
-      // (f) Releitura fail-closed dentro da transação
-      var execReread = txApp.findRecordById('com_execucoes_porta_2d2b', RECOVER_EXEC_ID)
-      if (execReread.getString('estado') !== 'blocked') {
-        throw new Error('RECOVER_FAILCLOSED: exec.estado !== blocked após commit interno')
+      // (h) Releitura fail-closed completa dentro da transação (G35 item 3)
+      // "após save e releitura transacional" — substitui "após commit interno".
+      var execReRead = txApp.findRecordById('com_execucoes_porta_2d2b', RECOVER_EXEC_ID)
+      if (execReRead.getString('estado') !== 'blocked') {
+        throw new Error('RECOVER_FAILCLOSED: exec.estado !== blocked após save e releitura transacional')
       }
-      if (!execReread.getString('finished_at')) {
-        throw new Error('RECOVER_FAILCLOSED: exec.finished_at ausente após commit interno')
+      if (!execReRead.getString('finished_at')) {
+        throw new Error('RECOVER_FAILCLOSED: exec.finished_at ausente após save e releitura transacional')
       }
-      var decReread = null
+      var decReRead = null
       try {
-        decReread = JSON.parse(execReread.getString('decisao') || '{}')
-      } catch (_) {
-        throw new Error('RECOVER_FAILCLOSED: decisao não parseable após commit interno')
+        decReRead = JSON.parse(execReRead.getString('decisao') || '{}')
+      } catch (drp) {
+        throw new Error('RECOVER_FAILCLOSED: decisao nao parseable após save e releitura transacional')
       }
-      if (decReread.snapshot_source !== 'recovery_manual') {
+      if (decReRead.snapshot_source !== 'recovery_manual') {
         throw new Error('RECOVER_FAILCLOSED: snapshot_source !== recovery_manual')
       }
-      if (!decReread.canonical_map || !decReread.canonical_map.A1) {
-        throw new Error('RECOVER_FAILCLOSED: canonical_map.A1 ausente')
+      if (decReRead.snapshot_version !== execReRead.getString('versao_commit')) {
+        throw new Error('RECOVER_FAILCLOSED: snapshot_version !== exec.versao_commit')
       }
-
-      var lockReread = txApp.findRecordById('com_parametros', RECOVER_LOCK_ID)
-      if (lockReread.getString('valor') !== 'unlocked') {
-        throw new Error('RECOVER_FAILCLOSED: lock.valor !== unlocked após commit interno')
+      if (execReRead.getString('versao_commit') !== RECOVER_EXPECTED_VERSAO_COMMIT) {
+        throw new Error('RECOVER_FAILCLOSED: execReRead.versao_commit !== ' + RECOVER_EXPECTED_VERSAO_COMMIT)
       }
-      if (lockReread.getBool('ativo') !== false) {
-        throw new Error('RECOVER_FAILCLOSED: lock.ativo !== false após commit interno')
-      }
-
-      var latchReread = null
+      // flag_final parseável
+      var ffReRead = null
       try {
-        latchReread = txApp.findFirstRecordByData('com_parametros', 'chave', RECOVER_LATCH_KEY)
-      } catch (_) {
-        latchReread = null
+        ffReRead = JSON.parse(execReRead.getString('flag_final') || '{}')
+      } catch (ffp) {
+        throw new Error('RECOVER_FAILCLOSED: flag_final nao parseable após save e releitura transacional')
       }
-      if (!latchReread || latchReread.getString('valor') !== 'committed') {
-        throw new Error('RECOVER_FAILCLOSED: latch.valor !== committed após commit interno')
+      if (!ffReRead || typeof ffReRead.valor === 'undefined') {
+        throw new Error('RECOVER_FAILCLOSED: flag_final malformado')
+      }
+
+      var lockReRead = txApp.findRecordById('com_parametros', RECOVER_LOCK_ID)
+      if (lockReRead.getString('valor') !== 'unlocked') {
+        throw new Error('RECOVER_FAILCLOSED: lock.valor !== unlocked após save e releitura transacional')
+      }
+      if (lockReRead.getBool('ativo') !== false) {
+        throw new Error('RECOVER_FAILCLOSED: lock.ativo !== false após save e releitura transacional')
+      }
+      if (lockReRead.getInt('versao') !== 1) {
+        throw new Error('RECOVER_FAILCLOSED: lock.versao !== 1 após save e releitura transacional')
+      }
+
+      var whReRead = txApp.findFirstRecordByData('com_parametros', 'chave', RECOVER_WEBHOOK_KEY)
+      if (whReRead.getString('valor') !== 'false') {
+        throw new Error('RECOVER_FAILCLOSED: webhook.valor !== false após save e releitura transacional')
+      }
+      if (whReRead.getBool('ativo') !== false) {
+        throw new Error('RECOVER_FAILCLOSED: webhook.ativo !== false após save e releitura transacional')
+      }
+
+      // latch relido via findRecordsByFilter (fail-closed)
+      var latchReReadList = txApp.findRecordsByFilter(
+        'com_parametros',
+        "chave = '" + RECOVER_LATCH_KEY + "'",
+        '',
+        1,
+        0,
+      )
+      if (!latchReReadList || latchReReadList.length === 0) {
+        throw new Error('RECOVER_FAILCLOSED: latch ausente após save e releitura transacional')
+      }
+      var latchReRead = latchReReadList[0]
+      if (latchReRead.getString('valor') !== 'committed') {
+        throw new Error('RECOVER_FAILCLOSED: latch.valor !== committed após save e releitura transacional')
+      }
+      if (latchReRead.getBool('ativo') !== true) {
+        throw new Error('RECOVER_FAILCLOSED: latch.ativo !== true após save e releitura transacional')
+      }
+
+      // flag_final cruzado com webhook relido (G35 item 3)
+      if (ffReRead.valor !== whReRead.getString('valor')) {
+        throw new Error('RECOVER_FAILCLOSED: flag_final.valor !== webhook relido.valor')
+      }
+      if (ffReRead.ativo !== whReRead.getBool('ativo')) {
+        throw new Error('RECOVER_FAILCLOSED: flag_final.ativo !== webhook relido.ativo')
+      }
+      if (ffReRead.error !== null) {
+        throw new Error('RECOVER_FAILCLOSED: flag_final.error !== null')
       }
     })
-  } catch (txErr) {
+  } catch (_) {
+    // Catch externo com mensagem fixa sanitizada (G35 item 6).
+    // NUNCA expor String(txErr) ou detalhes internos.
     return e.json(409, {
       error: 'recovery_failed',
-      message: String(txErr).substring(0, 500),
+      message: 'Recuperação abortada; nenhuma alteração confirmada.',
       precondicoes_ok: false,
       writes_performed: 0,
+      external_calls: 0,
     })
   }
 
-  // ── RELEITURA PÓS-COMMIT + VALIDAÇÃO + RESPOSTA (G31-R3 itens 2 e 3, G31-R4 item 2, CORREÇÃO VINCULANTE) ──
+  // ── RELEITURA PÓS-TRANSAÇÃO + VALIDAÇÃO + RESPOSTA (G31-R3 itens 2 e 3, G31-R4 item 2, G35 item 4, CORREÇÃO VINCULANTE) ──
 
-  // Releitura estrita pós-commit
+  // Releitura estrita pós-transação
   var execFinal = null,
     lockFinal = null,
     whFinal = null,
@@ -256,10 +358,24 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
     lockFinal = $app.findRecordById('com_parametros', RECOVER_LOCK_ID)
   } catch (_) {}
   try {
-    whFinal = $app.findFirstRecordByData('com_parametros', 'chave', RECOVER_WEBHOOK_KEY)
+    var whListFinal = $app.findRecordsByFilter(
+      'com_parametros',
+      "chave = '" + RECOVER_WEBHOOK_KEY + "'",
+      '',
+      1,
+      0,
+    )
+    if (whListFinal && whListFinal.length > 0) whFinal = whListFinal[0]
   } catch (_) {}
   try {
-    latchFinal = $app.findFirstRecordByData('com_parametros', 'chave', RECOVER_LATCH_KEY)
+    var latchListFinal = $app.findRecordsByFilter(
+      'com_parametros',
+      "chave = '" + RECOVER_LATCH_KEY + "'",
+      '',
+      1,
+      0,
+    )
+    if (latchListFinal && latchListFinal.length > 0) latchFinal = latchListFinal[0]
   } catch (_) {}
 
   var snapshotFinal = null
@@ -273,7 +389,27 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
     snapshotVersionFinal = snapshotFinal.snapshot_version || null
   } catch (_) {}
 
-  // PREDICADO COMPLETO (G31-R2 item 3 + G31-R3 item 1)
+  // flag_final parsing + flagFinalOk no bloco pós-transação (G35 item 4)
+  var flagFinalObj = null
+  var flagFinalParseable = false
+  var flagFinalOk = false
+  try {
+    flagFinalObj = JSON.parse(execFinal ? execFinal.getString('flag_final') || '{}' : '{}')
+    flagFinalParseable = !!flagFinalObj && typeof flagFinalObj.valor !== 'undefined'
+  } catch (_) {}
+  if (
+    flagFinalParseable &&
+    whFinal &&
+    flagFinalObj.valor === whFinal.getString('valor') &&
+    flagFinalObj.ativo === whFinal.getBool('ativo') &&
+    flagFinalObj.error === null &&
+    whFinal.getString('valor') === 'false' &&
+    whFinal.getBool('ativo') === false
+  ) {
+    flagFinalOk = true
+  }
+
+  // PREDICADO COMPLETO (G31-R2 item 3 + G31-R3 item 1 + G35 item 4 — inclui flagFinalOk)
   var committed =
     !!execFinal &&
     execFinal.getString('estado') === 'blocked' &&
@@ -281,6 +417,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
     decisionParseable &&
     snapshotSourceFinal === 'recovery_manual' &&
     snapshotVersionFinal === (execFinal.getString('versao_commit') || null) &&
+    execFinal.getString('versao_commit') === RECOVER_EXPECTED_VERSAO_COMMIT &&
     !!lockFinal &&
     lockFinal.getString('valor') === 'unlocked' &&
     lockFinal.getBool('ativo') === false &&
@@ -290,15 +427,16 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
     whFinal.getBool('ativo') === false &&
     !!latchFinal &&
     latchFinal.getString('valor') === 'committed' &&
-    latchFinal.getBool('ativo') === true
+    latchFinal.getBool('ativo') === true &&
+    flagFinalOk
 
   if (!committed) {
-    // CORREÇÃO VINCULANTE: transaction_committed: null, state_ambiguous: true
+    // CORREÇÃO VINCULANTE: transaction_committed: null, state_ambiguous: true (G35 item 9)
     // G31-R4 item 2: sem writes_performed
     // G31-R4 item 3: mensagem canônica
     return e.json(409, {
       error: 'recovery_inconsistent',
-      message: 'Estado pós-commit inesperado; não inferir sucesso nem falha; investigar via GET read-only.',
+      message: 'Estado pós-transação inesperado; não inferir sucesso nem falha; investigar via GET read-only.',
       transaction_committed: null,
       state_ambiguous: true,
       details: {
@@ -317,14 +455,16 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
         webhook_ativo: whFinal ? whFinal.getBool('ativo') : null,
         one_shot_valor: latchFinal ? latchFinal.getString('valor') : null,
         one_shot_ativo: latchFinal ? latchFinal.getBool('ativo') : null,
+        flag_final_parseable: flagFinalParseable,
+        flag_final_ok: flagFinalOk,
         external_calls: 0,
       },
     })
   }
 
   // HTTP 200 — predicado true
-  // estado_before e lock_before vêm das variáveis capturadas dentro da transação (G31-R4 item 1)
-  // Todos os _after vêm da releitura pós-commit (G31-R3 item 3)
+  // estado_before e lock_before vêm das variáveis capturadas dentro da transação (G31-R4 item 1 / G35-R1 item 1g)
+  // Todos os _after vêm da releitura pós-transação (G31-R3 item 3)
   return e.json(200, {
     recovery: '2d2b_one_shot',
     execution_id: RECOVER_EXEC_ID,
@@ -340,6 +480,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
     webhook_valor: whFinal.getString('valor'),
     webhook_ativo: whFinal.getBool('ativo'),
     one_shot_valor: latchFinal.getString('valor'),
+    flag_final_ok: flagFinalOk,
     transaction_committed: true,
     activecampaign_calls: 0,
     external_calls: 0,
@@ -352,11 +493,12 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
 // ─── ROTA 2: GET /recover-2d2b-status ─────────────────────────────────
 routerAdd('GET', '/backend/v1/integracao/ac/recover-2d2b-status', function (e) {
   // ── CONSTANTES (escopo JSVM — declaradas dentro do callback) ──
+  // G35 item 8: RECOVER_LOCK_KEY não é usada no GET — removida da lista de constantes.
   var RECOVER_EXEC_ID = '1y2v99dapopm5wla66iysd5wky1tnb8t'
   var RECOVER_LOCK_ID = 'ibc2cgk9u4hw5rf'
-  var RECOVER_LOCK_KEY = 'ac_2d2b_execution_lock'
   var RECOVER_LATCH_KEY = 'ac_2d2b_recovery_executed'
   var RECOVER_WEBHOOK_KEY = 'ac_webhook_enabled'
+  var RECOVER_EXPECTED_VERSAO_COMMIT = 'v0.0.163'
 
   // ── VERIFICAÇÃO DE SUPERADMIN (idêntica ao runner ac_run_round_2d2b.js 228-248) ──
   var authId = e.auth ? e.auth.id : ''
@@ -393,10 +535,24 @@ routerAdd('GET', '/backend/v1/integracao/ac/recover-2d2b-status', function (e) {
     lock = $app.findRecordById('com_parametros', RECOVER_LOCK_ID)
   } catch (_) {}
   try {
-    whFlag = $app.findFirstRecordByData('com_parametros', 'chave', RECOVER_WEBHOOK_KEY)
+    var whList = $app.findRecordsByFilter(
+      'com_parametros',
+      "chave = '" + RECOVER_WEBHOOK_KEY + "'",
+      '',
+      1,
+      0,
+    )
+    if (whList && whList.length > 0) whFlag = whList[0]
   } catch (_) {}
   try {
-    latch = $app.findFirstRecordByData('com_parametros', 'chave', RECOVER_LATCH_KEY)
+    var latchList = $app.findRecordsByFilter(
+      'com_parametros',
+      "chave = '" + RECOVER_LATCH_KEY + "'",
+      '',
+      1,
+      0,
+    )
+    if (latchList && latchList.length > 0) latch = latchList[0]
   } catch (_) {}
 
   var decisionParseable = false
@@ -409,7 +565,27 @@ routerAdd('GET', '/backend/v1/integracao/ac/recover-2d2b-status', function (e) {
     snapshotVersion = d.snapshot_version || null
   } catch (_) {}
 
-  // PREDICADO COMPLETO (G31-R2 item 3 + G31-R3 item 1)
+  // flag_final parsing + flagFinalOk no callback GET (G35 item 5)
+  var flagFinalObjGet = null
+  var flagFinalParseableGet = false
+  var flagFinalOkGet = false
+  try {
+    flagFinalObjGet = JSON.parse(exec ? exec.getString('flag_final') || '{}' : '{}')
+    flagFinalParseableGet = !!flagFinalObjGet && typeof flagFinalObjGet.valor !== 'undefined'
+  } catch (_) {}
+  if (
+    flagFinalParseableGet &&
+    whFlag &&
+    flagFinalObjGet.valor === whFlag.getString('valor') &&
+    flagFinalObjGet.ativo === whFlag.getBool('ativo') &&
+    flagFinalObjGet.error === null &&
+    whFlag.getString('valor') === 'false' &&
+    whFlag.getBool('ativo') === false
+  ) {
+    flagFinalOkGet = true
+  }
+
+  // PREDICADO COMPLETO (G31-R2 item 3 + G31-R3 item 1 + G35 item 5 — inclui flagFinalOk)
   var recoveryCommitted =
     !!exec &&
     exec.getString('estado') === 'blocked' &&
@@ -417,6 +593,7 @@ routerAdd('GET', '/backend/v1/integracao/ac/recover-2d2b-status', function (e) {
     decisionParseable &&
     snapshotSource === 'recovery_manual' &&
     snapshotVersion === (exec.getString('versao_commit') || null) &&
+    exec.getString('versao_commit') === RECOVER_EXPECTED_VERSAO_COMMIT &&
     !!lock &&
     lock.getString('valor') === 'unlocked' &&
     lock.getBool('ativo') === false &&
@@ -426,7 +603,8 @@ routerAdd('GET', '/backend/v1/integracao/ac/recover-2d2b-status', function (e) {
     whFlag.getBool('ativo') === false &&
     !!latch &&
     latch.getString('valor') === 'committed' &&
-    latch.getBool('ativo') === true
+    latch.getBool('ativo') === true &&
+    flagFinalOkGet
 
   return e.json(200, {
     route: 'GET /backend/v1/integracao/ac/recover-2d2b-status',
@@ -447,6 +625,8 @@ routerAdd('GET', '/backend/v1/integracao/ac/recover-2d2b-status', function (e) {
     webhook_valor: whFlag ? whFlag.getString('valor') : null,
     webhook_ativo: whFlag ? whFlag.getBool('ativo') : null,
     one_shot_valor: latch ? latch.getString('valor') : null,
+    flag_final_parseable: flagFinalParseableGet,
+    flag_final_ok: flagFinalOkGet,
     recovery_committed: recoveryCommitted,
   })
 }, $apis.requireAuth('users'))
