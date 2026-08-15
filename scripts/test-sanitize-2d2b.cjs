@@ -1,88 +1,115 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────
-// Teste da sanitizadora — Porta 2D.2B — G27 (v0.0.166)
+// Teste da sanitizadora — Porta 2D.2B — G28 (v0.0.168)
 // ─────────────────────────────────────────────────────────────────────
-// Lê pocketbase/hooks/ac_run_round_2d2b.js, extrai a declaração REAL de
-// SENSITIVE_KEY_PATTERN e a função REAL sanitizePersistErrorMessage, avalia
-// ambas em sandbox local (node:vm) e executa os casos. NÃO copia a função
-// para o teste — ela é avaliada a partir do fonte de produção.
+// Lê pocketbase/hooks/ac_run_round_2d2b.js, extrai o bloco REAL de
+// produção delimitado por marcadores textuais estáveis (sem interpretar
+// funções caractere a caractere), avalia o bloco completo em sandbox
+// local (node:vm) e executa os casos. NÃO copia nenhuma função —
+// SENSITIVE_KEY_PATTERN, $findBalancedBraceEnd, $findPemBlockEnd e
+// sanitizePersistErrorMessage são avaliados a partir do fonte de
+// produção extraído textualmente.
+//
+// Marcadores:
+//   início — primeira ocorrência de `var SENSITIVE_KEY_PATTERN`;
+//   fim    — o comentário `/* ─────────────────` imediatamente posterior
+//            a `sanitizePersistErrorMessage` (bloco de testes documentais).
 //
 // Execute: node scripts/test-sanitize-2d2b.cjs
 // ─────────────────────────────────────────────────────────────────────
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
-const vm = require('vm')
+var fs = require('fs')
+var path = require('path')
+var vm = require('vm')
 
-const hookPath = path.join(__dirname, '..', 'pocketbase', 'hooks', 'ac_run_round_2d2b.js')
-const src = fs.readFileSync(hookPath, 'utf8')
+var hookPath = path.join(__dirname, '..', 'pocketbase', 'hooks', 'ac_run_round_2d2b.js')
+var src = fs.readFileSync(hookPath, 'utf8')
 
-// ─── Extrai a declaração REAL de SENSITIVE_KEY_PATTERN ───
-const patMatch = src.match(/var\s+SENSITIVE_KEY_PATTERN\s*=\s*'[^']*'/)
-if (!patMatch) {
-  console.error('FAIL: SENSITIVE_KEY_PATTERN não encontrado no hook de produção')
-  process.exit(1)
-}
-const sensitiveKeyPatternSrc = patMatch[0]
-
-// ─── Extrai as funções REAIS do hook de produção ───
-// Varredura determinística de chaves balanceadas (respeitando strings
-// escapadas) para capturar cada função inteira. Extrai os helpers
-// $findBalancedBraceEnd e $findPemBlockEnd E sanitizePersistErrorMessage,
-// todos do fonte de produção — sem cópia.
-function extractFunction(name, text) {
-  const startIdx = text.indexOf('function ' + name + '(')
-  if (startIdx === -1) return null
-  let i = text.indexOf('{', startIdx)
-  if (i === -1) return null
-  let depth = 0
-  let inStr = false
-  let strCh = ''
-  for (; i < text.length; i++) {
-    const ch = text.charAt(i)
-    if (inStr) {
-      if (ch === '\\') {
-        i++
-        continue
-      }
-      if (ch === strCh) inStr = false
-      continue
-    }
-    if (ch === '"' || ch === "'") {
-      inStr = true
-      strCh = ch
-      continue
-    }
-    if (ch === '{') depth++
-    else if (ch === '}') {
-      depth--
-      if (depth === 0) return text.substring(startIdx, i + 1)
-    }
-  }
-  return null
-}
-const helperBrace = extractFunction('$findBalancedBraceEnd', src)
-const helperPem = extractFunction('$findPemBlockEnd', src)
-const fnSrc = extractFunction('sanitizePersistErrorMessage', src)
-if (!helperBrace || !helperPem || !fnSrc) {
+// ─── Extrai o bloco REAL de produção por marcadores textuais ───
+// Início: primeira ocorrência de `var SENSITIVE_KEY_PATTERN`.
+var startMarker = 'var SENSITIVE_KEY_PATTERN'
+var startIdx = src.indexOf(startMarker)
+if (startIdx === -1) {
   console.error(
-    'FAIL: não foi possível extrair helpers/sanitizePersistErrorMessage do hook de produção',
+    'FAIL: marcador de início `var SENSITIVE_KEY_PATTERN` não encontrado no hook de produção',
   )
   process.exit(1)
 }
+// Fim: o comentário `/* ─────────────────` imediatamente posterior a
+// `sanitizePersistErrorMessage` (bloco de testes documentais logo após
+// a função). Localiza o fim da função sanitizePersistErrorMessage pelo
+// fecha-chave balanceado a partir de sua declaração, então procura o
+// próximo `/* ───` após esse ponto.
+var fnDecl = 'function sanitizePersistErrorMessage'
+var fnIdx = src.indexOf(fnDecl, startIdx)
+if (fnIdx === -1) {
+  console.error(
+    'FAIL: `function sanitizePersistErrorMessage` não encontrado após o marcador de início',
+  )
+  process.exit(1)
+}
+var braceIdx = src.indexOf('{', fnIdx)
+if (braceIdx === -1) {
+  console.error('FAIL: abre-chaves de sanitizePersistErrorMessage não encontrado')
+  process.exit(1)
+}
+// Varredura balanceada simples para localizar o fecha-chaves que encerra
+// sanitizePersistErrorMessage (respeitando strings escapadas). Esta
+// varredura serve APENAS para localizar o fim da função e dela buscar o
+// marcador de comentário textual — não interpreta nem copia a função.
+var depth = 0
+var inStr = false
+var strCh = ''
+var fnEnd = -1
+for (var i = braceIdx; i < src.length; i++) {
+  var ch = src.charAt(i)
+  if (inStr) {
+    if (ch === '\\') {
+      i++
+      continue
+    }
+    if (ch === strCh) inStr = false
+    continue
+  }
+  if (ch === '"' || ch === "'") {
+    inStr = true
+    strCh = ch
+    continue
+  }
+  if (ch === '{') depth++
+  else if (ch === '}') {
+    depth--
+    if (depth === 0) {
+      fnEnd = i
+      break
+    }
+  }
+}
+if (fnEnd === -1) {
+  console.error('FAIL: não foi possível localizar o fim de sanitizePersistErrorMessage')
+  process.exit(1)
+}
+// Após o fim da função, busca o próximo comentário `/* ─────────────────`,
+// que delimita o bloco de testes documentais (fim do bloco de produção).
+var endMarker = '/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'
+var endIdx = src.indexOf(endMarker, fnEnd + 1)
+if (endIdx === -1) {
+  console.error('FAIL: marcador de fim `/* ───...` não encontrado após sanitizePersistErrorMessage')
+  process.exit(1)
+}
 
-// ─── Sandbox: avalia constante + helpers + função extraídas ───
-const sandbox = { console: console }
+// Bloco textual completo entre os marcadores: contém SENSITIVE_KEY_PATTERN,
+// $findBalancedBraceEnd, $findPemBlockEnd e sanitizePersistErrorMessage.
+var blockSrc = src.substring(startIdx, endIdx)
+
+// ─── Sandbox: avalia o bloco completo extraído do hook ───
+var sandbox = { console: console }
 vm.createContext(sandbox)
-vm.runInContext(
-  sensitiveKeyPatternSrc + ';\n' + helperBrace + '\n' + helperPem + '\n' + fnSrc,
-  sandbox,
-  { filename: 'extracted-sanitizer.js' },
-)
-const sanitize = sandbox.sanitizePersistErrorMessage
+vm.runInContext(blockSrc, sandbox, { filename: 'extracted-sanitizer-block.js' })
+var sanitize = sandbox.sanitizePersistErrorMessage
 if (typeof sanitize !== 'function') {
-  console.error('FAIL: sanitizePersistErrorMessage não é função após eval')
+  console.error('FAIL: sanitizePersistErrorMessage não é função após eval do bloco extraído')
   process.exit(1)
 }
 
@@ -90,7 +117,7 @@ if (typeof sanitize !== 'function') {
 // `expect`  → saída literal exata.
 // `noLeak`  → lista de fragmentos que NÃO podem aparecer na saída.
 // `has`     → lista de fragmentos que DEVEM aparecer na saída.
-const tests = [
+var tests = [
   // ── 16 casos existentes (G26) ──
   { input: 'headers: {"Cookie":"session=ULTRASECRET"}', expect: 'headers: [REDACTED]' },
   { input: 'Authorization: Basic dXNlcjpwYXNz', expect: 'Authorization: Basic [REDACTED]' },
@@ -157,21 +184,24 @@ const tests = [
     noLeak: ['eyJhbGciOiJIUzI1NiJ9', 'with spaces here'],
   },
   // Confirmação de saída sem fragmentos residuais (colchete/secret/suffix).
+  // `[REDACTED]` simples NÃO é vazamento — é a própria sanitização
+  // funcionando. `noLeak` contém apenas fragmentos realmente secretos/
+  // residuais: `ABCDEF`, `suffix`, `tail` e `[REDACTED]]` (colchete duplo).
   {
     input: 'secret=ABCDEF secret suffix tail',
     expect: 'secret=[REDACTED]',
-    noLeak: ['ABCDEF', 'suffix', 'tail', '[REDACTED]', '[REDACTED]]'],
+    noLeak: ['ABCDEF', 'suffix', 'tail', '[REDACTED]]'],
     has: ['secret=[REDACTED]'],
   },
 ]
 
 // ─── Runner ───
-let passed = 0
-let failed = 0
+var passed = 0
+var failed = 0
 tests.forEach(function (t, i) {
-  const result = sanitize(t.input)
-  let ok = true
-  const reasons = []
+  var result = sanitize(t.input)
+  var ok = true
+  var reasons = []
   if (t.expect !== undefined && result !== t.expect) {
     ok = false
     reasons.push('saída divergente do esperado')
