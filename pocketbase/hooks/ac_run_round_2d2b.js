@@ -84,8 +84,8 @@
 // compartilhado ou eval é usado — tudo vive neste único arquivo.
 //
 // Unificação de versão:
-//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.162),
-//     coordenada com package.json (0.0.162).
+//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.164),
+//     coordenada com package.json (0.0.164).
 //
 // PASS somente após:
 //   - execução terminal (estado=pass)
@@ -118,7 +118,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/validator-2d2b-health',
   function (e) {
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.163'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.164'
     return e.json(200, {
       ok: true,
       module: 'ac_validate_2d2b',
@@ -626,7 +626,7 @@ routerAdd(
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
     // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.163'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.164'
     var PORTA2D2B_CANONICAL_ORDERS = [
       'A1',
       'A2',
@@ -721,19 +721,11 @@ routerAdd(
       var anomalies = []
       var classification = 'ESTADO_INDETERMINADO'
       var justification = ''
-      if (!steps || steps.length === 0) {
-        classification = 'NAO_ENCONTRADA'
-        justification = 'Nenhuma etapa persistida.'
-        return {
-          pass: false,
-          reason: justification,
-          anomalies: anomalies,
-          classification: classification,
-          justification: justification,
-          execution: execution,
-          steps: steps || [],
-        }
-      }
+      // G24 (CORREÇÃO 1): estado terminal NÃO-pass ANTES de steps===0.
+      // Assim, execução blocked/fail/aborted com 0 etapas retorna a
+      // classificação do estado (BLOCKED/FAIL/ABORTED) e não
+      // NAO_ENCONTRADA. NAO_ENCONTRADA só quando estado='pass' com 0
+      // etapas.
       if (execution.estado !== 'pass') {
         classification =
           execution.estado === 'blocked'
@@ -752,6 +744,19 @@ routerAdd(
           justification: justification,
           execution: execution,
           steps: steps,
+        }
+      }
+      if (!steps || steps.length === 0) {
+        classification = 'NAO_ENCONTRADA'
+        justification = 'Nenhuma etapa persistida.'
+        return {
+          pass: false,
+          reason: justification,
+          anomalies: anomalies,
+          classification: classification,
+          justification: justification,
+          execution: execution,
+          steps: steps || [],
         }
       }
       if (steps.length !== 16) {
@@ -1791,6 +1796,28 @@ routerAdd(
       return t.substring(0, 500)
     }
 
+    // ─── G24 (CORREÇÃO 4b): sanitização de mensagens de erro de
+    //     persistência (persistStep). Remove, case-insensitive: token,
+    //     secret, signature, authorization, password, api_key/apikey,
+    //     private_key/privatekey, headers, access_token, refresh_token,
+    //     client_secret, bearer, basic auth, e-mail e telefone. Cada
+    //     ocorrência vira [REDACTED]. Limita a 300 caracteres. Não expõe
+    //     stack bruta, payload, corpo original, credencial ou URL secreta.
+    function sanitizePersistErrorMessage(s) {
+      var t = String(s == null ? '' : s)
+      // e-mails
+      t = t.replace(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/gi, '[REDACTED]')
+      // telefones (+ opcional, 8-15 digitos com separadores)
+      t = t.replace(/\+?\d[\d\s().\-]{6,}\d/g, '[REDACTED]')
+      // chaves/palavras sensíveis (case-insensitive)
+      t = t.replace(
+        /(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|authorization|password|secret|signature|token|bearer|basic\s+auth|headers)/gi,
+        '[REDACTED]',
+      )
+      if (t.length > 300) t = t.substring(0, 300)
+      return t
+    }
+
     // ─── CORREÇÃO 6: hash verificável (sanitizado + original) ───
     // raw_body_sanitized_sha256: pode ser recomputado do conteúdo devolvido
     // raw_body_original_sha256: refere-se ao raw original (não exposto se
@@ -1900,7 +1927,11 @@ routerAdd(
       idsCorr,
     ) {
       if (!evidenceCol || !execRecord)
-        return { ok: false, error: 'no evidence collection/exec record' }
+        return {
+          ok: false,
+          error: 'no evidence collection/exec record',
+          errorType: 'UNKNOWN_PERSIST_FAILURE',
+        }
       try {
         var stepId = execId + '_' + ordem
         var step = new Record(evidenceCol)
@@ -1943,7 +1974,27 @@ routerAdd(
         step.set('contrato', JSON.stringify(contrato))
         step.set('contrato_ok', contratoOk)
 
-        $app.save(step)
+        // CORREÇÃO 4 (G24): persistência com diagnóstico sanitizado.
+        // Diferencia 4 tipos de erro — DB_SAVE_EXCEPTION (save lançou),
+        // REREAD_NOT_FOUND (reread nula/não encontrada),
+        // REREAD_MISMATCH (campo esperado diverge do gravado),
+        // UNKNOWN_PERSIST_FAILURE (demais falhas) — sanitiza a mensagem
+        // (sem token/secret/signature/authorization/password/api_key/
+        // private_key/headers/access_token/refresh_token/client_secret/
+        // bearer/basic auth/e-mail/telefone), limita a 300 caracteres e
+        // nunca expõe stack bruta, payload, corpo original, credencial ou
+        // URL secreta.
+        var persistErrorType = 'UNKNOWN_PERSIST_FAILURE'
+        var persistErrorMessage = 'Falha desconhecida ao persistir etapa'
+        try {
+          $app.save(step)
+        } catch (saveErr) {
+          persistErrorType = 'DB_SAVE_EXCEPTION'
+          persistErrorMessage = sanitizePersistErrorMessage(
+            'DB_SAVE_EXCEPTION ' + ordem + ': ' + String(saveErr),
+          )
+          return { ok: false, error: persistErrorMessage, errorType: persistErrorType }
+        }
         writesPerformedRound++
 
         // Releitura e validação de campos críticos
@@ -1951,30 +2002,47 @@ routerAdd(
         try {
           reRead = $app.findFirstRecordByData('com_etapas_porta_2d2b', 'id', stepId)
         } catch (rrErr) {
-          return { ok: false, error: 'reread failed: ' + String(rrErr).substring(0, 150) }
+          persistErrorType = 'REREAD_NOT_FOUND'
+          persistErrorMessage = sanitizePersistErrorMessage(
+            'Etapa nao encontrada apos persistencia: ' + String(rrErr),
+          )
+          return { ok: false, error: persistErrorMessage, errorType: persistErrorType }
         }
-        if (!reRead) return { ok: false, error: 'reread returned null' }
-        if (reRead.getString('ordem') !== ordem)
-          return { ok: false, error: 'ordem mismatch on reread' }
-        if (reRead.getString('codigo') !== codigo)
-          return { ok: false, error: 'codigo mismatch on reread' }
-        if (reRead.getInt('http_status_real') !== httpReal)
-          return { ok: false, error: 'http_status_real mismatch on reread' }
-        if (reRead.getString('resultado') !== (pass ? 'PASS' : 'FAIL'))
-          return { ok: false, error: 'resultado mismatch on reread' }
-        if (reRead.getString('sha256_corpo_bruto') !== hashes.raw_original_sha256)
-          return { ok: false, error: 'sha256_corpo_bruto mismatch on reread' }
-        if (reRead.getString('raw_body_sanitized_sha256') !== hashes.raw_sanitized_sha256)
-          return { ok: false, error: 'raw_body_sanitized_sha256 mismatch on reread' }
-        if (reRead.getBool('contrato_ok') !== contratoOk)
-          return { ok: false, error: 'contrato_ok mismatch on reread' }
-        if (reRead.getBool('resposta_truncated') !== trunc.truncated)
-          return { ok: false, error: 'resposta_truncated mismatch on reread' }
-        return { ok: true, error: null, contrato_ok: contratoOk }
+        if (!reRead) {
+          persistErrorType = 'REREAD_NOT_FOUND'
+          persistErrorMessage = sanitizePersistErrorMessage(
+            'Etapa nao encontrada apos persistencia',
+          )
+          return { ok: false, error: persistErrorMessage, errorType: persistErrorType }
+        }
+        var mismatchField = null
+        if (reRead.getString('ordem') !== ordem) mismatchField = 'ordem'
+        else if (reRead.getString('codigo') !== codigo) mismatchField = 'codigo'
+        else if (reRead.getInt('http_status_real') !== httpReal) mismatchField = 'http_status_real'
+        else if (reRead.getString('resultado') !== (pass ? 'PASS' : 'FAIL'))
+          mismatchField = 'resultado'
+        else if (reRead.getString('sha256_corpo_bruto') !== hashes.raw_original_sha256)
+          mismatchField = 'sha256_corpo_bruto'
+        else if (reRead.getString('raw_body_sanitized_sha256') !== hashes.raw_sanitized_sha256)
+          mismatchField = 'raw_body_sanitized_sha256'
+        else if (reRead.getBool('contrato_ok') !== contratoOk) mismatchField = 'contrato_ok'
+        else if (reRead.getBool('resposta_truncated') !== trunc.truncated)
+          mismatchField = 'resposta_truncated'
+        if (mismatchField) {
+          persistErrorType = 'REREAD_MISMATCH'
+          persistErrorMessage = sanitizePersistErrorMessage(
+            'Divergencia na etapa persistida: campo esperado diferente do gravado (' +
+              mismatchField +
+              ')',
+          )
+          return { ok: false, error: persistErrorMessage, errorType: persistErrorType }
+        }
+        return { ok: true, error: null, errorType: null, contrato_ok: contratoOk }
       } catch (er) {
         return {
           ok: false,
-          error: 'persistStep error ' + ordem + ': ' + String(er).substring(0, 200),
+          error: sanitizePersistErrorMessage('persistStep error ' + ordem + ': ' + String(er)),
+          errorType: 'UNKNOWN_PERSIST_FAILURE',
         }
       }
     }
@@ -2066,9 +2134,12 @@ routerAdd(
       })
       if (!projectionResult.ok) {
         // A projeção não produziu pass===false/classification coerente:
-        // não persistir snapshot terminal confirmado.
+        // não persistir snapshot terminal confirmado. G24 (CORREÇÃO 2):
+        // preserva a causa original (stopReasonArg) e anexa o erro da
+        // terminalização — nunca sobrescreve o stopReason recebido.
         overallStatus = 'BLOCKED'
-        stopReason = projectionResult.error
+        stopReason =
+          (stopReasonArg || 'persist_step_failure') + ' | terminalize: ' + projectionResult.error
         terminalSaved = false
         return
       }
