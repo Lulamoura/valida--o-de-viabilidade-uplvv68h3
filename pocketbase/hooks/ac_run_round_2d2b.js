@@ -146,7 +146,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/validator-2d2b-health',
   function (e) {
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.169'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.170'
     return e.json(200, {
       ok: true,
       module: 'ac_validate_2d2b',
@@ -654,7 +654,7 @@ routerAdd(
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
     // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.169'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.170'
     var PORTA2D2B_CANONICAL_ORDERS = [
       'A1',
       'A2',

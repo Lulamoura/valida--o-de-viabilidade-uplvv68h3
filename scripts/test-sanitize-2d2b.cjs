@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────
-// Teste da sanitizadora — Porta 2D.2B — G29 (v0.0.169)
+// Teste da sanitizadora — Porta 2D.2B — G30 (v0.0.170)
 // ─────────────────────────────────────────────────────────────────────
 // Lê pocketbase/hooks/ac_run_round_2d2b.js, extrai o bloco REAL de
 // produção delimitado EXCLUSIVAMENTE por dois marcadores textuais
@@ -45,8 +45,9 @@ if (startIdx === -1) {
 // `/* ────...` seguido da linha do título
 // `G26 — TESTES ESTÁTICOS DA SANITIZADORA` — inequívoco e estável.
 // Calculado diretamente com src.indexOf(endMarker, startIdx).
-var endMarker =
-  '/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     * G26 \u2014 TESTES EST\u00c1TICOS DA SANITIZADORA'
+// O comentário real possui 63 caracteres `─`; construído com .repeat(63)
+// para impedir nova contagem visual incorreta do literal.
+var endMarker = '/* ' + '─'.repeat(63) + '\n     * G26 — TESTES ESTÁTICOS DA SANITIZADORA'
 var endIdx = src.indexOf(endMarker, startIdx)
 if (endIdx === -1) {
   console.error(
@@ -58,6 +59,26 @@ if (endIdx === -1) {
 // Bloco textual completo entre os marcadores: contém SENSITIVE_KEY_PATTERN,
 // $findBalancedBraceEnd, $findPemBlockEnd e sanitizePersistErrorMessage.
 var blockSrc = src.substring(startIdx, endIdx)
+
+// ─── Verificações fail-closed antes de avaliar o bloco ───
+// Garantem que o trecho extraído contém as três funções esperadas e que
+// endIdx > startIdx. Zero parser estrutural, zero loop sobre o fonte.
+if (!(endIdx > startIdx)) {
+  console.error('FAIL: endIdx não é maior que startIdx (bloco vazio ou invertido)')
+  process.exit(1)
+}
+if (blockSrc.indexOf('function $findBalancedBraceEnd') === -1) {
+  console.error('FAIL: blockSrc não contém `function $findBalancedBraceEnd`')
+  process.exit(1)
+}
+if (blockSrc.indexOf('function $findPemBlockEnd') === -1) {
+  console.error('FAIL: blockSrc não contém `function $findPemBlockEnd`')
+  process.exit(1)
+}
+if (blockSrc.indexOf('function sanitizePersistErrorMessage') === -1) {
+  console.error('FAIL: blockSrc não contém `function sanitizePersistErrorMessage`')
+  process.exit(1)
+}
 
 // ─── Sandbox: avalia o bloco completo extraído do hook ───
 var sandbox = { console: console }
