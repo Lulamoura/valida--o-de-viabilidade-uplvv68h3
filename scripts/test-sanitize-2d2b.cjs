@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────
-// Teste da sanitizadora — Porta 2D.2B — G28 (v0.0.168)
+// Teste da sanitizadora — Porta 2D.2B — G29 (v0.0.169)
 // ─────────────────────────────────────────────────────────────────────
 // Lê pocketbase/hooks/ac_run_round_2d2b.js, extrai o bloco REAL de
-// produção delimitado por marcadores textuais estáveis (sem interpretar
-// funções caractere a caractere), avalia o bloco completo em sandbox
-// local (node:vm) e executa os casos. NÃO copia nenhuma função —
+// produção delimitado EXCLUSIVAMENTE por dois marcadores textuais
+// (dois indexOf) e avalia o bloco completo em sandbox local (node:vm).
+// NÃO interpreta a função caractere a caractere (zero fnDecl, fnIdx,
+// braceIdx, depth, inStr, strCh, fnEnd e zero loop de análise
+// estrutural do fonte). NÃO copia nenhuma função —
 // SENSITIVE_KEY_PATTERN, $findBalancedBraceEnd, $findPemBlockEnd e
 // sanitizePersistErrorMessage são avaliados a partir do fonte de
 // produção extraído textualmente.
 //
-// Marcadores:
+// Marcadores textuais (indexOf):
 //   início — primeira ocorrência de `var SENSITIVE_KEY_PATTERN`;
-//   fim    — o comentário `/* ─────────────────` imediatamente posterior
-//            a `sanitizePersistErrorMessage` (bloco de testes documentais).
+//   fim    — ocorrência, após startIdx, do marcador textual único
+//            formado pelo comentário separador `/* ────...` seguido do
+//            título `G26 — TESTES ESTÁTICOS DA SANITIZADORA`.
 //
 // Execute: node scripts/test-sanitize-2d2b.cjs
 // ─────────────────────────────────────────────────────────────────────
@@ -26,7 +29,9 @@ var vm = require('vm')
 var hookPath = path.join(__dirname, '..', 'pocketbase', 'hooks', 'ac_run_round_2d2b.js')
 var src = fs.readFileSync(hookPath, 'utf8')
 
-// ─── Extrai o bloco REAL de produção por marcadores textuais ───
+// ─── Extrai o bloco REAL de produção EXCLUSIVAMENTE por dois
+//     marcadores textuais (dois indexOf). Não procura declaração,
+//     abre-chaves ou fecha-chaves de nenhuma função. ───
 // Início: primeira ocorrência de `var SENSITIVE_KEY_PATTERN`.
 var startMarker = 'var SENSITIVE_KEY_PATTERN'
 var startIdx = src.indexOf(startMarker)
@@ -36,66 +41,17 @@ if (startIdx === -1) {
   )
   process.exit(1)
 }
-// Fim: o comentário `/* ─────────────────` imediatamente posterior a
-// `sanitizePersistErrorMessage` (bloco de testes documentais logo após
-// a função). Localiza o fim da função sanitizePersistErrorMessage pelo
-// fecha-chave balanceado a partir de sua declaração, então procura o
-// próximo `/* ───` após esse ponto.
-var fnDecl = 'function sanitizePersistErrorMessage'
-var fnIdx = src.indexOf(fnDecl, startIdx)
-if (fnIdx === -1) {
-  console.error(
-    'FAIL: `function sanitizePersistErrorMessage` não encontrado após o marcador de início',
-  )
-  process.exit(1)
-}
-var braceIdx = src.indexOf('{', fnIdx)
-if (braceIdx === -1) {
-  console.error('FAIL: abre-chaves de sanitizePersistErrorMessage não encontrado')
-  process.exit(1)
-}
-// Varredura balanceada simples para localizar o fecha-chaves que encerra
-// sanitizePersistErrorMessage (respeitando strings escapadas). Esta
-// varredura serve APENAS para localizar o fim da função e dela buscar o
-// marcador de comentário textual — não interpreta nem copia a função.
-var depth = 0
-var inStr = false
-var strCh = ''
-var fnEnd = -1
-for (var i = braceIdx; i < src.length; i++) {
-  var ch = src.charAt(i)
-  if (inStr) {
-    if (ch === '\\') {
-      i++
-      continue
-    }
-    if (ch === strCh) inStr = false
-    continue
-  }
-  if (ch === '"' || ch === "'") {
-    inStr = true
-    strCh = ch
-    continue
-  }
-  if (ch === '{') depth++
-  else if (ch === '}') {
-    depth--
-    if (depth === 0) {
-      fnEnd = i
-      break
-    }
-  }
-}
-if (fnEnd === -1) {
-  console.error('FAIL: não foi possível localizar o fim de sanitizePersistErrorMessage')
-  process.exit(1)
-}
-// Após o fim da função, busca o próximo comentário `/* ─────────────────`,
-// que delimita o bloco de testes documentais (fim do bloco de produção).
-var endMarker = '/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'
-var endIdx = src.indexOf(endMarker, fnEnd + 1)
+// Fim: marcador textual único formado pelo comentário separador
+// `/* ────...` seguido da linha do título
+// `G26 — TESTES ESTÁTICOS DA SANITIZADORA` — inequívoco e estável.
+// Calculado diretamente com src.indexOf(endMarker, startIdx).
+var endMarker =
+  '/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     * G26 \u2014 TESTES EST\u00c1TICOS DA SANITIZADORA'
+var endIdx = src.indexOf(endMarker, startIdx)
 if (endIdx === -1) {
-  console.error('FAIL: marcador de fim `/* ───...` não encontrado após sanitizePersistErrorMessage')
+  console.error(
+    'FAIL: marcador de fim `/* ───... G26 — TESTES ESTÁTICOS DA SANITIZADORA` não encontrado após o marcador de início',
+  )
   process.exit(1)
 }
 
