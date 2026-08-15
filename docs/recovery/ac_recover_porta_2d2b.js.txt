@@ -1,6 +1,6 @@
 // ════════════════════════════════════════════════════════════════════
 // Hook TEMPORÁRIO de recuperação one-shot da Porta 2D.2B
-// Versão: v0.0.175-recovery (artefato inerte — NÃO publicado como hook)
+// Versão: v0.0.176-recovery (artefato inerte — NÃO publicado como hook)
 // ════════════════════════════════════════════════════════════════════
 //
 // ESTE ARQUIVO É UM ARTEFATO INERTE PARA INSPEÇÃO.
@@ -208,12 +208,12 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
             description:
               'Execução terminalizada por recuperação one-shot em ' +
               now +
-              '. A1 falhou ao persistir (HTTP 409, evidence_incomplete, SNAPSHOT_MALFORMED). Nenhuma etapa foi criada.',
+              '. Estado anterior observado: running, zero etapas, decisao vazia e lock ativo. A causa raiz não foi estabelecida.',
           },
           {
             type: 'ORIGINAL_EXECUTION_INCOMPLETE',
             description:
-              'Execução original (v0.0.163) parou em running com 0 etapas, decisao vazia e lock ativo. Motivo raiz: falha de persistência na etapa A1.',
+              'Execução original (v0.0.163) encontrada em running com 0 etapas, decisao vazia e lock ativo. Não há evidência persistida suficiente para determinar a causa raiz.',
           },
         ],
         canonical_map: {
@@ -236,7 +236,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
         },
         expected_contracts: { status: 'not_evaluated', source: 'recovery_manual' },
         hash_declaration: { status: 'not_available', source: 'recovery_manual' },
-        recovery_tool_version: 'v0.0.175-recovery',
+        recovery_tool_version: 'v0.0.176-recovery',
       }
       exec.set('decisao', JSON.stringify(snapshot))
 
