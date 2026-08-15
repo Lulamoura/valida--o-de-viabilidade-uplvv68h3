@@ -1,27 +1,28 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Hook consolidado (v0.0.165)
+// Porta 2D.2B — Hook consolidado (v0.0.166)
 // ════════════════════════════════════════════════════════════════════
-// SEGMENTO G25 (v0.0.165) — PRESERVAÇÃO TOTAL DA CAUSA E
-// SANITIZAÇÃO CHAVE-VALOR.
-//   1. terminalizeBlockedOrFail preserva stopReasonArg em TODOS os
-//      caminhos de falha (stepRead, terminalize, confirmTerminal,
-//      rereadMismatch, saveFailed) via novo helper
-//      composeTerminalReason(original, stage, detail), que mantém a
-//      causa original sanitizada, acrescenta ` | <stage>: <detail>`,
-//      nunca substitui a causa original, não duplica o mesmo stage em
-//      chamadas sucessivas, limita a 500 chars e aplica
-//      sanitizePersistErrorMessage no resultado final.
-//   2. sanitizePersistErrorMessage evolui: remove o PAR chave-valor
-//      COMPLETO (chave=valor, chave: valor, "chave":"valor",
-//      "chave": "valor", chave: "valor", Authorization: Bearer valor,
-//      Bearer valor) — o valor é integralmente substituído por
-//      [REDACTED], aspas preservadas. Remove URLs sensíveis
-//      (https://... / http://... → [REDACTED_URL]) ANTES das demais
-//      sanitizações. Mantém e-mails e telefones (regex). Limita a 300
+// SEGMENTO G26 (v0.0.166) — COBERTURA REAL DOS CINCO CAMINHOS E
+// SANITIZAÇÃO ESTRUTURAL.
+//   1. terminalizeBlockedOrFail usa composeTerminalReason em TODOS os
+//      cinco caminhos de falha (stepRead, terminalize, confirmTerminal,
+//      rereadMismatch, saveFailed), sem exceção. Removidas todas as
+//      atribuições diretas a stopReason nesses caminhos. A causa
+//      original (stopReasonArg) permanece no início, com fallback
+//      neutro 'persist_step_failure' apenas quando null/undefined/vazio.
+//   2. sanitizePersistErrorMessage reescrita com cobertura estrutural
+//      completa: URLs (http/https → [REDACTED_URL]); Authorization
+//      Bearer/Basic (→ [REDACTED]); pares chave-valor com valor
+//      COMPLETO substituído (chave=valor, chave: valor, "chave":"valor",
+//      chave: "valor", chave='valor') — sem sufixo, bearer token ou
+//      conteúdo residual; headers como objeto JSON substituído
+//      integralmente por [REDACTED]; private_key em formato PEM
+//      (BEGIN...END → [REDACTED]); valores com espaços substituídos
+//      integralmente; e-mails e telefones preservados. Limite de 300
 //      caracteres após toda sanitização.
-//   3. Testes estáticos da sanitizadora (10 casos) documentados no
-//      próprio arquivo, não executados em produção.
-//   4. Versão 0.0.165 / v0.0.165 coordenada em package.json, health e
+//   3. Testes executáveis em
+//      pocketbase/hooks/ac_run_round_2d2b.test.js (cópia exata da
+//      função de produção, sem require/import).
+//   4. Versão 0.0.166 / v0.0.166 coordenada em package.json, health e
 //      runner (PORTA2D2B_EXPECTED_VERSION e
 //      validatorCanonical.expectedVersion).
 // Preservações obrigatórias mantidas: quatro errorType, um único
@@ -112,8 +113,8 @@
 // compartilhado ou eval é usado — tudo vive neste único arquivo.
 //
 // Unificação de versão:
-//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.165),
-//     coordenada com package.json (0.0.165).
+//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.166),
+//     coordenada com package.json (0.0.166).
 //
 // PASS somente após:
 //   - execução terminal (estado=pass)
@@ -146,7 +147,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/validator-2d2b-health',
   function (e) {
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.165'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.166'
     return e.json(200, {
       ok: true,
       module: 'ac_validate_2d2b',
@@ -654,7 +655,7 @@ routerAdd(
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
     // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.165'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.166'
     var PORTA2D2B_CANONICAL_ORDERS = [
       'A1',
       'A2',
@@ -1824,83 +1825,105 @@ routerAdd(
       return t.substring(0, 500)
     }
 
-    // ─── G25: sanitização de mensagens de erro de persistência.
-    //     Remove o PAR chave-valor COMPLETO (chave=valor, chave: valor,
-    //     "chave":"valor", "chave": "valor", chave: "valor",
-    //     Authorization: Bearer valor, Bearer valor) — o valor é
-    //     integralmente substituído por [REDACTED], as aspas são
-    //     preservadas. Remove URLs sensíveis (https://... / http://...)
-    //     por [REDACTED_URL] ANTES das demais sanitizações. Mantém
-    //     e-mails e telefones (regex). Chaves sensíveis (case-insensitive,
-    //     com `-`/`_` equivalentes): password, passwd, token, api_key,
-    //     apikey, api-key, access_token, access-token, refresh_token,
-    //     refresh-token, client_secret, client-secret, private_key,
-    //     privatekey, private-key, secret, signature, authorization,
-    //     headers, x-api-key. Limita a 300 caracteres após toda
-    //     sanitização. Não expõe stack bruta, payload, corpo original,
-    //     credencial ou URL secreta.
-    // ─── G25: chave normalizada (case-insensitive, - e _ equivalentes).
+    // ─── G26: sanitização de mensagens de erro de persistência.
+    //     COBERTURA ESTRUTURAL COMPLETA. Aplica em ordem:
+    //       a) URLs http/https (query, user:pass, host interno) → [REDACTED_URL]
+    //       b) Authorization: Bearer/Basic <qualquer coisa> → [REDACTED]
+    //          (case-insensitive)
+    //       c) private_key em formato PEM (BEGIN...END, inclusive RSA/EC)
+    //          → [REDACTED]
+    //       d) headers como objeto JSON (headers:{...}, "headers":{...},
+    //          headers={...}) → objeto inteiro substituído por [REDACTED]
+    //       e) Pares chave-valor com valor COMPLETO substituído por
+    //          [REDACTED] — "chave":"valor", "chave": "valor",
+    //          chave: "valor", chave='valor', chave=valor, chave: valor
+    //          (valor com espaços substituído integralmente). Chaves
+    //          sensíveis (case-insensitive, - e _ equivalentes):
+    //          password, passwd, token, api_key/apikey, access_token,
+    //          refresh_token, client_secret, private_key/privatekey,
+    //          secret, signature, authorization, x-api-key, cookie.
+    //       f) e-mails e telefones (regex, preservados).
+    //     Limite de 300 caracteres após toda sanitização. Não expõe
+    //     stack bruta, payload, corpo original, credencial ou URL secreta.
+    // ─── G26: chave normalizada (case-insensitive, - e _ equivalentes).
+    //     `headers` é tratado à parte (passo d) e não entra no padrão de
+    //     pares chave-valor para evitar reprocessamento do [REDACTED].
     var SENSITIVE_KEY_PATTERN =
-      'password|passwd|token|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|privatekey|secret|signature|authorization|headers|x[_-]?api[_-]?key'
+      'password|passwd|token|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|privatekey|secret|signature|authorization|x[_-]?api[_-]?key|cookie'
     function sanitizePersistErrorMessage(s) {
       var t = String(s == null ? '' : s)
-      // 1) URLs sensíveis ANTES das demais sanitizações — inclui query
-      //    strings, user:password embutidos, hosts internos e qualquer
-      //    caminho. Aplicado globalmente.
+      // (a) URLs sensíveis — inclui query strings, user:password embutidos,
+      //     hosts internos e qualquer caminho. Aplicado globalmente ANTES
+      //     das demais sanitizações.
       t = t.replace(/https?:\/\/[^\s"'<>]+/gi, '[REDACTED_URL]')
-      // 2) Authorization: Bearer <token>  →  Authorization: Bearer [REDACTED]
+      // (b) Authorization: Bearer/Basic <qualquer coisa>
+      //     → Authorization: Bearer/Basic [REDACTED] (case-insensitive).
       t = t.replace(/(Authorization\s*:\s*Bearer\s+)[^\s"',;}\]]+/gi, '$1[REDACTED]')
-      // 3) Bearer <token> isolado  →  Bearer [REDACTED]
-      //    (não re-redata valor já [REDACTED])
-      t = t.replace(/(Bearer\s+)(?!\[REDACTED\])[^\s"',;}\]]+/gi, '$1[REDACTED]')
-      // 2b) Preserva `Authorization: Bearer [REDACTED]` (passo 2) para que o
-      //     passo 8 (chave: valor) não re-redatada a palavra `Bearer`.
-      //     Marca o trecho já-sanitizado com placeholder ASCII seguro.
-      var AUTH_BEARER_PLACEHOLDER = '\x01AUTH_BEARER_OK\x01'
-      t = t.replace(/Authorization\s*:\s*Bearer\s+\[REDACTED\]/gi, AUTH_BEARER_PLACEHOLDER)
-      // 4) "chave":"valor"  e  "chave": "valor"
+      t = t.replace(/(Authorization\s*:\s*Basic\s+)[^\s"',;}\]]+/gi, '$1[REDACTED]')
+      // (b2) Preserva `Authorization: Bearer/Basic [REDACTED]` para que o
+      //      passo (e) (chave: valor) não re-redatada o conteúdo. Marca o
+      //      trecho já-sanitizado com placeholders ASCII seguros.
+      t = t.replace(/Authorization\s*:\s*Bearer\s+\[REDACTED\]/gi, '\x01AUTH_BEARER_OK\x01')
+      t = t.replace(/Authorization\s*:\s*Basic\s+\[REDACTED\]/gi, '\x01AUTH_BASIC_OK\x01')
+      // (c) private_key em formato PEM — BEGIN...END (inclusive RSA/EC).
+      t = t.replace(
+        /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+        '[REDACTED]',
+      )
+      // (d) headers como objeto JSON — substitui o objeto INTEIRO por
+      //     [REDACTED]. Cobre headers:{...}, "headers":{...},
+      //     "headers": {...}, headers={...}. Preserva aspas e separador
+      //     originais da chave.
+      t = t.replace(/("?headers"?)\s*([:=]\s*)\{[^}]*\}/gi, '$1$2[REDACTED]')
+      // (e) Pares chave-valor com valor COMPLETO substituído.
+      //     1) "chave":"valor"  e  "chave": "valor"
       t = t.replace(
         new RegExp('("(?:' + SENSITIVE_KEY_PATTERN + ')"\\s*(?::)\\s*)"([^"]*)"', 'gi'),
         '$1"[REDACTED]"',
       )
-      // 5) chave: "valor"
+      //     2) chave: "valor"  (sem aspas na chave)
       t = t.replace(
         new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ')\\s*(?::)\\s*)"([^"]*)"', 'gi'),
         '$1"[REDACTED]"',
       )
-      // 6) chave='valor'  (aspas simples)
+      //     3) chave: valor  (sem aspas, valor com espaços — substitui
+      //        integralmente até separador de bloco)
+      t = t.replace(
+        new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ')\\s*(?::)\\s*)[^\\n;,}\\\]]+', 'gi'),
+        '$1[REDACTED]',
+      )
+      //     4) chave='valor'  (aspas simples)
       t = t.replace(
         new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ")\\s*(?:=)\\s*)'([^']*)'", 'gi'),
         "$1'[REDACTED]'",
       )
-      // 7) chave=valor  (sem aspas)
+      //     5) chave=valor  (sem aspas, valor com espaços — substitui
+      //        integralmente até separador de bloco)
       t = t.replace(
-        new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ')\\s*(?:=)\\s*)[^\\s"\',;}\\]]+', 'gi'),
+        new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ')\\s*(?:=)\\s*)[^\\n;,}\\\]]+', 'gi'),
         '$1[REDACTED]',
       )
-      // 8) chave: valor  (JSON-like, sem aspas, valor até separador)
-      t = t.replace(
-        new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ')\\s*(?::)\\s*)[^\\s"\',;}\\]]+', 'gi'),
-        '$1[REDACTED]',
-      )
-      // 8b) Restaura Authorization: Bearer [REDACTED] preservado no passo 2b.
+      // (b2r) Restaura Authorization: Bearer/Basic [REDACTED] preservado.
       t = t.replace(/\x01AUTH_BEARER_OK\x01/g, 'Authorization: Bearer [REDACTED]')
-      // 9) e-mails
+      t = t.replace(/\x01AUTH_BASIC_OK\x01/g, 'Authorization: Basic [REDACTED]')
+      // (f) e-mails
       t = t.replace(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/gi, '[REDACTED]')
-      // 10) telefones (+ opcional, 8-15 digitos com separadores)
+      // (g) telefones (+ opcional, 8-15 digitos com separadores)
       t = t.replace(/\+?\d[\d\s().\-]{6,}\d/g, '[REDACTED]')
       if (t.length > 300) t = t.substring(0, 300)
       return t
     }
 
     /* ───────────────────────────────────────────────────────────────
-     * G25 — TESTES ESTÁTICOS DA SANITIZADORA (não executados em produção)
+     * G26 — TESTES ESTÁTICOS DA SANITIZADORA (não executados em produção)
      * ───────────────────────────────────────────────────────────────
      * Bloco de auto-teste documental. NÃO é invocado em produção (nenhuma
      * rota, hook, cron ou migration o chama). Existe apenas para registrar
-     * os 10 casos exigidos pelo segmento G25 e permitir verificação
+     * os casos exigidos pelo segmento G26 e permitir verificação
      * humana/lint das saídas esperadas. Cada caso afirma que zero valor
-     * sensível original permanece após sanitizePersistErrorMessage.
+     * sensível original permanece após sanitizePersistErrorMessage. Os
+     * testes executáveis estão em ac_run_round_2d2b.test.js (cópia exata
+     * da função de produção, sem require/import).
      *
      * Entradas → Saídas esperadas (literais):
      *
@@ -1978,7 +2001,7 @@ routerAdd(
      * Resultado esperado: todos pass:true, zero leaked:true.
      * ─────────────────────────────────────────────────────────────── */
 
-    // ─── G25: composeTerminalReason(original, stage, detail) ───
+    // ─── G26: composeTerminalReason(original, stage, detail) ───
     //     Preserva a causa original (stopReasonArg) em todos os caminhos
     //     de falha de terminalizeBlockedOrFail. Regras:
     //       - mantém a causa original sanitizada (se vazia/null/undefined,
@@ -2293,13 +2316,12 @@ routerAdd(
         for (var s = 0; s < stepRecs.length; s++) steps.push(normalizeStepRecord(stepRecs[s]))
       } catch (er) {
         // Erro de leitura impede classificação; não persiste snapshot
-        // confirmado.
+        // confirmado. G26: usa composeTerminalReason no caminho stepRead.
         overallStatus = 'BLOCKED'
-        stopReason = 'STEP_READ_ERROR ao terminalizar: ' + String(er).substring(0, 150)
+        stopReason = composeTerminalReason(stopReasonArg, 'stepRead', String(er).substring(0, 150))
         terminalSaved = false
         return
       }
-
       // Montar e validar a projeção terminal ANTES do save.
       var projectionResult = buildAndValidateTerminalProjection({
         termEstado: termEstado,
@@ -2320,12 +2342,11 @@ routerAdd(
       })
       if (!projectionResult.ok) {
         // A projeção não produziu pass===false/classification coerente:
-        // não persistir snapshot terminal confirmado. G24 (CORREÇÃO 2):
-        // preserva a causa original (stopReasonArg) e anexa o erro da
-        // terminalização — nunca sobrescreve o stopReason recebido.
+        // não persistir snapshot terminal confirmado. G26: usa
+        // composeTerminalReason no caminho terminalize — preserva a causa
+        // original (stopReasonArg) e anexa o erro da terminalização.
         overallStatus = 'BLOCKED'
-        stopReason =
-          (stopReasonArg || 'persist_step_failure') + ' | terminalize: ' + projectionResult.error
+        stopReason = composeTerminalReason(stopReasonArg, 'terminalize', projectionResult.error)
         terminalSaved = false
         return
       }
@@ -2361,8 +2382,9 @@ routerAdd(
           // Confirmar estado e snapshot completos por releitura.
           var termConfirm = confirmTerminalSnapshot(termSave.reread, expectedClass, $app)
           if (!termConfirm.ok) {
-            // Não reportar registro terminal como confirmado. G25:
-            // preserva a causa original (stopReasonArg).
+            // Não reportar registro terminal como confirmado. G26:
+            // preserva a causa original (stopReasonArg) via
+            // composeTerminalReason no caminho confirmTerminal.
             terminalSaved = false
             overallStatus = 'BLOCKED'
             stopReason = composeTerminalReason(stopReasonArg, 'confirmTerminal', termConfirm.error)
