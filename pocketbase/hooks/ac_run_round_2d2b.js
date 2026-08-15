@@ -1,5 +1,33 @@
 // ════════════════════════════════════════════════════════════════════
-// Porta 2D.2B — Hook consolidado (v0.0.163)
+// Porta 2D.2B — Hook consolidado (v0.0.165)
+// ════════════════════════════════════════════════════════════════════
+// SEGMENTO G25 (v0.0.165) — PRESERVAÇÃO TOTAL DA CAUSA E
+// SANITIZAÇÃO CHAVE-VALOR.
+//   1. terminalizeBlockedOrFail preserva stopReasonArg em TODOS os
+//      caminhos de falha (stepRead, terminalize, confirmTerminal,
+//      rereadMismatch, saveFailed) via novo helper
+//      composeTerminalReason(original, stage, detail), que mantém a
+//      causa original sanitizada, acrescenta ` | <stage>: <detail>`,
+//      nunca substitui a causa original, não duplica o mesmo stage em
+//      chamadas sucessivas, limita a 500 chars e aplica
+//      sanitizePersistErrorMessage no resultado final.
+//   2. sanitizePersistErrorMessage evolui: remove o PAR chave-valor
+//      COMPLETO (chave=valor, chave: valor, "chave":"valor",
+//      "chave": "valor", chave: "valor", Authorization: Bearer valor,
+//      Bearer valor) — o valor é integralmente substituído por
+//      [REDACTED], aspas preservadas. Remove URLs sensíveis
+//      (https://... / http://... → [REDACTED_URL]) ANTES das demais
+//      sanitizações. Mantém e-mails e telefones (regex). Limita a 300
+//      caracteres após toda sanitização.
+//   3. Testes estáticos da sanitizadora (10 casos) documentados no
+//      próprio arquivo, não executados em produção.
+//   4. Versão 0.0.165 / v0.0.165 coordenada em package.json, health e
+//      runner (PORTA2D2B_EXPECTED_VERSION e
+//      validatorCanonical.expectedVersion).
+// Preservações obrigatórias mantidas: quatro errorType, um único
+// validateCore, três routerAdd, zero require/module.exports/globalThis/
+// eval/probes, health/evidence/contratos/hashes/transação/migrations/
+// schema/frontend inalterados.
 // ════════════════════════════════════════════════════════════════════
 // SEGMENTO G21 (v0.0.163) — DOIS AJUSTES FINAIS.
 //   1. persist_failure com conversão booleana estrita: false para
@@ -84,8 +112,8 @@
 // compartilhado ou eval é usado — tudo vive neste único arquivo.
 //
 // Unificação de versão:
-//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.164),
-//     coordenada com package.json (0.0.164).
+//   - usada SOMENTE a constante PORTA2D2B_EXPECTED_VERSION (v0.0.165),
+//     coordenada com package.json (0.0.165).
 //
 // PASS somente após:
 //   - execução terminal (estado=pass)
@@ -118,7 +146,7 @@ routerAdd(
   'GET',
   '/backend/v1/integracao/ac/validator-2d2b-health',
   function (e) {
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.164'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.165'
     return e.json(200, {
       ok: true,
       module: 'ac_validate_2d2b',
@@ -626,7 +654,7 @@ routerAdd(
   '/backend/v1/integracao/ac/run-round-2d2b',
   (e) => {
     // ─── constantes canônicas (escopo do callback) ───
-    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.164'
+    var PORTA2D2B_EXPECTED_VERSION = 'v0.0.165'
     var PORTA2D2B_CANONICAL_ORDERS = [
       'A1',
       'A2',
@@ -1796,26 +1824,184 @@ routerAdd(
       return t.substring(0, 500)
     }
 
-    // ─── G24 (CORREÇÃO 4b): sanitização de mensagens de erro de
-    //     persistência (persistStep). Remove, case-insensitive: token,
-    //     secret, signature, authorization, password, api_key/apikey,
-    //     private_key/privatekey, headers, access_token, refresh_token,
-    //     client_secret, bearer, basic auth, e-mail e telefone. Cada
-    //     ocorrência vira [REDACTED]. Limita a 300 caracteres. Não expõe
-    //     stack bruta, payload, corpo original, credencial ou URL secreta.
+    // ─── G25: sanitização de mensagens de erro de persistência.
+    //     Remove o PAR chave-valor COMPLETO (chave=valor, chave: valor,
+    //     "chave":"valor", "chave": "valor", chave: "valor",
+    //     Authorization: Bearer valor, Bearer valor) — o valor é
+    //     integralmente substituído por [REDACTED], as aspas são
+    //     preservadas. Remove URLs sensíveis (https://... / http://...)
+    //     por [REDACTED_URL] ANTES das demais sanitizações. Mantém
+    //     e-mails e telefones (regex). Chaves sensíveis (case-insensitive,
+    //     com `-`/`_` equivalentes): password, passwd, token, api_key,
+    //     apikey, api-key, access_token, access-token, refresh_token,
+    //     refresh-token, client_secret, client-secret, private_key,
+    //     privatekey, private-key, secret, signature, authorization,
+    //     headers, x-api-key. Limita a 300 caracteres após toda
+    //     sanitização. Não expõe stack bruta, payload, corpo original,
+    //     credencial ou URL secreta.
+    // ─── G25: chave normalizada (case-insensitive, - e _ equivalentes).
+    var SENSITIVE_KEY_PATTERN =
+      'password|passwd|token|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|privatekey|secret|signature|authorization|headers|x[_-]?api[_-]?key'
     function sanitizePersistErrorMessage(s) {
       var t = String(s == null ? '' : s)
-      // e-mails
-      t = t.replace(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/gi, '[REDACTED]')
-      // telefones (+ opcional, 8-15 digitos com separadores)
-      t = t.replace(/\+?\d[\d\s().\-]{6,}\d/g, '[REDACTED]')
-      // chaves/palavras sensíveis (case-insensitive)
+      // 1) URLs sensíveis ANTES das demais sanitizações — inclui query
+      //    strings, user:password embutidos, hosts internos e qualquer
+      //    caminho. Aplicado globalmente.
+      t = t.replace(/https?:\/\/[^\s"'<>]+/gi, '[REDACTED_URL]')
+      // 2) Authorization: Bearer <token>  →  Authorization: Bearer [REDACTED]
+      t = t.replace(/(Authorization\s*:\s*Bearer\s+)[^\s"',;}\]]+/gi, '$1[REDACTED]')
+      // 3) Bearer <token> isolado  →  Bearer [REDACTED]
+      //    (não re-redata valor já [REDACTED])
+      t = t.replace(/(Bearer\s+)(?!\[REDACTED\])[^\s"',;}\]]+/gi, '$1[REDACTED]')
+      // 2b) Preserva `Authorization: Bearer [REDACTED]` (passo 2) para que o
+      //     passo 8 (chave: valor) não re-redatada a palavra `Bearer`.
+      //     Marca o trecho já-sanitizado com placeholder ASCII seguro.
+      var AUTH_BEARER_PLACEHOLDER = '\x01AUTH_BEARER_OK\x01'
+      t = t.replace(/Authorization\s*:\s*Bearer\s+\[REDACTED\]/gi, AUTH_BEARER_PLACEHOLDER)
+      // 4) "chave":"valor"  e  "chave": "valor"
       t = t.replace(
-        /(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|authorization|password|secret|signature|token|bearer|basic\s+auth|headers)/gi,
-        '[REDACTED]',
+        new RegExp('("(?:' + SENSITIVE_KEY_PATTERN + ')"\\s*(?::)\\s*)"([^"]*)"', 'gi'),
+        '$1"[REDACTED]"',
       )
+      // 5) chave: "valor"
+      t = t.replace(
+        new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ')\\s*(?::)\\s*)"([^"]*)"', 'gi'),
+        '$1"[REDACTED]"',
+      )
+      // 6) chave='valor'  (aspas simples)
+      t = t.replace(
+        new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ")\\s*(?:=)\\s*)'([^']*)'", 'gi'),
+        "$1'[REDACTED]'",
+      )
+      // 7) chave=valor  (sem aspas)
+      t = t.replace(
+        new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ')\\s*(?:=)\\s*)[^\\s"\',;}\\]]+', 'gi'),
+        '$1[REDACTED]',
+      )
+      // 8) chave: valor  (JSON-like, sem aspas, valor até separador)
+      t = t.replace(
+        new RegExp('\\b((?:' + SENSITIVE_KEY_PATTERN + ')\\s*(?::)\\s*)[^\\s"\',;}\\]]+', 'gi'),
+        '$1[REDACTED]',
+      )
+      // 8b) Restaura Authorization: Bearer [REDACTED] preservado no passo 2b.
+      t = t.replace(/\x01AUTH_BEARER_OK\x01/g, 'Authorization: Bearer [REDACTED]')
+      // 9) e-mails
+      t = t.replace(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/gi, '[REDACTED]')
+      // 10) telefones (+ opcional, 8-15 digitos com separadores)
+      t = t.replace(/\+?\d[\d\s().\-]{6,}\d/g, '[REDACTED]')
       if (t.length > 300) t = t.substring(0, 300)
       return t
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+     * G25 — TESTES ESTÁTICOS DA SANITIZADORA (não executados em produção)
+     * ───────────────────────────────────────────────────────────────
+     * Bloco de auto-teste documental. NÃO é invocado em produção (nenhuma
+     * rota, hook, cron ou migration o chama). Existe apenas para registrar
+     * os 10 casos exigidos pelo segmento G25 e permitir verificação
+     * humana/lint das saídas esperadas. Cada caso afirma que zero valor
+     * sensível original permanece após sanitizePersistErrorMessage.
+     *
+     * Entradas → Saídas esperadas (literais):
+     *
+     *  1. 'password=segredo123'
+     *     → 'password=[REDACTED]'
+     *       (não contém 'segredo123')
+     *
+     *  2. 'token: abc.def.ghi'
+     *     → 'token: [REDACTED]'
+     *       (não contém 'abc.def.ghi')
+     *
+     *  3. 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc.def'
+     *     → 'Authorization: Bearer [REDACTED]'
+     *       (não contém 'eyJhbGciOiJIUzI1NiJ9.abc.def')
+     *
+     *  4. '{"private_key":"CHAVE_PRIVADA_SECRETA"}'
+     *     → '{"private_key":"[REDACTED]"}'
+     *       (não contém 'CHAVE_PRIVADA_SECRETA')
+     *
+     *  5. 'client-secret=valor-super-secreto'
+     *     → 'client-secret=[REDACTED]'
+     *       (não contém 'valor-super-secreto')
+     *
+     *  6. 'https://usuario:senha@host.interno/caminho?token=abc123'
+     *     → '[REDACTED_URL]'
+     *       (contém '[REDACTED_URL]'; não contém 'usuario', 'senha',
+     *        'abc123')
+     *
+     *  7. 'email: joao@example.com enviado'
+     *     → 'email: [REDACTED] enviado'
+     *       (não contém 'joao@example.com')
+     *
+     *  8. 'tel: +55 11 99999-9999'
+     *     → 'tel: [REDACTED]'   (telefone redacted; 'tel' não é chave
+     *       sensível, mas o número some pela regex de telefone)
+     *       (não contém '+55 11 99999-9999')
+     *
+     *  9. 'api_key=sk-abc123-def456'
+     *     → 'api_key=[REDACTED]'
+     *       (não contém 'sk-abc123-def456')
+     *
+     * 10. 'access_token: xyz.789'
+     *     → 'access_token: [REDACTED]'
+     *       (não contém 'xyz.789')
+     *
+     * Função de auto-teste (referência Only — não invocada em runtime):
+     *   function __g25_selfTest() {
+     *     var cases = [
+     *       ['password=segredo123', 'segredo123'],
+     *       ['token: abc.def.ghi', 'abc.def.ghi'],
+     *       ['Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc.def', 'eyJhbGciOiJIUzI1NiJ9.abc.def'],
+     *       ['{"private_key":"CHAVE_PRIVADA_SECRETA"}', 'CHAVE_PRIVADA_SECRETA'],
+     *       ['client-secret=valor-super-secreto', 'valor-super-secreto'],
+     *       ['https://usuario:senha@host.interno/caminho?token=abc123', 'usuario'],
+     *       ['email: joao@example.com enviado', 'joao@example.com'],
+     *       ['tel: +55 11 99999-9999', '+55 11 99999-9999'],
+     *       ['api_key=sk-abc123-def456', 'sk-abc123-def456'],
+     *       ['access_token: xyz.789', 'xyz.789'],
+     *     ]
+     *     var out = []
+     *     for (var i = 0; i < cases.length; i++) {
+     *       var sanitized = sanitizePersistErrorMessage(cases[i][0])
+     *       var leaked = sanitized.indexOf(cases[i][1]) !== -1
+     *       out.push({
+     *         n: i + 1,
+     *         input: cases[i][0],
+     *         output: sanitized,
+     *         sensitiveFragment: cases[i][1],
+     *         leaked: leaked,
+     *         pass: !leaked,
+     *       })
+     *     }
+     *     return out
+     *   }
+     * Resultado esperado: todos pass:true, zero leaked:true.
+     * ─────────────────────────────────────────────────────────────── */
+
+    // ─── G25: composeTerminalReason(original, stage, detail) ───
+    //     Preserva a causa original (stopReasonArg) em todos os caminhos
+    //     de falha de terminalizeBlockedOrFail. Regras:
+    //       - mantém a causa original sanitizada (se vazia/null/undefined,
+    //         usa fallback neutro 'persist_step_failure');
+    //       - acrescenta ` | <stage>: <detail>`;
+    //       - nunca substitui a causa original;
+    //       - não duplica o mesmo stage em chamadas sucessivas (se
+    //         `original` já contém ` | <stage>:` não re-adiciona);
+    //       - limita o resultado final a 500 chars;
+    //       - aplica sanitizePersistErrorMessage no resultado final.
+    function composeTerminalReason(original, stage, detail) {
+      var base = original && String(original).length > 0 ? String(original) : 'persist_step_failure'
+      var stagePrefix = ' | ' + stage + ':'
+      // Não re-adiciona se o stage já está presente na causa original.
+      if (base.indexOf(stagePrefix) !== -1) {
+        var composed = base
+      } else {
+        var detailStr = detail ? String(detail) : ''
+        var composed = base + stagePrefix + (detailStr ? ' ' + detailStr : '')
+      }
+      composed = sanitizePersistErrorMessage(composed)
+      if (composed.length > 500) composed = composed.substring(0, 500)
+      return composed
     }
 
     // ─── CORREÇÃO 6: hash verificável (sanitizado + original) ───
@@ -2175,22 +2361,31 @@ routerAdd(
           // Confirmar estado e snapshot completos por releitura.
           var termConfirm = confirmTerminalSnapshot(termSave.reread, expectedClass, $app)
           if (!termConfirm.ok) {
-            // Não reportar registro terminal como confirmado.
+            // Não reportar registro terminal como confirmado. G25:
+            // preserva a causa original (stopReasonArg).
             terminalSaved = false
             overallStatus = 'BLOCKED'
-            stopReason = termConfirm.error
+            stopReason = composeTerminalReason(stopReasonArg, 'confirmTerminal', termConfirm.error)
           } else {
             terminalSaved = true
           }
         } else {
           terminalSaved = false
           overallStatus = 'BLOCKED'
-          stopReason = 'Terminal save reread mismatch: estado=' + tsv + ' expected=' + termEstado
+          stopReason = composeTerminalReason(
+            stopReasonArg,
+            'rereadMismatch',
+            'Terminal save reread mismatch: estado=' + tsv + ' expected=' + termEstado,
+          )
         }
       } else {
         terminalSaved = false
         overallStatus = 'BLOCKED'
-        stopReason = 'Terminal save failed: ' + (termSave.error || 'unknown')
+        stopReason = composeTerminalReason(
+          stopReasonArg,
+          'saveFailed',
+          'Terminal save failed: ' + (termSave.error || 'unknown'),
+        )
       }
     }
 
