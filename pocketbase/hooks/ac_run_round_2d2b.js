@@ -19,9 +19,8 @@
 //      (BEGIN...END → [REDACTED]); valores com espaços substituídos
 //      integralmente; e-mails e telefones preservados. Limite de 300
 //      caracteres após toda sanitização.
-//   3. Testes executáveis em
-//      pocketbase/hooks/ac_run_round_2d2b.test.js (cópia exata da
-//      função de produção, sem require/import).
+//   3. Testes executáveis em scripts/test-sanitize-2d2b.cjs (extrai a
+//      função real do hook de produção via node:vm, sem cópia).
 //   4. Versão 0.0.166 / v0.0.166 coordenada em package.json, health e
 //      runner (PORTA2D2B_EXPECTED_VERSION e
 //      validatorCanonical.expectedVersion).
@@ -1845,11 +1844,64 @@ routerAdd(
     //       f) e-mails e telefones (regex, preservados).
     //     Limite de 300 caracteres após toda sanitização. Não expõe
     //     stack bruta, payload, corpo original, credencial ou URL secreta.
-    // ─── G26: chave normalizada (case-insensitive, - e _ equivalentes).
+    // ─── G27: chave normalizada (case-insensitive, - e _ equivalentes).
     //     `headers` é tratado à parte (passo d) e não entra no padrão de
     //     pares chave-valor para evitar reprocessamento do [REDACTED].
     var SENSITIVE_KEY_PATTERN =
       'password|passwd|token|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|privatekey|secret|signature|authorization|x[_-]?api[_-]?key|cookie'
+    // ─── G27: helper determinístico de varredura/balanceamento.
+    //     Encontra o fim de um objeto JSON/valor delimitado por chaves a
+    //     partir da posição `start` (que aponta para a `{` de abertura),
+    //     respeitando chaves aninhadas, strings com aspas simples/duplas e
+    //     escapes `\`. Retorna o índice do `}` que fecha o objeto, ou -1 se
+    //     desbalanceado (fail-closed: chamador deve tratar removendo o
+    //     restante). NÃO usa regex `[^}]*` — varre caractere a caractere.
+    function $findBalancedBraceEnd(str, start) {
+      var i = start
+      var n = str.length
+      // `start` deve apontar para '{'.
+      if (i >= n || str.charAt(i) !== '{') return -1
+      var depth = 0
+      var inStr = false
+      var strCh = ''
+      for (; i < n; i++) {
+        var ch = str.charAt(i)
+        if (inStr) {
+          if (ch === '\\') {
+            i++
+            continue
+          }
+          if (ch === strCh) inStr = false
+          continue
+        }
+        if (ch === '"' || ch === "'") {
+          inStr = true
+          strCh = ch
+          continue
+        }
+        if (ch === '{') depth++
+        else if (ch === '}') {
+          depth--
+          if (depth === 0) return i
+        }
+      }
+      return -1
+    }
+    // ─── G27: helper determinístico para blocos PEM.
+    //     Encontra o fim de um bloco PEM `-----END ... PRIVATE KEY-----`
+    //     após `start` (que aponta para o início do `-----BEGIN`). Retorna
+    //     o índice logo após o `-----` final do END, ou -1 se não houver
+    //     END (fail-closed: chamador deve remover todo o restante). Varre
+    //     por substring; NÃO usa regex com captura greedy de `[\s\S]*?`.
+    function $findPemBlockEnd(str, start) {
+      var beginIdx = str.indexOf('-----BEGIN', start)
+      if (beginIdx === -1) return -1
+      var endIdx = str.indexOf('-----END', beginIdx)
+      if (endIdx === -1) return -1
+      var dashEnd = str.indexOf('-----', endIdx + 8)
+      if (dashEnd === -1) return -1
+      return dashEnd + 5
+    }
     function sanitizePersistErrorMessage(s) {
       var t = String(s == null ? '' : s)
       // (a) URLs sensíveis — inclui query strings, user:password embutidos,
@@ -1858,23 +1910,67 @@ routerAdd(
       t = t.replace(/https?:\/\/[^\s"'<>]+/gi, '[REDACTED_URL]')
       // (b) Authorization: Bearer/Basic <qualquer coisa>
       //     → Authorization: Bearer/Basic [REDACTED] (case-insensitive).
-      t = t.replace(/(Authorization\s*:\s*Bearer\s+)[^\s"',;}\]]+/gi, '$1[REDACTED]')
-      t = t.replace(/(Authorization\s*:\s*Basic\s+)[^\s"',;}\]]+/gi, '$1[REDACTED]')
+      //     G27: remove o valor COMPLETO até um delimitador estrutural
+      //     seguro (aspas, vírgula, ponto-e-vírgula, fecha-chave,
+      //     fecha-colchete, fim de linha ou fim da string) — não apenas
+      //     até o primeiro espaço, cobrindo valores com espaços.
+      t = t.replace(/(Authorization\s*:\s*Bearer\s+)/gi, function (m, p1) {
+        return p1 + '[REDACTED]'
+      })
+      t = t.replace(/(Authorization\s*:\s*Basic\s+)/gi, function (m, p1) {
+        return p1 + '[REDACTED]'
+      })
+      //     Após redactar Bearer/Basic, o `[REDACTED]` ocupa o lugar do
+      //     valor. A regex acima consumiu o prefixo; agora consome o
+      //     restante do valor (qualquer coisa até delimitador estrutural).
+      //     Reaplica para garantir que sufixos com espaços sumam.
+      t = t.replace(/(Authorization\s*:\s*Bearer\s+\[REDACTED\])\S*/gi, '$1')
+      t = t.replace(/(Authorization\s*:\s*Basic\s+\[REDACTED\])\S*/gi, '$1')
+      //     Se o valor Bearer/Basic tinha espaços, o trecho após o
+      //     primeiro espaço ainda permanece; remova até delimitador
+      //     estrutural (vírgula/fecha-chave/fecha-colchete/fim-de-linha).
+      t = t.replace(/(Authorization\s*:\s*Bearer\s+\[REDACTED\])[^,;\]}]*/gi, '$1')
+      t = t.replace(/(Authorization\s*:\s*Basic\s+\[REDACTED\])[^,;\]}]*/gi, '$1')
       // (b2) Preserva `Authorization: Bearer/Basic [REDACTED]` para que o
       //      passo (e) (chave: valor) não re-redatada o conteúdo. Marca o
       //      trecho já-sanitizado com placeholders ASCII seguros.
       t = t.replace(/Authorization\s*:\s*Bearer\s+\[REDACTED\]/gi, '\x01AUTH_BEARER_OK\x01')
       t = t.replace(/Authorization\s*:\s*Basic\s+\[REDACTED\]/gi, '\x01AUTH_BASIC_OK\x01')
       // (c) private_key em formato PEM — BEGIN...END (inclusive RSA/EC).
-      t = t.replace(
-        /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
-        '[REDACTED]',
-      )
+      //     G27: usa helper determinístico de varredura. Se houver BEGIN
+      //     sem END, fail-closed: remove todo o restante da mensagem a
+      //     partir do BEGIN. Itera para cobrir múltiplos blocos.
+      var pemIdx = t.indexOf('-----BEGIN')
+      while (pemIdx !== -1) {
+        var endPos = $findPemBlockEnd(t, pemIdx)
+        if (endPos === -1) {
+          // Fail-closed: BEGIN sem END — remove todo o restante.
+          t = t.substring(0, pemIdx) + '[REDACTED]'
+          break
+        }
+        t = t.substring(0, pemIdx) + '[REDACTED]' + t.substring(endPos)
+        pemIdx = t.indexOf('-----BEGIN', pemIdx + '[REDACTED]'.length)
+      }
       // (d) headers como objeto JSON — substitui o objeto INTEIRO por
-      //     [REDACTED]. Cobre headers:{...}, "headers":{...},
-      //     "headers": {...}, headers={...}. Preserva aspas e separador
-      //     originais da chave.
-      t = t.replace(/("?headers"?)\s*([:=]\s*)\{[^}]*\}/gi, '$1$2[REDACTED]')
+      //     [REDACTED]. G27: usa helper de balanceamento de chaves
+      //     ($findBalancedBraceEnd) em vez de regex `[^}]*`, cobrindo
+      //     objetos aninhados e strings escapadas. Cobre headers:{...},
+      //     "headers":{...}, "headers": {...}, headers={...}.
+      var hdrRe = /("?headers"?)\s*([:=]\s*)\{/gi
+      var hdrMatch
+      while ((hdrMatch = hdrRe.exec(t)) !== null) {
+        var braceStart = hdrMatch.index + hdrMatch[0].length - 1
+        var braceEnd = $findBalancedBraceEnd(t, braceStart)
+        if (braceEnd === -1) {
+          // Fail-closed: objeto desbalanceado — remove o restante.
+          t = t.substring(0, hdrMatch.index) + hdrMatch[1] + hdrMatch[2] + '[REDACTED]'
+          hdrRe.lastIndex = t.length
+          break
+        }
+        var replacement = hdrMatch[1] + hdrMatch[2] + '[REDACTED]'
+        t = t.substring(0, hdrMatch.index) + replacement + t.substring(braceEnd + 1)
+        hdrRe.lastIndex = hdrMatch.index + replacement.length
+      }
       // (e) Pares chave-valor com valor COMPLETO substituído.
       //     1) "chave":"valor"  e  "chave": "valor"
       t = t.replace(
@@ -1910,6 +2006,9 @@ routerAdd(
       t = t.replace(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/gi, '[REDACTED]')
       // (g) telefones (+ opcional, 8-15 digitos com separadores)
       t = t.replace(/\+?\d[\d\s().\-]{6,}\d/g, '[REDACTED]')
+      // (h) Limpeza de sufixo residual: nenhum `[REDACTED]` pode deixar
+      //     colchete/parêntese residual. Remove duplicações óbvias.
+      t = t.replace(/\[REDACTED\]\]/g, '[REDACTED]')
       if (t.length > 300) t = t.substring(0, 300)
       return t
     }
@@ -1922,8 +2021,8 @@ routerAdd(
      * os casos exigidos pelo segmento G26 e permitir verificação
      * humana/lint das saídas esperadas. Cada caso afirma que zero valor
      * sensível original permanece após sanitizePersistErrorMessage. Os
-     * testes executáveis estão em ac_run_round_2d2b.test.js (cópia exata
-     * da função de produção, sem require/import).
+     * testes executáveis estão em scripts/test-sanitize-2d2b.cjs (extrai
+     * a função real do hook de produção via node:vm, sem cópia).
      *
      * Entradas → Saídas esperadas (literais):
      *
@@ -1969,35 +2068,10 @@ routerAdd(
      *     → 'access_token: [REDACTED]'
      *       (não contém 'xyz.789')
      *
-     * Função de auto-teste (referência Only — não invocada em runtime):
-     *   function __g25_selfTest() {
-     *     var cases = [
-     *       ['password=segredo123', 'segredo123'],
-     *       ['token: abc.def.ghi', 'abc.def.ghi'],
-     *       ['Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc.def', 'eyJhbGciOiJIUzI1NiJ9.abc.def'],
-     *       ['{"private_key":"CHAVE_PRIVADA_SECRETA"}', 'CHAVE_PRIVADA_SECRETA'],
-     *       ['client-secret=valor-super-secreto', 'valor-super-secreto'],
-     *       ['https://usuario:senha@host.interno/caminho?token=abc123', 'usuario'],
-     *       ['email: joao@example.com enviado', 'joao@example.com'],
-     *       ['tel: +55 11 99999-9999', '+55 11 99999-9999'],
-     *       ['api_key=sk-abc123-def456', 'sk-abc123-def456'],
-     *       ['access_token: xyz.789', 'xyz.789'],
-     *     ]
-     *     var out = []
-     *     for (var i = 0; i < cases.length; i++) {
-     *       var sanitized = sanitizePersistErrorMessage(cases[i][0])
-     *       var leaked = sanitized.indexOf(cases[i][1]) !== -1
-     *       out.push({
-     *         n: i + 1,
-     *         input: cases[i][0],
-     *         output: sanitized,
-     *         sensitiveFragment: cases[i][1],
-     *         leaked: leaked,
-     *         pass: !leaked,
-     *       })
-     *     }
-     *     return out
-     *   }
+     * (Os casos executáveis vivem em scripts/test-sanitize-2d2b.cjs, que
+     *  extrai a função real deste hook via node:vm. Nenhuma função de
+     *  auto-teste é declarada aqui — zero código de teste no hook de
+     *  produção.)
      * Resultado esperado: todos pass:true, zero leaked:true.
      * ─────────────────────────────────────────────────────────────── */
 
