@@ -1,6 +1,6 @@
 // ════════════════════════════════════════════════════════════════════
 // Hook TEMPORÁRIO de recuperação one-shot da Porta 2D.2B
-// Versão: v0.0.174-recovery (artefato inerte — NÃO publicado como hook)
+// Versão: v0.0.175-recovery (artefato inerte — NÃO publicado como hook)
 // ════════════════════════════════════════════════════════════════════
 //
 // ESTE ARQUIVO É UM ARTEFATO INERTE PARA INSPEÇÃO.
@@ -191,7 +191,9 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
           'RECOVERY_MANUAL: execução bloqueada em A1 (v0.0.163). Fallback one-shot autorizado por superadmin. 0 etapas persistidas — chamadas originais não reconstruíveis.',
         classification: 'BLOCKED',
         classification_justification:
-          'Recuperação manual honesta. snapshot_source=recovery_manual. Execução original running com 0 etapas, decisao vazia e lock ativo. Motivo raiz: falha de persistência na etapa A1. validateCore não foi executado — classificação atribuída diretamente.',
+          'Recuperação manual honesta. snapshot_source=recovery_manual. Execução original running com 0 etapas, versao_commit=' +
+          versaoCommit +
+          '. validateCore não foi executado — classificação atribuída diretamente.',
         expected_version: versaoCommit,
         snapshot_source: 'recovery_manual',
         snapshot_version: versaoCommit,
@@ -234,7 +236,7 @@ routerAdd('POST', '/backend/v1/integracao/ac/recover-2d2b', function (e) {
         },
         expected_contracts: { status: 'not_evaluated', source: 'recovery_manual' },
         hash_declaration: { status: 'not_available', source: 'recovery_manual' },
-        recovery_tool_version: 'v0.0.174-recovery',
+        recovery_tool_version: 'v0.0.175-recovery',
       }
       exec.set('decisao', JSON.stringify(snapshot))
 
