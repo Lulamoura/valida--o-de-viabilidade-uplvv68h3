@@ -55,6 +55,9 @@ var validarInvariantes = sandbox.__testExports.validarInvariantes
 var validarRBAC = sandbox.__testExports.validarRBAC
 var hojeRecife = sandbox.__testExports.hojeRecife
 var mergePayload = sandbox.__testExports.mergePayload
+var bindingVigente = sandbox.__testExports.bindingVigente
+var validarUsuario = sandbox.__testExports.validarUsuario
+var resolverFallbackSuperadmin = sandbox.__testExports.resolverFallbackSuperadmin
 
 function expectFn(name, fn) {
   if (typeof fn !== 'function') {
@@ -67,6 +70,9 @@ expectFn('validarInvariantes', validarInvariantes)
 expectFn('validarRBAC', validarRBAC)
 expectFn('hojeRecife', hojeRecife)
 expectFn('mergePayload', mergePayload)
+expectFn('bindingVigente', bindingVigente)
+expectFn('validarUsuario', validarUsuario)
+expectFn('resolverFallbackSuperadmin', resolverFallbackSuperadmin)
 
 // ─── Runner ───
 var passed = 0
@@ -419,6 +425,105 @@ assert(
     m5.observacao === 'obs antiga' &&
     m5.data_inicio === '2026-03-01',
   'got: ' + JSON.stringify(m5),
+)
+
+// ═══════ F) bindingVigente — 4 casos ═══════
+
+assert(
+  'F1 bindingVigente fim==hojeCivil → true',
+  bindingVigente(null, '2026-08-11', '2026-08-11') === true,
+  'got: ' + bindingVigente(null, '2026-08-11', '2026-08-11'),
+)
+
+assert(
+  'F2 bindingVigente fim<hojeCivil → false',
+  bindingVigente(null, '2026-08-10', '2026-08-11') === false,
+  'got: ' + bindingVigente(null, '2026-08-10', '2026-08-11'),
+)
+
+assert(
+  'F3 bindingVigente inicio==hojeCivil → true',
+  bindingVigente('2026-08-11', null, '2026-08-11') === true,
+  'got: ' + bindingVigente('2026-08-11', null, '2026-08-11'),
+)
+
+assert(
+  'F4 bindingVigente ambos vazios → true',
+  bindingVigente(null, null, '2026-08-11') === true,
+  'got: ' + bindingVigente(null, null, '2026-08-11'),
+)
+
+// ═══════ G) validarUsuario — 2 casos ═══════
+
+var g1 = validarUsuario({ ativo_comercial: true })
+assert(
+  'G1 validarUsuario ativo_comercial=true → ok',
+  g1.aprovado === true && g1.motivo === 'ok',
+  'got: ' + JSON.stringify(g1),
+)
+
+var g2 = validarUsuario({ ativo_comercial: false })
+assert(
+  'G2 validarUsuario ativo_comercial=false → comercial_inativo',
+  g2.aprovado === false && g2.motivo === 'comercial_inativo',
+  'got: ' + JSON.stringify(g2),
+)
+
+// ═══════ H) resolverFallbackSuperadmin — 4 casos ═══════
+
+assert(
+  'H1 resolverFallback ativo+SA+vigente → true',
+  resolverFallbackSuperadmin(
+    [{ ativo: true, perfilSlug: 'superadministrador', inicio_vigencia: null, fim_vigencia: null }],
+    '2026-08-11',
+  ) === true,
+  'esperado true',
+)
+
+assert(
+  'H2 resolverFallback ativo+SA+expirado → false',
+  resolverFallbackSuperadmin(
+    [
+      {
+        ativo: true,
+        perfilSlug: 'superadministrador',
+        inicio_vigencia: null,
+        fim_vigencia: '2026-08-10',
+      },
+    ],
+    '2026-08-11',
+  ) === false,
+  'esperado false',
+)
+
+assert(
+  'H3 resolverFallback inativo+SA → false',
+  resolverFallbackSuperadmin(
+    [{ ativo: false, perfilSlug: 'superadministrador', inicio_vigencia: null, fim_vigencia: null }],
+    '2026-08-11',
+  ) === false,
+  'esperado false',
+)
+
+assert(
+  'H4 resolverFallback ativo+não-SA → false',
+  resolverFallbackSuperadmin(
+    [{ ativo: true, perfilSlug: 'gestor', inicio_vigencia: null, fim_vigencia: null }],
+    '2026-08-11',
+  ) === false,
+  'esperado false',
+)
+
+// ═══════ I) RBAC revogado — bindings pré aprovam, pós rejeitam ═══════
+
+var bindingsPreI = [{ equipe_id: 'eq1', perfilSlug: 'gestor', ativo: true, vigente: true }]
+var bindingsPosI = [{ equipe_id: 'eq1', perfilSlug: 'gestor', ativo: true, vigente: false }]
+var i1pre = validarRBAC('gestor', bindingsPreI, 'eq1')
+var i1pos = validarRBAC('gestor', bindingsPosI, 'eq1')
+assert(
+  'I1 RBAC revogado — pré vigente aprovado, pós expirado rejeitado',
+  i1pre.aprovado === true && i1pos.aprovado === false,
+  'pre=' + JSON.stringify(i1pre) + ' pos=' + JSON.stringify(i1pos),
 )
 
 // ═══════ Resumo ═══════

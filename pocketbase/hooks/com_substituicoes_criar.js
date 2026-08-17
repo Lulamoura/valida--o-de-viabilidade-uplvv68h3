@@ -136,6 +136,46 @@ routerAdd(
       return { aprovado: false, motivo: 'sem_correspondencia' }
     }
 
+    // hojeRecife — guarda temporal determinística.
+    // ⚠️ FUTURO: se o Brasil reintroduzir DST ou alterar o fuso de Recife,
+    //    esta constante deverá ser revisada.
+    function hojeRecife(nowMs) {
+      var ms = typeof nowMs === 'number' ? nowMs : Date.now()
+      var recifeMs = ms - 3 * 60 * 60 * 1000
+      return new Date(recifeMs).toISOString().slice(0, 10)
+    }
+
+    // bindingVigente — função pura. Comparação inclusiva:
+    //   inicio_vigencia vazio ou <= hojeCivil
+    //   fim_vigencia    vazio ou >= hojeCivil
+    function bindingVigente(inicio, fim, hojeCivil) {
+      if (inicio && inicio > hojeCivil) return false
+      if (fim && fim < hojeCivil) return false
+      return true
+    }
+
+    // resolverFallbackSuperadmin — função pura. Considera somente bindings
+    // ativos, com perfilSlug 'superadministrador' e vigentes.
+    function resolverFallbackSuperadmin(bindings, hojeCivil) {
+      if (!bindings || bindings.length === 0) return false
+      for (var i = 0; i < bindings.length; i++) {
+        var b = bindings[i]
+        if (b.ativo !== true) continue
+        if (b.perfilSlug !== 'superadministrador') continue
+        if (!bindingVigente(b.inicio_vigencia, b.fim_vigencia, hojeCivil)) continue
+        return true
+      }
+      return false
+    }
+
+    // validarUsuario — função pura. Perfil direto superadministrador TAMBÉM
+    // exige ativo_comercial = true.
+    function validarUsuario(usuario) {
+      if (!usuario) return { aprovado: false, motivo: 'usuario_inexistente' }
+      if (usuario.ativo_comercial !== true) return { aprovado: false, motivo: 'comercial_inativo' }
+      return { aprovado: true, motivo: 'ok' }
+    }
+
     // ═══════ FASE 1 — PRÉ-VALIDAÇÃO (fora da transação) ═══════
 
     // 1. Autenticar, extrair autor_id
@@ -169,7 +209,7 @@ routerAdd(
       }
     } catch (_) {}
     if (!atorPerfilSlug) {
-      // fallback por binding em com_usuarios_equipes
+      // fallback superadmin por binding (com vigência)
       try {
         var saPerfil = $app.findFirstRecordByData('com_perfis', 'slug', 'superadministrador')
         if (saPerfil) {
@@ -177,10 +217,24 @@ routerAdd(
             'com_usuarios_equipes',
             "usuario_id = '" + atorId + "' && perfil_id = '" + saPerfil.id + "' && ativo = true",
             '',
-            1,
+            100,
             0,
           )
-          if (saBindings && saBindings.length > 0) atorPerfilSlug = 'superadministrador'
+          if (saBindings && saBindings.length > 0) {
+            var bindingsFb = []
+            for (var sbi = 0; sbi < saBindings.length; sbi++) {
+              var sbRec = saBindings[sbi]
+              bindingsFb.push({
+                ativo: sbRec.getBool('ativo'),
+                perfilSlug: 'superadministrador',
+                inicio_vigencia: sbRec.getString('inicio_vigencia'),
+                fim_vigencia: sbRec.getString('fim_vigencia'),
+              })
+            }
+            if (resolverFallbackSuperadmin(bindingsFb, hojeRecife())) {
+              atorPerfilSlug = 'superadministrador'
+            }
+          }
         }
       } catch (_) {}
     }
@@ -199,7 +253,7 @@ routerAdd(
     var bindingsArr = []
     if (atorPerfilSlug !== 'superadministrador' && titularEquipeId) {
       try {
-        var hoje = new Date().toISOString().slice(0, 10)
+        var hoje = hojeRecife()
         var foundBindings = $app.findRecordsByFilter(
           'com_usuarios_equipes',
           "usuario_id = '" + atorId + "' && ativo = true",
@@ -216,14 +270,11 @@ routerAdd(
           } catch (_) {}
           var inicioVig = bRec.getString('inicio_vigencia')
           var fimVig = bRec.getString('fim_vigencia')
-          var vigente = true
-          if (inicioVig && inicioVig > hoje) vigente = false
-          if (fimVig && fimVig < hoje) vigente = false
           bindingsArr.push({
             equipe_id: bRec.getString('equipe_id'),
             perfilSlug: bPerfilSlug,
             ativo: bRec.getBool('ativo'),
-            vigente: vigente,
+            vigente: bindingVigente(inicioVig, fimVig, hoje),
           })
         }
       } catch (_) {}
@@ -474,6 +525,107 @@ routerAdd(
           throw saveErr
         }
 
+        // ── REVALIDAÇÃO RBAC INTRA-TRANSAÇÃO ──
+        // RBAC-1. Reler usuário autenticado via txApp
+        var usuarioAtualTx = null
+        try {
+          usuarioAtualTx = txApp.findRecordById('users', atorId)
+        } catch (_) {}
+        if (!usuarioAtualTx) throw new Error('FORBIDDEN')
+
+        // RBAC-2. Validar ativo_comercial
+        var valUsuario = validarUsuario({
+          ativo_comercial: usuarioAtualTx.getBool('ativo_comercial'),
+        })
+        if (!valUsuario.aprovado) throw new Error('FORBIDDEN')
+
+        // RBAC-3. Perfil direto (via txApp)
+        var atorPerfilSlugTx = ''
+        try {
+          var perfilIdAtualTx = usuarioAtualTx.getString('perfil_id')
+          if (perfilIdAtualTx) {
+            var perfilRecTx = txApp.findRecordById('com_perfis', perfilIdAtualTx)
+            atorPerfilSlugTx = perfilRecTx.getString('slug')
+          }
+        } catch (_) {}
+
+        // RBAC-4. Fallback superadmin por binding (via txApp, COM vigência)
+        var hojeTx = hojeRecife()
+        if (!atorPerfilSlugTx) {
+          try {
+            var saBindingsTx = txApp.findRecordsByFilter(
+              'com_usuarios_equipes',
+              "usuario_id = '" + atorId + "' && ativo = true",
+              '',
+              100,
+              0,
+            )
+            if (saBindingsTx && saBindingsTx.length > 0) {
+              var bindingsFbTx = []
+              for (var sbi = 0; sbi < saBindingsTx.length; sbi++) {
+                var sbRec = saBindingsTx[sbi]
+                var sbPerfilSlug = ''
+                try {
+                  var sbPerfilRec = txApp.findRecordById('com_perfis', sbRec.getString('perfil_id'))
+                  sbPerfilSlug = sbPerfilRec.getString('slug')
+                } catch (_) {}
+                bindingsFbTx.push({
+                  ativo: sbRec.getBool('ativo'),
+                  perfilSlug: sbPerfilSlug,
+                  inicio_vigencia: sbRec.getString('inicio_vigencia'),
+                  fim_vigencia: sbRec.getString('fim_vigencia'),
+                })
+              }
+              if (resolverFallbackSuperadmin(bindingsFbTx, hojeTx)) {
+                atorPerfilSlugTx = 'superadministrador'
+              }
+            }
+          } catch (_) {}
+        }
+        if (!atorPerfilSlugTx) throw new Error('FORBIDDEN')
+
+        // RBAC-5. Se NÃO é superadmin, validar bindings de gestor
+        if (atorPerfilSlugTx !== 'superadministrador') {
+          var titularEquipeIdTx = ''
+          if (titular_id) {
+            try {
+              var titularUserTx = txApp.findRecordById('users', titular_id)
+              titularEquipeIdTx = titularUserTx.getString('equipe_id')
+            } catch (_) {}
+          }
+          if (!titularEquipeIdTx) throw new Error('FORBIDDEN')
+
+          var bindingsArrTx = []
+          try {
+            var foundTx = txApp.findRecordsByFilter(
+              'com_usuarios_equipes',
+              "usuario_id = '" + atorId + "' && ativo = true",
+              '',
+              100,
+              0,
+            )
+            for (var bi = 0; bi < foundTx.length; bi++) {
+              var bRecTx = foundTx[bi]
+              var bPerfilSlugTx = ''
+              try {
+                var bPerfilRecTx = txApp.findRecordById('com_perfis', bRecTx.getString('perfil_id'))
+                bPerfilSlugTx = bPerfilRecTx.getString('slug')
+              } catch (_) {}
+              var inicioVigTx = bRecTx.getString('inicio_vigencia')
+              var fimVigTx = bRecTx.getString('fim_vigencia')
+              bindingsArrTx.push({
+                equipe_id: bRecTx.getString('equipe_id'),
+                perfilSlug: bPerfilSlugTx,
+                ativo: bRecTx.getBool('ativo'),
+                vigente: bindingVigente(inicioVigTx, fimVigTx, hojeTx),
+              })
+            }
+          } catch (_) {}
+
+          var rbacTx = validarRBAC(atorPerfilSlugTx, bindingsArrTx, titularEquipeIdTx)
+          if (!rbacTx.aprovado) throw new Error('FORBIDDEN')
+        }
+
         // 7. Criar registro em com_substituicoes
         var subCol = txApp.findCollectionByNameOrId('com_substituicoes')
         var subRec = new Record(subCol)
@@ -570,6 +722,12 @@ routerAdd(
           message: 'Snapshot excede 2048 bytes',
         })
       }
+      if (txError.indexOf('FORBIDDEN') !== -1) {
+        return e.json(403, {
+          error: 'FORBIDDEN',
+          message: 'Sem permissao para criar substituicao/ausencia',
+        })
+      }
       // Tratamento de creation_idempotency_key duplicada (com command_idempotency_key diferente):
       // O txApp.save(com_substituicoes) lança erro de UNIQUE constraint; a transação aborta.
       // FORA da transação: capturar erro, ler registro existente por creation_idempotency_key.
@@ -613,7 +771,7 @@ routerAdd(
   $apis.bodyLimit(262144),
 )
 
-/* ──── BLOCO DE TESTES ESTÁTICOS — canonicalize / validarInvariantes / validarRBAC ──── */
+/* ──── BLOCO DE TESTES ESTÁTICOS ──── */
 var __testExports = (function () {
   function canonicalize(obj) {
     if (obj === null || obj === undefined) return 'null'
@@ -710,10 +868,47 @@ var __testExports = (function () {
     return { aprovado: false, motivo: 'sem_correspondencia' }
   }
 
+  // hojeRecife — offset fixo UTC-03.
+  // ⚠️ FUTURO: se o Brasil reintroduzir DST ou alterar o fuso de Recife,
+  //    esta constante deverá ser revisada.
+  function hojeRecife(nowMs) {
+    var ms = typeof nowMs === 'number' ? nowMs : Date.now()
+    var recifeMs = ms - 3 * 60 * 60 * 1000
+    return new Date(recifeMs).toISOString().slice(0, 10)
+  }
+
+  function bindingVigente(inicio, fim, hojeCivil) {
+    if (inicio && inicio > hojeCivil) return false
+    if (fim && fim < hojeCivil) return false
+    return true
+  }
+
+  function validarUsuario(usuario) {
+    if (!usuario) return { aprovado: false, motivo: 'usuario_inexistente' }
+    if (usuario.ativo_comercial !== true) return { aprovado: false, motivo: 'comercial_inativo' }
+    return { aprovado: true, motivo: 'ok' }
+  }
+
+  function resolverFallbackSuperadmin(bindings, hojeCivil) {
+    if (!bindings || bindings.length === 0) return false
+    for (var i = 0; i < bindings.length; i++) {
+      var b = bindings[i]
+      if (b.ativo !== true) continue
+      if (b.perfilSlug !== 'superadministrador') continue
+      if (!bindingVigente(b.inicio_vigencia, b.fim_vigencia, hojeCivil)) continue
+      return true
+    }
+    return false
+  }
+
   return {
     canonicalize: canonicalize,
     validarInvariantes: validarInvariantes,
     validarRBAC: validarRBAC,
+    hojeRecife: hojeRecife,
+    bindingVigente: bindingVigente,
+    validarUsuario: validarUsuario,
+    resolverFallbackSuperadmin: resolverFallbackSuperadmin,
   }
 })()
 /* ──── FIM DO BLOCO DE TESTES ESTÁTICOS ──── */

@@ -5,10 +5,11 @@
 // Lê pocketbase/hooks/com_substituicoes_criar.js, extrai o bloco delimitado
 // EXCLUSIVAMENTE por dois marcadores textuais (dois indexOf) e avalia em
 // sandbox local (node:vm). NENHUMA conexão com PocketBase, NENHUMA chamada
-// HTTP. Extrai __testExports.canonicalize, .validarInvariantes, .validarRBAC.
+// HTTP. Extrai __testExports.canonicalize, .validarInvariantes, .validarRBAC,
+// .hojeRecife, .bindingVigente, .validarUsuario, .resolverFallbackSuperadmin.
 //
 // Marcadores textuais (indexOf):
-//   início — "/* ──── BLOCO DE TESTES ESTÁTICOS — canonicalize / validarInvariantes / validarRBAC ──── */"
+//   início — "/* ──── BLOCO DE TESTES ESTÁTICOS ──── */"
 //   fim    — "/* ──── FIM DO BLOCO DE TESTES ESTÁTICOS ──── */"
 //
 // Execute: node scripts/test-substituicoes-criar.cjs
@@ -23,8 +24,7 @@ var hookPath = path.join(__dirname, '..', 'pocketbase', 'hooks', 'com_substituic
 var src = fs.readFileSync(hookPath, 'utf8')
 
 // ─── Extrai o bloco EXCLUSIVAMENTE por dois marcadores textuais ───
-var startMarker =
-  '/* ──── BLOCO DE TESTES ESTÁTICOS — canonicalize / validarInvariantes / validarRBAC ──── */'
+var startMarker = '/* ──── BLOCO DE TESTES ESTÁTICOS ──── */'
 var startIdx = src.indexOf(startMarker)
 if (startIdx === -1) {
   console.error('FAIL: marcador de início do bloco de testes não encontrado no hook')
@@ -54,19 +54,24 @@ vm.runInContext(blockSrc, sandbox, { filename: 'extracted-substituicoes-block.js
 var canonicalize = sandbox.__testExports.canonicalize
 var validarInvariantes = sandbox.__testExports.validarInvariantes
 var validarRBAC = sandbox.__testExports.validarRBAC
+var hojeRecife = sandbox.__testExports.hojeRecife
+var bindingVigente = sandbox.__testExports.bindingVigente
+var validarUsuario = sandbox.__testExports.validarUsuario
+var resolverFallbackSuperadmin = sandbox.__testExports.resolverFallbackSuperadmin
 
-if (typeof canonicalize !== 'function') {
-  console.error('FAIL: __testExports.canonicalize não é função após eval do bloco')
-  process.exit(1)
+function expectFn(name, fn) {
+  if (typeof fn !== 'function') {
+    console.error('FAIL: __testExports.' + name + ' não é função após eval do bloco')
+    process.exit(1)
+  }
 }
-if (typeof validarInvariantes !== 'function') {
-  console.error('FAIL: __testExports.validarInvariantes não é função após eval do bloco')
-  process.exit(1)
-}
-if (typeof validarRBAC !== 'function') {
-  console.error('FAIL: __testExports.validarRBAC não é função após eval do bloco')
-  process.exit(1)
-}
+expectFn('canonicalize', canonicalize)
+expectFn('validarInvariantes', validarInvariantes)
+expectFn('validarRBAC', validarRBAC)
+expectFn('hojeRecife', hojeRecife)
+expectFn('bindingVigente', bindingVigente)
+expectFn('validarUsuario', validarUsuario)
+expectFn('resolverFallbackSuperadmin', resolverFallbackSuperadmin)
 
 // ─── Runner ───
 var passed = 0
@@ -330,6 +335,131 @@ var r5 = validarRBAC(
   null,
 )
 assert('C5 titular sem equipe (gestor) → rejeitado', r5.aprovado === false, 'motivo: ' + r5.motivo)
+
+// ═══════ D) hojeRecife — 4 casos ═══════
+
+assert(
+  'D1 hojeRecife meio do dia Recife (15:00 UTC → 2026-08-12)',
+  hojeRecife(Date.UTC(2026, 7, 12, 15, 0, 0)) === '2026-08-12',
+  'got: ' + hojeRecife(Date.UTC(2026, 7, 12, 15, 0, 0)),
+)
+
+assert(
+  'D2 hojeRecife virada UTC positiva (02:30 UTC → 2026-08-11)',
+  hojeRecife(Date.UTC(2026, 7, 12, 2, 30, 0)) === '2026-08-11',
+  'got: ' + hojeRecife(Date.UTC(2026, 7, 12, 2, 30, 0)),
+)
+
+assert(
+  'D3 hojeRecife exatamente 03:00 UTC → 2026-08-12 (00:00 Recife)',
+  hojeRecife(Date.UTC(2026, 7, 12, 3, 0, 0)) === '2026-08-12',
+  'got: ' + hojeRecife(Date.UTC(2026, 7, 12, 3, 0, 0)),
+)
+
+assert(
+  'D4 hojeRecife exatamente 02:59:59 UTC → 2026-08-11',
+  hojeRecife(Date.UTC(2026, 7, 12, 2, 59, 59)) === '2026-08-11',
+  'got: ' + hojeRecife(Date.UTC(2026, 7, 12, 2, 59, 59)),
+)
+
+// ═══════ E) bindingVigente — 4 casos ═══════
+
+assert(
+  'E1 bindingVigente fim==hojeCivil → true',
+  bindingVigente(null, '2026-08-11', '2026-08-11') === true,
+  'got: ' + bindingVigente(null, '2026-08-11', '2026-08-11'),
+)
+
+assert(
+  'E2 bindingVigente fim<hojeCivil → false',
+  bindingVigente(null, '2026-08-10', '2026-08-11') === false,
+  'got: ' + bindingVigente(null, '2026-08-10', '2026-08-11'),
+)
+
+assert(
+  'E3 bindingVigente inicio==hojeCivil → true',
+  bindingVigente('2026-08-11', null, '2026-08-11') === true,
+  'got: ' + bindingVigente('2026-08-11', null, '2026-08-11'),
+)
+
+assert(
+  'E4 bindingVigente ambos vazios → true',
+  bindingVigente(null, null, '2026-08-11') === true,
+  'got: ' + bindingVigente(null, null, '2026-08-11'),
+)
+
+// ═══════ F) validarUsuario — 2 casos ═══════
+
+var f1 = validarUsuario({ ativo_comercial: true })
+assert(
+  'F1 validarUsuario ativo_comercial=true → ok',
+  f1.aprovado === true && f1.motivo === 'ok',
+  'got: ' + JSON.stringify(f1),
+)
+
+var f2 = validarUsuario({ ativo_comercial: false })
+assert(
+  'F2 validarUsuario ativo_comercial=false → comercial_inativo',
+  f2.aprovado === false && f2.motivo === 'comercial_inativo',
+  'got: ' + JSON.stringify(f2),
+)
+
+// ═══════ G) resolverFallbackSuperadmin — 4 casos ═══════
+
+assert(
+  'G1 resolverFallback ativo+SA+vigente → true',
+  resolverFallbackSuperadmin(
+    [{ ativo: true, perfilSlug: 'superadministrador', inicio_vigencia: null, fim_vigencia: null }],
+    '2026-08-11',
+  ) === true,
+  'esperado true',
+)
+
+assert(
+  'G2 resolverFallback ativo+SA+expirado → false',
+  resolverFallbackSuperadmin(
+    [
+      {
+        ativo: true,
+        perfilSlug: 'superadministrador',
+        inicio_vigencia: null,
+        fim_vigencia: '2026-08-10',
+      },
+    ],
+    '2026-08-11',
+  ) === false,
+  'esperado false',
+)
+
+assert(
+  'G3 resolverFallback inativo+SA → false',
+  resolverFallbackSuperadmin(
+    [{ ativo: false, perfilSlug: 'superadministrador', inicio_vigencia: null, fim_vigencia: null }],
+    '2026-08-11',
+  ) === false,
+  'esperado false',
+)
+
+assert(
+  'G4 resolverFallback ativo+não-SA → false',
+  resolverFallbackSuperadmin(
+    [{ ativo: true, perfilSlug: 'gestor', inicio_vigencia: null, fim_vigencia: null }],
+    '2026-08-11',
+  ) === false,
+  'esperado false',
+)
+
+// ═══════ H) RBAC revogado — bindings pré aprovam, pós rejeitam ═══════
+
+var bindingsPre = [{ equipe_id: 'eq1', perfilSlug: 'gestor', ativo: true, vigente: true }]
+var bindingsPos = [{ equipe_id: 'eq1', perfilSlug: 'gestor', ativo: true, vigente: false }]
+var h1pre = validarRBAC('gestor', bindingsPre, 'eq1')
+var h1pos = validarRBAC('gestor', bindingsPos, 'eq1')
+assert(
+  'H1 RBAC revogado — pré vigente aprovado, pós expirado rejeitado',
+  h1pre.aprovado === true && h1pos.aprovado === false,
+  'pre=' + JSON.stringify(h1pre) + ' pos=' + JSON.stringify(h1pos),
+)
 
 // ═══════ Resumo ═══════
 console.log('\n' + passed + '/' + (passed + failed) + ' passed')
