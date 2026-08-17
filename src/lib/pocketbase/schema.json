@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T14:25:05.589Z",
+  "generatedAt": "2026-08-17T15:07:22.970Z",
   "collections": [
     {
       "name": "users",
@@ -2638,6 +2638,125 @@
         "CREATE UNIQUE INDEX idx_com_recuperacao_agendas_unica_ativa ON com_recuperacao_agendas (negocio_perdido_id) WHERE estado = 'ativa'",
         "CREATE INDEX idx_com_recuperacao_agendas_responsavel_estado ON com_recuperacao_agendas (responsavel_id, estado)",
         "CREATE INDEX idx_com_recuperacao_agendas_data_alvo ON com_recuperacao_agendas (data_alvo)"
+      ]
+    },
+    {
+      "name": "com_substituicoes",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "view": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "create": "@request.auth.id != '' && @request.auth.id = ''",
+        "update": "@request.auth.id != '' && @request.auth.id = ''",
+        "delete": "@request.auth.id != '' && @request.auth.id = ''"
+      },
+      "fields": [
+        {
+          "name": "titular_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "substituto_principal_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "substituto_reserva_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "data_inicio",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_fim",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tipo_cobertura",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["integral", "por_negocios"]
+        },
+        {
+          "name": "negocios_cobertos",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "motivo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ferias", "licenca", "falta"]
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cancelada_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "justificativa_cancelamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "autor_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "creation_idempotency_key",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_substituicoes_idempotency ON com_substituicoes (creation_idempotency_key)",
+        "CREATE INDEX idx_com_substituicoes_titular_periodo ON com_substituicoes (titular_id, data_inicio, data_fim)",
+        "CREATE INDEX idx_com_substituicoes_substituto_principal ON com_substituicoes (substituto_principal_id)",
+        "CREATE INDEX idx_com_substituicoes_substituto_reserva ON com_substituicoes (substituto_reserva_id)",
+        "CREATE INDEX idx_com_substituicoes_data_inicio ON com_substituicoes (data_inicio)"
       ]
     }
   ]
