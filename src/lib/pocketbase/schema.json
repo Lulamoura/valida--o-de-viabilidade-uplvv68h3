@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-15T13:18:55.699Z",
+  "generatedAt": "2026-08-17T13:11:36.786Z",
   "collections": [
     {
       "name": "users",
@@ -773,7 +773,7 @@
       "apiRules": {
         "list": "@request.auth.id != ''",
         "view": "@request.auth.id != ''",
-        "create": null,
+        "create": "@request.auth.id != '' && @request.auth.id = ''",
         "update": null,
         "delete": null
       },
@@ -841,11 +841,97 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "perfil",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "escopo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comando",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "command_idempotency_key",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "correlation_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "transacao_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sequencia",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "evento_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "snapshot_hash",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "snapshot_hash_versao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "retifica_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_auditoria"
+        },
+        {
+          "name": "evidencia_estruturada",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_com_auditoria_collection_record ON com_auditoria (collection_name, record_id)",
-        "CREATE INDEX idx_com_auditoria_created ON com_auditoria (created)"
+        "CREATE INDEX idx_com_auditoria_created ON com_auditoria (created)",
+        "CREATE INDEX `idx_com_auditoria_comando` ON `com_auditoria` (comando)",
+        "CREATE INDEX `idx_com_auditoria_command_key` ON `com_auditoria` (command_idempotency_key)",
+        "CREATE INDEX `idx_com_auditoria_correlation_id` ON `com_auditoria` (correlation_id)",
+        "CREATE INDEX `idx_com_auditoria_transacao_id` ON `com_auditoria` (transacao_id)",
+        "CREATE INDEX `idx_com_auditoria_usuario_id` ON `com_auditoria` (usuario_id)",
+        "CREATE INDEX `idx_com_auditoria_evento_em` ON `com_auditoria` (evento_em)",
+        "CREATE INDEX `idx_com_auditoria_retifica_id` ON `com_auditoria` (retifica_id)"
       ]
     },
     {
@@ -1785,6 +1871,125 @@
         "CREATE INDEX idx_com_etapas_porta_2d2b_execucao_id ON com_etapas_porta_2d2b (execucao_id)",
         "CREATE INDEX idx_com_etapas_porta_2d2b_ordem ON com_etapas_porta_2d2b (ordem)",
         "CREATE UNIQUE INDEX `idx_com_etapas_porta_2d2b_execucao_ordem` ON `com_etapas_porta_2d2b` (execucao_id, ordem)"
+      ]
+    },
+    {
+      "name": "com_idempotencia",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "view": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "create": "@request.auth.id != '' && @request.auth.id = ''",
+        "update": "@request.auth.id != '' && @request.auth.id = ''",
+        "delete": "@request.auth.id != '' && @request.auth.id = ''"
+      },
+      "fields": [
+        {
+          "name": "command_idempotency_key",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "comando",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ator_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "payload_hash",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "estado",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["executando", "concluido", "rejeitado", "abandonado"]
+        },
+        {
+          "name": "codigo_retorno",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resultado",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "registros_afetados",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "executor_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "lease_ate",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tentativa",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "claim_version",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "inicio_em",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "conclusao_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_idempotencia_unique_identity ON com_idempotencia (ator_id, comando, command_idempotency_key)",
+        "CREATE INDEX idx_com_idempotencia_key ON com_idempotencia (command_idempotency_key)",
+        "CREATE INDEX idx_com_idempotencia_estado_lease ON com_idempotencia (estado, lease_ate)",
+        "CREATE INDEX idx_com_idempotencia_id_claim ON com_idempotencia (id, claim_version)"
       ]
     }
   ]
