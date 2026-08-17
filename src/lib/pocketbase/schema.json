@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T13:11:36.786Z",
+  "generatedAt": "2026-08-17T13:22:34.674Z",
   "collections": [
     {
       "name": "users",
@@ -669,6 +669,90 @@
           "required": false,
           "system": false,
           "collectionRef": "com_contatos"
+        },
+        {
+          "name": "tipo_entrada",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "pre_qualificada"]
+        },
+        {
+          "name": "qualificacao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "qualificada", "desqualificada"]
+        },
+        {
+          "name": "origem_canal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "captador_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "negocio_original_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "fechamento_motivo",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "preco",
+            "fechou_com_outra_empresa",
+            "perdeu_contato",
+            "desistiu",
+            "nao_atendido"
+          ]
+        },
+        {
+          "name": "fechamento_data",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fechamento_valor_efetivo_centavos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "oe_numero",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "oe_data_envio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "oe_responsavel_envio_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "prospectivo",
+          "type": "bool",
+          "required": true,
+          "system": false
         }
       ],
       "indexes": [
@@ -1990,6 +2074,113 @@
         "CREATE INDEX idx_com_idempotencia_key ON com_idempotencia (command_idempotency_key)",
         "CREATE INDEX idx_com_idempotencia_estado_lease ON com_idempotencia (estado, lease_ate)",
         "CREATE INDEX idx_com_idempotencia_id_claim ON com_idempotencia (id, claim_version)"
+      ]
+    },
+    {
+      "name": "com_qualificacao_historico",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.id = ''",
+        "update": "@request.auth.id != '' && @request.auth.id = ''",
+        "delete": "@request.auth.id != '' && @request.auth.id = ''"
+      },
+      "fields": [
+        {
+          "name": "negocio_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "estado_anterior",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pendente", "qualificada", "desqualificada"]
+        },
+        {
+          "name": "estado_novo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "qualificada", "desqualificada"]
+        },
+        {
+          "name": "tipo_entrada",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pendente", "pre_qualificada"]
+        },
+        {
+          "name": "motivo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "autor_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "origem",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "manual",
+            "entrada_pre_qualificada",
+            "reavaliacao",
+            "reativacao",
+            "integracao",
+            "sistema"
+          ]
+        },
+        {
+          "name": "justificativa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_hora_efetiva",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_qualificacao_historico_idempotency_key ON com_qualificacao_historico (idempotency_key)",
+        "CREATE INDEX idx_com_qualificacao_historico_negocio_created ON com_qualificacao_historico (negocio_id, created)",
+        "CREATE INDEX idx_com_qualificacao_historico_negocio_estado ON com_qualificacao_historico (negocio_id, estado_novo)",
+        "CREATE INDEX idx_com_qualificacao_historico_autor ON com_qualificacao_historico (autor_id)",
+        "CREATE INDEX idx_com_qualificacao_historico_data ON com_qualificacao_historico (data_hora_efetiva)"
       ]
     }
   ]
