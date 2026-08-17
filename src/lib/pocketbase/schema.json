@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T13:30:07.289Z",
+  "generatedAt": "2026-08-17T13:38:01.880Z",
   "collections": [
     {
       "name": "users",
@@ -2181,6 +2181,224 @@
         "CREATE INDEX idx_com_qualificacao_historico_negocio_estado ON com_qualificacao_historico (negocio_id, estado_novo)",
         "CREATE INDEX idx_com_qualificacao_historico_autor ON com_qualificacao_historico (autor_id)",
         "CREATE INDEX idx_com_qualificacao_historico_data ON com_qualificacao_historico (data_hora_efetiva)"
+      ]
+    },
+    {
+      "name": "com_propostas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "view": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "create": "@request.auth.id != '' && @request.auth.id = ''",
+        "update": "@request.auth.id != '' && @request.auth.id = ''",
+        "delete": "@request.auth.id != '' && @request.auth.id = ''"
+      },
+      "fields": [
+        {
+          "name": "negocio_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "identificador",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "autor_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativa", "arquivada", "cancelada"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_com_propostas_negocio_status ON com_propostas (negocio_id, status)"
+      ]
+    },
+    {
+      "name": "com_proposta_versoes",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "view": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "create": "@request.auth.id != '' && @request.auth.id = ''",
+        "update": "@request.auth.id != '' && @request.auth.id = ''",
+        "delete": "@request.auth.id != '' && @request.auth.id = ''"
+      },
+      "fields": [
+        {
+          "name": "proposta_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_propostas"
+        },
+        {
+          "name": "numero",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "estado",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["rascunho", "enviada", "aceita", "recusada", "cancelada"]
+        },
+        {
+          "name": "modalidade",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pontual", "recorrente"]
+        },
+        {
+          "name": "valor_total_centavos",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_mensal_centavos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "enviada_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "destinatario",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "canal_envio",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["email", "provelo", "whatsapp", "presencial"]
+        },
+        {
+          "name": "validade",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "documento_url",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "responsavel_envio_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "creation_idempotency_key",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "leitura_estado",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["nao_rastreavel", "nao_lida", "lida"]
+        },
+        {
+          "name": "primeira_leitura_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ultima_leitura_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "decisao_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_evidencia_decisao",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "assinatura",
+            "aceite_formal_corporativo",
+            "aceite_formal_provelo",
+            "pedido_compra",
+            "equivalente_formal"
+          ]
+        },
+        {
+          "name": "evidencia_decisao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_proposta_versoes_idempotency ON com_proposta_versoes (creation_idempotency_key)",
+        "CREATE UNIQUE INDEX idx_com_proposta_versoes_proposta_numero ON com_proposta_versoes (proposta_id, numero)",
+        "CREATE UNIQUE INDEX idx_com_proposta_versoes_proposta_aceita ON com_proposta_versoes (proposta_id) WHERE estado = 'aceita'",
+        "CREATE INDEX idx_com_proposta_versoes_proposta_numero_idx ON com_proposta_versoes (proposta_id, numero)",
+        "CREATE INDEX idx_com_proposta_versoes_estado ON com_proposta_versoes (estado)"
       ]
     }
   ]
