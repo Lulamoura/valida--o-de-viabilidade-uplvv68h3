@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T13:38:01.880Z",
+  "generatedAt": "2026-08-17T14:25:05.589Z",
   "collections": [
     {
       "name": "users",
@@ -2399,6 +2399,245 @@
         "CREATE UNIQUE INDEX idx_com_proposta_versoes_proposta_aceita ON com_proposta_versoes (proposta_id) WHERE estado = 'aceita'",
         "CREATE INDEX idx_com_proposta_versoes_proposta_numero_idx ON com_proposta_versoes (proposta_id, numero)",
         "CREATE INDEX idx_com_proposta_versoes_estado ON com_proposta_versoes (estado)"
+      ]
+    },
+    {
+      "name": "com_atividades",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "view": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "create": "@request.auth.id != '' && @request.auth.id = ''",
+        "update": "@request.auth.id != '' && @request.auth.id = ''",
+        "delete": "@request.auth.id != '' && @request.auth.id = ''"
+      },
+      "fields": [
+        {
+          "name": "negocio_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "tentativa_contato",
+            "reuniao",
+            "visita",
+            "envio_proposta",
+            "acompanhamento_proposta",
+            "aceite_verbal_pendente",
+            "decisao_combinada",
+            "tarefa_interna"
+          ]
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "autor_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "responsavel_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "canal",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["telefone", "email", "whatsapp", "presencial", "video"]
+        },
+        {
+          "name": "estado",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["planejada", "realizada", "cancelada"]
+        },
+        {
+          "name": "planejada_para",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "realizada_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resultado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "proposta_versao_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_proposta_versoes"
+        },
+        {
+          "name": "justificativa_cancelamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "creation_idempotency_key",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "atividade_origem_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_atividades"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_atividades_idempotency ON com_atividades (creation_idempotency_key)",
+        "CREATE INDEX idx_com_atividades_negocio_planejada ON com_atividades (negocio_id, planejada_para)",
+        "CREATE INDEX idx_com_atividades_responsavel_estado ON com_atividades (responsavel_id, estado)",
+        "CREATE INDEX idx_com_atividades_estado_planejada ON com_atividades (estado, planejada_para)"
+      ]
+    },
+    {
+      "name": "com_recuperacao_agendas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "view": "@request.auth.id != '' && @request.auth.perfil_id.slug = 'superadministrador'",
+        "create": "@request.auth.id != '' && @request.auth.id = ''",
+        "update": "@request.auth.id != '' && @request.auth.id = ''",
+        "delete": "@request.auth.id != '' && @request.auth.id = ''"
+      },
+      "fields": [
+        {
+          "name": "negocio_perdido_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "data_alvo",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "antecedencia_dias",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "contexto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "responsavel_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "estado",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativa", "concluida_por_reativacao", "adiada", "descartada"]
+        },
+        {
+          "name": "motivo_adiamento_descarte",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "negocio_novo_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_negocios"
+        },
+        {
+          "name": "autor_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "creation_idempotency_key",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "agenda_origem_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "com_recuperacao_agendas"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_com_recuperacao_agendas_idempotency ON com_recuperacao_agendas (creation_idempotency_key)",
+        "CREATE UNIQUE INDEX idx_com_recuperacao_agendas_unica_ativa ON com_recuperacao_agendas (negocio_perdido_id) WHERE estado = 'ativa'",
+        "CREATE INDEX idx_com_recuperacao_agendas_responsavel_estado ON com_recuperacao_agendas (responsavel_id, estado)",
+        "CREATE INDEX idx_com_recuperacao_agendas_data_alvo ON com_recuperacao_agendas (data_alvo)"
       ]
     }
   ]
