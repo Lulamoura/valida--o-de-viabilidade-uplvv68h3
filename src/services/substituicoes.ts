@@ -89,7 +89,7 @@ export interface BackendError {
 // toQueryParams — omite undefined/null, number→String(n), preserva string
 // ─────────────────────────────────────────────────────────────────────
 
-function toQueryParams(params: Record<string, unknown>): Record<string, string> {
+export function toQueryParams(params: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {}
   for (const key of Object.keys(params)) {
     const value = params[key]
