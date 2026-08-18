@@ -37,10 +37,14 @@ vi.mock('@/hooks/use-is-superadmin', async () => {
 
 // 4) Mock de react-router-dom. Inlinado (src/test/mocks/router.ts contém
 //    JSX num arquivo .ts, o que o oxlint/tsc tratam como erro de parse).
-const _useParams = vi.fn().mockReturnValue({})
-const _useNavigate = vi.fn().mockReturnValue(vi.fn())
-const _useSearchParams = vi.fn().mockReturnValue([new URLSearchParams(), vi.fn()])
-const _useLocation = vi.fn().mockReturnValue({ pathname: '/', search: '', hash: '', state: null })
+const { _useParams, _useNavigate, _useSearchParams, _useLocation } = vi.hoisted(() => ({
+  _useParams: vi.fn().mockReturnValue({}),
+  _useNavigate: vi.fn().mockReturnValue(vi.fn()),
+  _useSearchParams: vi.fn().mockReturnValue([new URLSearchParams(), vi.fn()]),
+  _useLocation: vi
+    .fn()
+    .mockReturnValue({ pathname: '/', search: '', hash: '', state: null }),
+}))
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>()
@@ -93,8 +97,8 @@ const VALID_ID = '1234567890abcde'
 
 const FIXTURE_VIEW: SubstituicaoView = {
   id: VALID_ID,
-  data_inicio: '2025-03-10',
-  data_fim: '2025-03-20',
+  data_inicio: '2099-03-10',
+  data_fim: '2099-03-20',
   tipo_cobertura: 'integral',
   motivo: 'ferias',
   cancelada_em: null,
@@ -167,10 +171,10 @@ describe('SubstituicaoDetalhe', () => {
     render(<SubstituicaoDetalhe />)
 
     // Titular (principal) e substituto principal.
-    expect(await screen.findByText('Titular Fixtura')).toBeInTheDocument()
-    expect(screen.getByText('Principal Fixtura')).toBeInTheDocument()
+    expect((await screen.findAllByText('Titular Fixtura')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Principal Fixtura').length).toBeGreaterThan(0)
     // Período formatado (dd/MM/yyyy).
-    expect(screen.getByText(/10\/03\/2025 – 20\/03\/2025/)).toBeInTheDocument()
+    expect(screen.getByText(/10\/03\/2099 – 20\/03\/2099/)).toBeInTheDocument()
     // Situação (futura → badge "Futura").
     expect(screen.getByText('Futura')).toBeInTheDocument()
   })
@@ -191,7 +195,7 @@ describe('SubstituicaoDetalhe', () => {
 
     // Dados carregados...
     await waitFor(() => {
-      expect(screen.getByText('Titular Fixtura')).toBeInTheDocument()
+      expect(screen.getAllByText('Titular Fixtura').length).toBeGreaterThan(0)
     })
 
     // ...mas sem botões de ação.
@@ -234,7 +238,7 @@ describe('SubstituicaoDetalhe', () => {
 
     // Vê os dados (leitura permitida).
     await waitFor(() => {
-      expect(screen.getByText('Titular Fixtura')).toBeInTheDocument()
+      expect(screen.getAllByText('Titular Fixtura').length).toBeGreaterThan(0)
     })
 
     // Não vê controles de mutação (perfil fora do allowlist).

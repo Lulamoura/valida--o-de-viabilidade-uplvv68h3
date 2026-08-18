@@ -65,11 +65,11 @@ describe('NegocioSelect', () => {
     expect(args[1]).toBe(20)
   })
 
-  it('multi-seleção: badges aparecem para itens selecionados', () => {
+  it('multi-seleção: badges aparecem para itens selecionados', async () => {
     getOne.mockResolvedValue({ id: 'n1', titulo: 'Negócio Alpha' })
     render(<NegocioSelect value={['n1']} onChange={() => {}} />)
     // O badge é renderizado com o título resolvido via getOne
-    expect(screen.getByText('Negócio Alpha')).toBeInTheDocument()
+    expect(await screen.findByText('Negócio Alpha')).toBeInTheDocument()
   })
 
   it('remoção: clicar no X remove o item', async () => {
@@ -77,7 +77,7 @@ describe('NegocioSelect', () => {
     getOne.mockResolvedValue({ id: 'n1', titulo: 'Negócio Alpha' })
     const onChange = vi.fn()
     render(<NegocioSelect value={['n1']} onChange={onChange} />)
-    const removeBtn = screen.getByRole('button', { name: /Remover Negócio Alpha/i })
+    const removeBtn = await screen.findByRole('button', { name: /Remover Negócio Alpha/i })
     await user.click(removeBtn)
     expect(onChange).toHaveBeenCalledWith([])
   })

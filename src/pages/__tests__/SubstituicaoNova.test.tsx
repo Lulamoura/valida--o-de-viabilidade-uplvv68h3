@@ -29,7 +29,7 @@ vi.mock('@/lib/feature-flags', async (importOriginal) => {
 
 // 3) Mock de react-router-dom. Inlinado (src/test/mocks/router.ts contém
 //    JSX num arquivo .ts, o que o oxlint/tsc tratam como erro de parse).
-const _useNavigate = vi.fn().mockReturnValue(vi.fn())
+const _useNavigate = vi.hoisted(() => vi.fn().mockReturnValue(vi.fn()))
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>()
   const React = await import('react')
@@ -119,7 +119,6 @@ describe('SubstituicaoNova', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
-    document.body.innerHTML = ''
   })
 
   it('idempotência — crypto.randomUUID() usado para creation_idempotency_key ao criar', async () => {
