@@ -51,15 +51,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/substituicoes/:id"
-                element={
-                  <ProtectedRoute>
-                    <SubstituicaoDetalhe />
-                  </ProtectedRoute>
-                }
-              />
-              {MUTATIONS_ENABLED && (
+              {MUTATIONS_ENABLED ? (
                 <>
                   <Route
                     path="/substituicoes/nova"
@@ -74,6 +66,27 @@ const App = () => (
                     element={
                       <ProtectedRoute>
                         <SubstituicaoAjuste />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/substituicoes/:id"
+                    element={
+                      <ProtectedRoute>
+                        <SubstituicaoDetalhe />
+                      </ProtectedRoute>
+                    }
+                  />
+                </>
+              ) : (
+                <>
+                  <Route path="/substituicoes/nova" element={<NotFound />} />
+                  <Route path="/substituicoes/:id/ajustar" element={<NotFound />} />
+                  <Route
+                    path="/substituicoes/:id"
+                    element={
+                      <ProtectedRoute>
+                        <SubstituicaoDetalhe />
                       </ProtectedRoute>
                     }
                   />
