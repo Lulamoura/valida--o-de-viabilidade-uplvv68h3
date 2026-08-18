@@ -803,10 +803,13 @@ assert(
 // hook, fora do bloco de testes). Lê o arquivo novamente e inspeciona o trecho
 // antes do marcador de testes.
 var hookBody = src.substring(0, startIdx)
+var hookCode = hookBody
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:\\])\/\/.*$/gm, '$1')
 var forbidden = ['$app.save', 'runInTransaction', 'com_auditoria', 'com_idempotencia', 'cronAdd']
 var violations = []
 for (var zi = 0; zi < forbidden.length; zi++) {
-  if (hookBody.indexOf(forbidden[zi]) !== -1) violations.push(forbidden[zi])
+  if (hookCode.indexOf(forbidden[zi]) !== -1) violations.push(forbidden[zi])
 }
 assert(
   'Z1 zero side effects: hook sem save/runInTransaction/auditoria/idempotência/scheduler',

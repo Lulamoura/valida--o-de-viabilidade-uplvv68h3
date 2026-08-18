@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
 // ── Mocks (registrados ANTES de importar o SUT) ─────────────────────
 vi.mock('@/lib/feature-flags', () => ({
@@ -71,25 +70,20 @@ import App from './App'
 describe('App routing com gate fechado', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.history.pushState({}, '', '/')
   })
 
   it('navegar para /substituicoes/nova com MUTATIONS_ENABLED=false renderiza NotFound', () => {
-    render(
-      <MemoryRouter initialEntries={['/substituicoes/nova']}>
-        <App />
-      </MemoryRouter>,
-    )
+    window.history.pushState({}, '', '/substituicoes/nova')
+    render(<App />)
     expect(screen.getByText('404')).toBeInTheDocument()
     // Não renderiza a página Nova (que exibiria "Nova substituição")
     expect(screen.queryByText('Nova substituição')).not.toBeInTheDocument()
   })
 
   it('navegar para /substituicoes/abc123/ajustar com MUTATIONS_ENABLED=false renderiza NotFound', () => {
-    render(
-      <MemoryRouter initialEntries={['/substituicoes/abc123/ajustar']}>
-        <App />
-      </MemoryRouter>,
-    )
+    window.history.pushState({}, '', '/substituicoes/abc123/ajustar')
+    render(<App />)
     expect(screen.getByText('404')).toBeInTheDocument()
     expect(screen.queryByText('Ajustar substituição')).not.toBeInTheDocument()
   })

@@ -37,8 +37,10 @@ vi.mock('@/hooks/use-is-superadmin', async () => {
 
 // 4) Mock de react-router-dom. Inlinado (src/test/mocks/router.ts contém
 //    JSX num arquivo .ts, o que o oxlint/tsc tratam como erro de parse).
-const _useNavigate = vi.fn().mockReturnValue(vi.fn())
-const _useSearchParams = vi.fn().mockReturnValue([new URLSearchParams(), vi.fn()])
+const { _useNavigate, _useSearchParams } = vi.hoisted(() => ({
+  _useNavigate: vi.fn().mockReturnValue(vi.fn()),
+  _useSearchParams: vi.fn().mockReturnValue([new URLSearchParams(), vi.fn()]),
+}))
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>()

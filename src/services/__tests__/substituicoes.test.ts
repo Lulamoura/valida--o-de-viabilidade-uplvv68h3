@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // ── Mocks (registrados ANTES de importar o SUT) ─────────────────────
-const pbSend = vi.fn()
+const pbSend = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/pocketbase/client', () => ({
   default: {
@@ -23,7 +23,7 @@ vi.mock('@/lib/pocketbase/client', () => ({
 // MUTATIONS_ENABLED default true; testes de gate sobrescrevem via vi.doMock.
 vi.mock('@/lib/feature-flags', async () => {
   const actual = await vi.importActual<typeof import('@/lib/feature-flags')>('@/lib/feature-flags')
-  return { ...actual, MUTATIONS_ENABLED: true }
+  return { ...actual, MUTATIONS_ENABLED: true, assertMutationsEnabled: vi.fn() }
 })
 
 import {
