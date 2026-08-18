@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { Eye, SearchX } from 'lucide-react'
+import { Eye, Plus, SearchX } from 'lucide-react'
 
 import { useConsultaSubstituicoes } from '@/hooks/use-substituicoes'
+import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
+import { MUTATIONS_ENABLED } from '@/lib/feature-flags'
 import type { SubstituicaoItem } from '@/services/substituicoes'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -84,9 +86,20 @@ function MotivoBadge({ motivo }: { motivo: SubstituicaoItem['motivo'] }) {
   }
 }
 
+const NOVA_ALLOWLIST = new Set([
+  'superadministrador',
+  'gestor',
+  'gestor-comercial',
+  'operador-comercial',
+  'prospeccao',
+])
+
 export default function SubstituicoesLista() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { perfilSlug } = useIsSuperAdmin()
+
+  const podeCriar = MUTATIONS_ENABLED && !!perfilSlug && NOVA_ALLOWLIST.has(perfilSlug)
 
   const situacaoRaw = searchParams.get('situacao')
   const situacao =
@@ -162,9 +175,19 @@ export default function SubstituicoesLista() {
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-7xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Substituições</h1>
-        <p className="text-sm text-muted-foreground">Consulta de substituições comerciais</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Substituições</h1>
+          <p className="text-sm text-muted-foreground">Consulta de substituições comerciais</p>
+        </div>
+        {podeCriar && (
+          <Link to="/substituicoes/nova">
+            <Button className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              Nova substituição
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Filtros */}

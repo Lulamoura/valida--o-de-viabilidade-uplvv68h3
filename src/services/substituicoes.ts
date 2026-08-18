@@ -110,8 +110,8 @@ function toQueryParams(params: Record<string, unknown>): Record<string, string> 
 export async function criarSubstituicao(
   payload: CriarSubstituicaoPayload,
 ): Promise<{ id: string }> {
-  assertMutationsEnabled('/backend/v1/integracao/com/substituicoes/criar')
-  return pb.send('/backend/v1/integracao/com/substituicoes/criar', {
+  assertMutationsEnabled('/backend/v1/substituicoes/criar')
+  return pb.send('/backend/v1/substituicoes/criar', {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
@@ -121,8 +121,8 @@ export async function criarSubstituicao(
 export async function ajustarSubstituicao(
   payload: AjustarSubstituicaoPayload,
 ): Promise<{ id: string }> {
-  assertMutationsEnabled('/backend/v1/integracao/com/substituicoes/ajustar')
-  return pb.send('/backend/v1/integracao/com/substituicoes/ajustar', {
+  assertMutationsEnabled('/backend/v1/substituicoes/ajustar')
+  return pb.send('/backend/v1/substituicoes/ajustar', {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
@@ -132,8 +132,8 @@ export async function ajustarSubstituicao(
 export async function cancelarSubstituicao(
   payload: CancelarSubstituicaoPayload,
 ): Promise<{ id: string }> {
-  assertMutationsEnabled('/backend/v1/integracao/com/substituicoes/cancelar')
-  return pb.send('/backend/v1/integracao/com/substituicoes/cancelar', {
+  assertMutationsEnabled('/backend/v1/substituicoes/cancelar')
+  return pb.send('/backend/v1/substituicoes/cancelar', {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
@@ -158,4 +158,50 @@ export async function obterSubstituicao(id: string): Promise<SubstituicaoView> {
     method: 'GET',
     query: toQueryParams({ id }),
   })
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Mapeamento de erros do backend → mensagens em PT-BR (sem detalhes técnicos)
+// Extrai httpStatus e código de error do ClientResponseError do PocketBase SDK.
+// ─────────────────────────────────────────────────────────────────────
+
+export function mapSubstituicaoError(err: unknown): string {
+  let httpStatus = 0
+  let codigo: string | undefined
+  if (err && typeof err === 'object') {
+    const e = err as {
+      status?: number
+      response?: { code?: number; error?: string }
+    }
+    httpStatus = e.status ?? e.response?.code ?? 0
+    codigo = e.response?.error
+  }
+  if (httpStatus === 400) return 'Dados inválidos. Verifique os campos e tente novamente.'
+  if (httpStatus === 401) return 'Sessão expirada. Faça login novamente.'
+  if (httpStatus === 403) return 'Você não tem permissão para realizar esta operação.'
+  if (httpStatus === 404) return 'Substituição não encontrada.'
+  if (httpStatus === 500) return 'Erro interno. Tente novamente mais tarde.'
+  if (httpStatus === 409) {
+    switch (codigo) {
+      case 'SOBREPOSICAO':
+        return 'Já existe uma substituição no período informado para este titular.'
+      case 'STALE_WRITE':
+        return 'Os dados foram alterados por outro usuário. Recarregue a página e tente novamente.'
+      case 'CONFLICT':
+        return 'Conflito de idempotência. Tente novamente.'
+      case 'CONCORRENTE':
+        return 'Uma solicitação já está em andamento. Aguarde e tente novamente.'
+      case 'CANCELADO':
+        return 'Registros cancelados não podem ser ajustados.'
+      case 'JANELA_FECHADA':
+        return 'A janela da substituição já está aberta ou encerrada e não pode ser ajustada.'
+      case 'JA_CANCELADO':
+        return 'Esta substituição já foi cancelada.'
+      case 'JANELA_ENCERRADA':
+        return 'A janela da substituição já está encerrada e não pode ser cancelada.'
+      default:
+        return 'Erro inesperado. Tente novamente.'
+    }
+  }
+  return 'Erro inesperado. Tente novamente.'
 }

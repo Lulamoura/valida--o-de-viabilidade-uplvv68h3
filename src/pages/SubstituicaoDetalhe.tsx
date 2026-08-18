@@ -1,14 +1,33 @@
+import { useState } from 'react'
 import { useParams, useLocation, Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { ArrowLeft, FileX } from 'lucide-react'
+import { ArrowLeft, FileX, Pencil, Loader2 } from 'lucide-react'
 
 import { useSubstituicaoView } from '@/hooks/use-substituicoes'
-import type { SubstituicaoView } from '@/services/substituicoes'
+import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
+import { useToast } from '@/hooks/use-toast'
+import { MUTATIONS_ENABLED } from '@/lib/feature-flags'
+import {
+  cancelarSubstituicao,
+  mapSubstituicaoError,
+  type SubstituicaoView,
+} from '@/services/substituicoes'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Textarea } from '@/components/ui/textarea'
 
 // ─────────────────────────────────────────────────────────────────────
 // Validações
@@ -95,6 +114,8 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+const AJUSTE_CANCELAMENTO_ALLOWLIST = new Set(['superadministrador', 'gestor', 'gestor-comercial'])
+
 export default function SubstituicaoDetalhe() {
   const { id: rawId } = useParams<{ id: string }>()
   const location = useLocation()
@@ -105,15 +126,64 @@ export default function SubstituicaoDetalhe() {
   const returnTo = validarReturnTo((location.state as any)?.returnTo)
 
   const { data, loading, error, notFound, refresh } = useSubstituicaoView(id)
+  const { perfilSlug } = useIsSuperAdmin()
+  const { toast } = useToast()
+
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [justificativa, setJustificativa] = useState('')
+  const [cancelando, setCancelando] = useState(false)
+
+  const podeMutar =
+    MUTATIONS_ENABLED && !!perfilSlug && AJUSTE_CANCELAMENTO_ALLOWLIST.has(perfilSlug)
+
+  const podeCancelar =
+    podeMutar && !!data && !data.cancelada_em && new Date() <= new Date(data.data_fim)
+
+  const podeAjustar = podeMutar && !!data && !data.cancelada_em
+
+  const handleConfirmarCancelamento = async () => {
+    if (!data || !id) return
+    const just = justificativa.trim()
+    if (just.length < 1 || just.length > 500) return
+    setCancelando(true)
+    try {
+      await cancelarSubstituicao({
+        id,
+        updated_esperado: data.updated,
+        justificativa_cancelamento: just,
+        command_idempotency_key: crypto.randomUUID(),
+      })
+      toast({ title: 'Substituição cancelada.' })
+      setCancelOpen(false)
+      setJustificativa('')
+      refresh()
+    } catch (err) {
+      toast({ title: mapSubstituicaoError(err), variant: 'destructive' })
+    } finally {
+      setCancelando(false)
+    }
+  }
+
+  const justificativaValida = justificativa.trim().length >= 1 && justificativa.trim().length <= 500
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl space-y-6">
-      <Link to={returnTo}>
-        <Button variant="ghost" size="sm" className="gap-1.5">
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
-        </Button>
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link to={returnTo}>
+          <Button variant="ghost" size="sm" className="gap-1.5">
+            <ArrowLeft className="h-4 w-4" />
+            Voltar
+          </Button>
+        </Link>
+        {podeAjustar && id && (
+          <Link to={`/substituicoes/${id}/ajustar`} state={{ returnTo }}>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Pencil className="h-4 w-4" />
+              Ajustar
+            </Button>
+          </Link>
+        )}
+      </div>
 
       {/* Loading */}
       {loading && (
@@ -249,9 +319,60 @@ export default function SubstituicaoDetalhe() {
                 <Campo label="Atualizado em">{formatarDataHora(data.updated)}</Campo>
               </dl>
             </section>
+
+            {podeCancelar && (
+              <section className="border-t pt-4">
+                <Button variant="destructive" onClick={() => setCancelOpen(true)}>
+                  Cancelar substituição
+                </Button>
+              </section>
+            )}
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar substituição</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja cancelar esta substituição? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <label htmlFor="justificativa-cancel" className="text-sm font-medium">
+              Justificativa *
+            </label>
+            <Textarea
+              id="justificativa-cancel"
+              value={justificativa}
+              onChange={(e) => setJustificativa(e.target.value.slice(0, 500))}
+              rows={3}
+              maxLength={500}
+              placeholder="Informe a justificativa do cancelamento"
+            />
+            <p className="text-xs text-muted-foreground">{justificativa.trim().length}/500</p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelando}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!justificativaValida || cancelando}
+              onClick={(e) => {
+                e.preventDefault()
+                handleConfirmarCancelamento()
+              }}
+            >
+              {cancelando ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Cancelando...
+                </>
+              ) : (
+                'Confirmar cancelamento'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

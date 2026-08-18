@@ -7,12 +7,15 @@ import Login from './pages/Login'
 import Foundation from './pages/Foundation'
 import SubstituicoesLista from './pages/SubstituicoesLista'
 import SubstituicaoDetalhe from './pages/SubstituicaoDetalhe'
+import SubstituicaoNova from './pages/SubstituicaoNova'
+import SubstituicaoAjuste from './pages/SubstituicaoAjuste'
 
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './hooks/use-auth'
 import { PermissionsProvider } from './hooks/use-permissions'
+import { MUTATIONS_ENABLED } from './lib/feature-flags'
 
 const App = () => (
   <BrowserRouter>
@@ -56,6 +59,26 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              {MUTATIONS_ENABLED && (
+                <>
+                  <Route
+                    path="/substituicoes/nova"
+                    element={
+                      <ProtectedRoute>
+                        <SubstituicaoNova />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/substituicoes/:id/ajustar"
+                    element={
+                      <ProtectedRoute>
+                        <SubstituicaoAjuste />
+                      </ProtectedRoute>
+                    }
+                  />
+                </>
+              )}
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
