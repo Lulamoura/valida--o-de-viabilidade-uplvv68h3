@@ -16,15 +16,13 @@ vi.mock('@/lib/pocketbase/client', async () => {
 // 2) Gate de feature-flags — MUTATIONS_ENABLED controlado via vi.hoisted.
 //    assertMutationsEnabled é substituído por no-op: o serviço criador
 //    (criarSubstituicao) importa-o por nome e recebe a versão mockada,
-//    alcançando pb.send (testado real) com o gate aberto.
+//    alcançando pb.send (alvo da asserção) com o gate aberto.
 const ffState = vi.hoisted(() => ({ MUTATIONS_ENABLED: true }))
 vi.mock('@/lib/feature-flags', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/feature-flags')>()
   return {
     ...actual,
-    get MUTATIONS_ENABLED() {
-      return ffState.MUTATIONS_ENABLED
-    },
+    MUTATIONS_ENABLED: ffState.MUTATIONS_ENABLED,
     assertMutationsEnabled: vi.fn(),
   }
 })
@@ -35,11 +33,8 @@ const _useNavigate = vi.fn().mockReturnValue(vi.fn())
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>()
   const React = await import('react')
-  const LinkStub = React.forwardRef<
-    HTMLAnchorElement,
-    { to?: string; children?: React.ReactNode }
-  >(({ to, children }, ref) =>
-    React.createElement('a', { href: to ?? '#', ref }, children),
+  const LinkStub = React.forwardRef<HTMLAnchorElement, { to?: string; children?: React.ReactNode }>(
+    ({ to, children }, ref) => React.createElement('a', { href: to ?? '#', ref }, children),
   )
   LinkStub.displayName = 'LinkStub'
   return {
@@ -65,27 +60,42 @@ import { pbSend, mockPbSend, mockCollectionGetList } from '@/test/mocks/pocketba
 import SubstituicaoNova from '@/pages/SubstituicaoNova'
 
 // ─────────────────────────────────────────────────────────────────────
-// Helpers de interação com a UI real (UserSelect, Calendar, Select).
+// Helpers de interação com a UI real (UserSelect cmdk, Calendar, Select).
 // ─────────────────────────────────────────────────────────────────────
 type User = ReturnType<typeof userEvent.setup>
 
+async function setupUser() {
+  return userEvent.setup({
+    advanceTimers: vi.advanceTimersByTime,
+    pointerEventsCheck: 0,
+  })
+}
+
 async function selectUserOption(user: User, triggerText: string, itemName: string) {
   await user.click(screen.getByText(triggerText))
-  // Debounce de 300ms do UserSelect — avanço os timers falsos.
+  // Debounce de 300ms do UserSelect — avanço os timers falsos e microtasks.
   await vi.advanceTimersByTimeAsync(350)
-  const item = await screen.findByRole('option', { name: itemName })
+  const item = await screen.findByText(itemName)
   await user.click(item)
 }
 
 async function selectCalendarDay(user: User, triggerText: string, dayNum: number) {
   await user.click(screen.getByRole('button', { name: triggerText }))
-  // Garante flush de microtasks/timers do Popover/Calendar (Radix).
+  // Flush de microtasks/timers do Popover (Radix) antes de ler o Calendar.
   await vi.advanceTimersByTimeAsync(0)
-  const days = await screen.findAllByRole('button', { name: String(dayNum) })
-  await user.click(days[0])
+  // Botão de dia do Calendar (react-day-picker) — localiza por texto exato
+  // para ser robusto ao aria-label que pode conter a data por extenso.
+  const candidates = Array.from(document.querySelectorAll('button')).filter(
+    (b) => (b.textContent ?? '').trim() === String(dayNum),
+  )
+  if (candidates.length === 0) {
+    throw new Error(`Botão de dia ${dayNum} não encontrado no calendário`)
+  }
+  await user.click(candidates[0])
 }
 
 async function selectTipoCobertura(user: User, label: string) {
+  // Trigger do Radix Select mostra o valor atual ("Integral").
   await user.click(screen.getByText('Integral'))
   await vi.advanceTimersByTimeAsync(0)
   const opt = await screen.findByRole('option', { name: label })
@@ -115,7 +125,7 @@ describe('SubstituicaoNova', () => {
   it('idempotência — crypto.randomUUID() usado para creation_idempotency_key ao criar', async () => {
     // Gate aberto.
     expect(MUTATIONS_ENABLED).toBe(true)
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = await setupUser()
     render(<SubstituicaoNova />)
 
     // Formulário mínimo válido: titular + período (cobertura integral, sem principal).
@@ -142,10 +152,10 @@ describe('SubstituicaoNova', () => {
   })
 
   it('invariante I3 — reserva sem principal bloqueia submit', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = await setupUser()
     render(<SubstituicaoNova />)
 
-    await selectUserOption(user, 'Selecionar titular', 'Titular Fixtura')
+    // Apenas reserva selecionado (sem principal).
     await selectUserOption(user, 'Selecionar substituto reserva', 'Reserva Fixtura')
 
     await user.click(screen.getByRole('button', { name: /Criar substituição/ }))
@@ -158,10 +168,9 @@ describe('SubstituicaoNova', () => {
   })
 
   it('invariante I4 — por_negocios sem principal bloqueia submit', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = await setupUser()
     render(<SubstituicaoNova />)
 
-    await selectUserOption(user, 'Selecionar titular', 'Titular Fixtura')
     // Tipo de cobertura → "Por negócios" (sem substituto principal).
     await selectTipoCobertura(user, 'Por negócios')
 
