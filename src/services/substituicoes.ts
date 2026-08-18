@@ -147,14 +147,14 @@ export async function cancelarSubstituicao(
 export async function consultarSubstituicoes(
   params: Omit<ConsultaSubstituicoesParams, 'id'>,
 ): Promise<ConsultaSubstituicoesResponse> {
-  return pb.send('/backend/v1/integracao/com/substituicoes/consultar', {
+  return pb.send('/backend/v1/substituicoes/consulta', {
     method: 'GET',
     query: toQueryParams(params as Record<string, unknown>),
   })
 }
 
 export async function obterSubstituicao(id: string): Promise<SubstituicaoView> {
-  return pb.send('/backend/v1/integracao/com/substituicoes/obter', {
+  return pb.send('/backend/v1/substituicoes/consulta', {
     method: 'GET',
     query: toQueryParams({ id }),
   })

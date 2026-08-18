@@ -42,10 +42,13 @@ export function useIsSuperAdmin() {
     }
 
     setLoading(true)
-    pb.collection('com_perfis')
-      .getOne(perfilId)
-      .then((profile) => {
-        const slug = profile?.slug ?? null
+    // Releitura autenticada do próprio usuário — slug vem exclusivamente do
+    // expand de perfil_id. Nunca lemos com_perfis diretamente (retorna 403
+    // para todos exceto SA direto) nem aceitamos slug de campo não expandido.
+    pb.collection('users')
+      .getOne(user.id, { expand: 'perfil_id' })
+      .then((record) => {
+        const slug = record?.expand?.perfil_id?.slug ?? null
         cachedPerfilId = perfilId
         cachedSlug = slug
         setIsSuperAdmin(slug === 'superadministrador')
