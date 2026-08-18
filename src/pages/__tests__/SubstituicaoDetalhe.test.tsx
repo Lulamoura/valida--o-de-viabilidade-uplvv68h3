@@ -41,9 +41,7 @@ const { _useParams, _useNavigate, _useSearchParams, _useLocation } = vi.hoisted(
   _useParams: vi.fn().mockReturnValue({}),
   _useNavigate: vi.fn().mockReturnValue(vi.fn()),
   _useSearchParams: vi.fn().mockReturnValue([new URLSearchParams(), vi.fn()]),
-  _useLocation: vi
-    .fn()
-    .mockReturnValue({ pathname: '/', search: '', hash: '', state: null }),
+  _useLocation: vi.fn().mockReturnValue({ pathname: '/', search: '', hash: '', state: null }),
 }))
 
 vi.mock('react-router-dom', async (importOriginal) => {
