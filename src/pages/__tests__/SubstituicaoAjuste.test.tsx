@@ -41,11 +41,8 @@ vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>()
   const React = await import('react')
   // Link stub: renderiza children em um <a> sem exigir contexto de Router.
-  const LinkStub = React.forwardRef<
-    HTMLAnchorElement,
-    { to?: string; children?: React.ReactNode }
-  >(({ to, children }, ref) =>
-    React.createElement('a', { href: to ?? '#', ref }, children),
+  const LinkStub = React.forwardRef<HTMLAnchorElement, { to?: string; children?: React.ReactNode }>(
+    ({ to, children }, ref) => React.createElement('a', { href: to ?? '#', ref }, children),
   )
   LinkStub.displayName = 'LinkStub'
   return {
