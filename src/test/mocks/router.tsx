@@ -37,5 +37,5 @@ export function mockUseParams(params: Record<string, string | undefined>): void 
 
 /** Retorna o mock de useNavigate para inspecionar chamadas. */
 export function getNavigateMock(): ReturnType<typeof vi.fn> {
-  return useNavigate() as ReturnType<typeof vi.fn>
+  return useNavigate.getMockImplementation()?.() as ReturnType<typeof vi.fn>
 }
