@@ -1,15 +1,30 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
+import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Building2, LogOut, LayoutDashboard, Layers, Menu, X } from 'lucide-react'
+import { Building2, LogOut, LayoutDashboard, Layers, Menu, X, ArrowLeftRight } from 'lucide-react'
+
+const SUBSTITUICOES_ALLOWLIST = new Set([
+  'superadministrador',
+  'gestor',
+  'gestor-comercial',
+  'operador-comercial',
+  'prospeccao',
+])
 
 export function Layout() {
   const { user, signOut } = useAuth()
+  const { perfilSlug, loading: perfilLoading } = useIsSuperAdmin()
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const podeVerSubstituicoes =
+    !perfilLoading &&
+    user?.ativo_comercial === true &&
+    SUBSTITUICOES_ALLOWLIST.has(perfilSlug ?? '')
 
   const handleLogout = () => {
     signOut()
@@ -62,6 +77,12 @@ export function Layout() {
                 <Layers className="h-4 w-4" />
                 <span>Administração</span>
               </Link>
+              {podeVerSubstituicoes && (
+                <Link to="/substituicoes" className={navLinkClass('/substituicoes')}>
+                  <ArrowLeftRight className="h-4 w-4" />
+                  <span>Substituições</span>
+                </Link>
+              )}
             </nav>
 
             <div className="hidden md:flex items-center space-x-3">
@@ -143,6 +164,16 @@ export function Layout() {
               <Layers className="h-4 w-4 text-purple-400" />
               <span>Administração / Fundação</span>
             </Link>
+            {podeVerSubstituicoes && (
+              <Link
+                to="/substituicoes"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium text-slate-200 hover:bg-slate-800"
+              >
+                <ArrowLeftRight className="h-4 w-4 text-blue-400" />
+                <span>Substituições</span>
+              </Link>
+            )}
           </div>
         )}
       </header>
