@@ -26,6 +26,11 @@
 var fs = require('fs')
 var path = require('path')
 var vm = require('vm')
+var packageJson = require('../package.json')
+
+function deveEncadearDashboard(testCommand) {
+  return typeof testCommand !== 'string' || !testCommand.includes('test-dashboard-resumo.cjs')
+}
 
 var hookPath = path.join(__dirname, '..', 'pocketbase', 'hooks', 'com_fila_sem_cobertura.js')
 var src = fs.readFileSync(hookPath, 'utf8')
@@ -506,6 +511,23 @@ assert(
   'esperado false para [], true para ["u1"]',
 )
 
+// ═══════ N) Encadeamento resiliente do Dashboard V1 (2) ═══════
+
+assert(
+  'N1 package sem Dashboard → encadeia a suíte',
+  deveEncadearDashboard('node scripts/test-fila-sem-cobertura.cjs') === true,
+)
+assert(
+  'N2 package com Dashboard → não duplica a suíte',
+  deveEncadearDashboard(
+    'node scripts/test-fila-sem-cobertura.cjs && node scripts/test-dashboard-resumo.cjs',
+  ) === false,
+)
+
 // ═══════ Resumo ═══════
 console.log('\n' + passed + '/' + (passed + failed) + ' passed')
 if (failed > 0) process.exit(1)
+
+if (deveEncadearDashboard(packageJson.scripts && packageJson.scripts.test)) {
+  require('./test-dashboard-resumo.cjs')
+}
