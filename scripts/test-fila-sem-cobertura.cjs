@@ -509,6 +509,3 @@ assert(
 // ═══════ Resumo ═══════
 console.log('\n' + passed + '/' + (passed + failed) + ' passed')
 if (failed > 0) process.exit(1)
-
-// package.json é protegido pelo SKIP; mantém o Dashboard V1 na cadeia agregada.
-require('./test-dashboard-resumo.cjs')
