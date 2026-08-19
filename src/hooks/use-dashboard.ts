@@ -12,9 +12,7 @@ export interface UseDashboardResumoResult {
   refresh: () => void
 }
 
-export function useDashboardResumo(
-  params: DashboardResumoParams = {},
-): UseDashboardResumoResult {
+export function useDashboardResumo(params: DashboardResumoParams = {}): UseDashboardResumoResult {
   const latestRequestRef = useRef(0)
   const paramsKey = JSON.stringify(params)
 
