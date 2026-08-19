@@ -59,7 +59,7 @@ function toQueryParams(params: Record<string, unknown>): Record<string, string> 
 export async function getFilaSemCobertura(
   params?: FilaSemCoberturaParams,
 ): Promise<FilaSemCoberturaResponse> {
-  return pb.send('/backend/v1/integracao/com/fila-sem-cobertura', {
+  return pb.send('/backend/v1/fila/sem-cobertura', {
     method: 'GET',
     query: toQueryParams((params ?? {}) as Record<string, unknown>),
   })
