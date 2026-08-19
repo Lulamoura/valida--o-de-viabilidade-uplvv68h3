@@ -209,6 +209,7 @@ export default function SubstituicaoNova() {
                 onChange={(id) => set('titularId', id)}
                 onSelect={(opt) => set('titularName', opt ? opt.name : null)}
                 placeholder="Selecionar titular"
+                ariaLabel="Selecionar titular"
               />
             </div>
             <div className="space-y-1.5">
@@ -218,6 +219,7 @@ export default function SubstituicaoNova() {
                 onChange={(id) => set('principalId', id)}
                 onSelect={(opt) => set('principalName', opt ? opt.name : null)}
                 placeholder="Selecionar substituto principal"
+                ariaLabel="Selecionar substituto principal"
                 excludeId={form.titularId ?? undefined}
               />
             </div>
@@ -228,6 +230,7 @@ export default function SubstituicaoNova() {
                 onChange={(id) => set('reservaId', id)}
                 onSelect={(opt) => set('reservaName', opt ? opt.name : null)}
                 placeholder="Selecionar substituto reserva"
+                ariaLabel="Selecionar substituto reserva"
                 excludeId={form.principalId ?? undefined}
               />
             </div>
@@ -308,7 +311,11 @@ export default function SubstituicaoNova() {
           </div>
 
           {erros.length > 0 && (
-            <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 space-y-1">
+            <div
+              className="rounded-md border border-destructive/50 bg-destructive/5 p-3 space-y-1"
+              role="alert"
+              aria-live="assertive"
+            >
               {erros.map((m, i) => (
                 <p key={i} className="text-sm text-destructive">
                   {m}

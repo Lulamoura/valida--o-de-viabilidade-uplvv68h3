@@ -34,6 +34,7 @@ export interface UserSelectProps {
   placeholder?: string
   disabled?: boolean
   excludeId?: string
+  ariaLabel?: string
 }
 
 export function UserSelect({
@@ -43,6 +44,7 @@ export function UserSelect({
   placeholder,
   disabled,
   excludeId,
+  ariaLabel = 'Selecionar usuário',
 }: UserSelectProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -127,7 +129,7 @@ export function UserSelect({
           type="button"
           variant="outline"
           role="combobox"
-          aria-label="Selecionar usuário"
+          aria-label={ariaLabel}
           disabled={disabled}
           className="w-full justify-between font-normal"
         >
@@ -145,7 +147,11 @@ export function UserSelect({
           />
           <CommandList>
             {loading ? (
-              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <div
+                className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
                 <Loader2 className="h-4 w-4 animate-spin" /> Buscando...
               </div>
             ) : error ? (
