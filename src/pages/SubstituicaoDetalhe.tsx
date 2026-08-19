@@ -187,7 +187,10 @@ export default function SubstituicaoDetalhe() {
 
       {/* Loading */}
       {loading && (
-        <Card>
+        <Card aria-busy="true">
+          <p className="sr-only" role="status" aria-live="polite">
+            Carregando detalhes da substituição
+          </p>
           <CardHeader>
             <Skeleton className="h-6 w-[240px]" />
             <Skeleton className="h-4 w-[180px]" />
@@ -217,7 +220,7 @@ export default function SubstituicaoDetalhe() {
 
       {/* Erro */}
       {!loading && !notFound && error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertTitle>Erro ao carregar</AlertTitle>
           <AlertDescription>
             Não foi possível carregar os dados. Verifique sua conexão e tente novamente.

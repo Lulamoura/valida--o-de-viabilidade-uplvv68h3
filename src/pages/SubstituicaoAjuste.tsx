@@ -200,7 +200,10 @@ export default function SubstituicaoAjuste() {
       </div>
 
       {loading && (
-        <Card>
+        <Card aria-busy="true">
+          <p className="sr-only" role="status" aria-live="polite">
+            Carregando dados da substituição
+          </p>
           <CardHeader>
             <Skeleton className="h-6 w-[240px]" />
           </CardHeader>
@@ -213,7 +216,7 @@ export default function SubstituicaoAjuste() {
       )}
 
       {!loading && error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertTitle>Erro ao carregar</AlertTitle>
           <AlertDescription>Não foi possível carregar os dados.</AlertDescription>
         </Alert>
@@ -264,6 +267,7 @@ export default function SubstituicaoAjuste() {
                   value={principalId}
                   onChange={(v) => setPrincipalId(v)}
                   placeholder="Selecionar substituto principal"
+                  ariaLabel="Selecionar substituto principal"
                   excludeId={data.titular?.id}
                 />
               </div>
@@ -273,6 +277,7 @@ export default function SubstituicaoAjuste() {
                   value={reservaId}
                   onChange={(v) => setReservaId(v)}
                   placeholder="Selecionar substituto reserva"
+                  ariaLabel="Selecionar substituto reserva"
                   excludeId={principalId ?? undefined}
                 />
               </div>
@@ -318,7 +323,11 @@ export default function SubstituicaoAjuste() {
             </div>
 
             {erros.length > 0 && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 space-y-1">
+              <div
+                className="rounded-md border border-destructive/50 bg-destructive/5 p-3 space-y-1"
+                role="alert"
+                aria-live="assertive"
+              >
                 {erros.map((m, i) => (
                   <p key={i} className="text-sm text-destructive">
                     {m}

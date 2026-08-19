@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -195,12 +196,14 @@ export default function SubstituicoesLista() {
         <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Situação</span>
+              <Label htmlFor="filtro-situacao" className="text-xs text-muted-foreground">
+                Situação
+              </Label>
               <Select
                 value={situacao ?? 'todas'}
                 onValueChange={(v) => handleSetParam('situacao', v === 'todas' ? undefined : v)}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger id="filtro-situacao" className="w-[180px]">
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
@@ -214,14 +217,16 @@ export default function SubstituicoesLista() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Ordenar por</span>
+              <Label htmlFor="filtro-ordenacao" className="text-xs text-muted-foreground">
+                Ordenar por
+              </Label>
               <Select
                 value={ordenarPor ?? 'default'}
                 onValueChange={(v) =>
                   handleSetParam('ordenar_por', v === 'default' ? undefined : v)
                 }
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger id="filtro-ordenacao" className="w-[180px]">
                   <SelectValue placeholder="Padrão" />
                 </SelectTrigger>
                 <SelectContent>
@@ -234,12 +239,14 @@ export default function SubstituicoesLista() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Ordem</span>
+              <Label htmlFor="filtro-ordem" className="text-xs text-muted-foreground">
+                Ordem
+              </Label>
               <Select
                 value={ordem ?? 'default'}
                 onValueChange={(v) => handleSetParam('ordem', v === 'default' ? undefined : v)}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger id="filtro-ordem" className="w-[180px]">
                   <SelectValue placeholder="Padrão" />
                 </SelectTrigger>
                 <SelectContent>
@@ -255,7 +262,7 @@ export default function SubstituicoesLista() {
 
       {/* Erro */}
       {error && !loading && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertTitle>Erro ao carregar</AlertTitle>
           <AlertDescription>
             Não foi possível carregar os dados. Verifique sua conexão e tente novamente.
@@ -272,7 +279,12 @@ export default function SubstituicoesLista() {
       {!error && (
         <Card>
           <CardContent className="p-0">
-            <Table>
+            {loading && (
+              <p className="sr-only" role="status" aria-live="polite">
+                Carregando substituições
+              </p>
+            )}
+            <Table scrollContainerLabel="Tabela de substituições — deslize horizontalmente para ver todas as colunas">
               <TableHeader>
                 <TableRow>
                   <TableHead>Titular</TableHead>

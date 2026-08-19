@@ -145,6 +145,18 @@ describe('SubstituicoesLista', () => {
     expect(screen.getByText('Titular Fixtura')).toBeInTheDocument()
   })
 
+  it('identifica de forma acessível a região rolável da tabela', async () => {
+    render(<SubstituicoesLista />)
+
+    await screen.findByText('Titular Fixtura')
+
+    expect(
+      screen.getByRole('region', {
+        name: 'Tabela de substituições — deslize horizontalmente para ver todas as colunas',
+      }),
+    ).toBeInTheDocument()
+  })
+
   it('operador-comercial vê a lista e não vê controles de ajustar/cancelar', async () => {
     ffState.MUTATIONS_ENABLED = true
     mockUseIsSuperAdmin({
