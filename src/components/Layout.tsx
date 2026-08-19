@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, Building2, ChevronRight, Layers, LayoutDashboard, LogOut, Menu } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  Building2,
+  ChevronRight,
+  Layers,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+} from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -152,7 +160,9 @@ export function Layout() {
             <Building2 aria-hidden="true" className="h-5 w-5" />
           </span>
           <span>
-            <span className="block text-lg font-bold tracking-tight text-white">PMais Comercial</span>
+            <span className="block text-lg font-bold tracking-tight text-white">
+              PMais Comercial
+            </span>
             <span className="block text-xs text-slate-400">Gestão Comercial</span>
           </span>
         </Link>
@@ -194,7 +204,9 @@ export function Layout() {
                     </span>
                     <span>
                       <span className="block text-base font-bold">PMais Comercial</span>
-                      <span className="block text-xs font-normal text-slate-400">Módulo de Gestão</span>
+                      <span className="block text-xs font-normal text-slate-400">
+                        Módulo de Gestão
+                      </span>
                     </span>
                   </SheetTitle>
                 </SheetHeader>
@@ -206,7 +218,9 @@ export function Layout() {
                 </div>
               </SheetContent>
             </Sheet>
-            <h1 className="truncate text-xl font-bold tracking-tight text-slate-900">{pageTitle}</h1>
+            <h1 className="truncate text-xl font-bold tracking-tight text-slate-900">
+              {pageTitle}
+            </h1>
           </div>
 
           <div className="hidden items-center gap-2 sm:flex">
