@@ -75,8 +75,8 @@ const VALID_ID = '1234567890abcde' // 15 chars [a-z0-9], satisfaz ID_REGEX
 
 const FIXTURE_VIEW: SubstituicaoView = {
   id: VALID_ID,
-  data_inicio: '2025-01-10',
-  data_fim: '2025-01-20',
+  data_inicio: '2025-01-10T00:00:00.000Z',
+  data_fim: '2025-01-20T00:00:00.000Z',
   tipo_cobertura: 'integral',
   motivo: 'ferias',
   cancelada_em: null,
@@ -119,6 +119,9 @@ describe('SubstituicaoAjuste', () => {
     await waitFor(() => {
       expect(screen.getByText('Ajustar substituição')).toBeInTheDocument()
     })
+
+    expect(screen.getByRole('button', { name: '10/01/2025' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '20/01/2025' })).toBeInTheDocument()
 
     // Sanity: pb.send foi chamado para carregar a view (leitura).
     expect(pbSend).toHaveBeenCalled()

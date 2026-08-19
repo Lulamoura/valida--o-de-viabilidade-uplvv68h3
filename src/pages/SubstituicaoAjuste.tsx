@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { format, parseISO } from 'date-fns'
+import { format } from 'date-fns'
 import { ArrowLeft, FileX, Loader2 } from 'lucide-react'
 
 import { ajustarSubstituicao, mapSubstituicaoError } from '@/services/substituicoes'
 import { useSubstituicaoView } from '@/hooks/use-substituicoes'
 import { useToast } from '@/hooks/use-toast'
+import { parseDateOnly } from '@/lib/date-only'
 import { UserSelect } from '@/components/UserSelect'
 import { NegocioSelect } from '@/components/NegocioSelect'
 import { Button } from '@/components/ui/button'
@@ -86,12 +87,12 @@ export default function SubstituicaoAjuste() {
       setPrincipalId(data.substituto_principal?.id ?? null)
       setReservaId(data.substituto_reserva?.id ?? null)
       try {
-        setDataInicio(parseISO(data.data_inicio))
+        setDataInicio(parseDateOnly(data.data_inicio))
       } catch {
         setDataInicio(undefined)
       }
       try {
-        setDataFim(parseISO(data.data_fim))
+        setDataFim(parseDateOnly(data.data_fim))
       } catch {
         setDataFim(undefined)
       }
