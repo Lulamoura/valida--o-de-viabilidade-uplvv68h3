@@ -7,6 +7,7 @@ import { useSubstituicaoView } from '@/hooks/use-substituicoes'
 import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 import { useToast } from '@/hooks/use-toast'
 import { MUTATIONS_ENABLED } from '@/lib/feature-flags'
+import { dateOnlyHasNotEnded, formatDateOnly } from '@/lib/date-only'
 import {
   cancelarSubstituicao,
   mapSubstituicaoError,
@@ -43,11 +44,7 @@ function validarReturnTo(raw: unknown): string {
 }
 
 function formatarData(str: string): string {
-  try {
-    return format(parseISO(str), 'dd/MM/yyyy')
-  } catch {
-    return str
-  }
+  return formatDateOnly(str)
 }
 
 function formatarDataHora(str: string): string {
@@ -137,7 +134,7 @@ export default function SubstituicaoDetalhe() {
     MUTATIONS_ENABLED && !!perfilSlug && AJUSTE_CANCELAMENTO_ALLOWLIST.has(perfilSlug)
 
   const podeCancelar =
-    podeMutar && !!data && !data.cancelada_em && new Date() <= new Date(data.data_fim)
+    podeMutar && !!data && !data.cancelada_em && dateOnlyHasNotEnded(data.data_fim)
 
   const podeAjustar = podeMutar && !!data && !data.cancelada_em
 

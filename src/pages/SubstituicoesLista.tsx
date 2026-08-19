@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { format, parseISO } from 'date-fns'
 import { Eye, Plus, SearchX } from 'lucide-react'
 
 import { useConsultaSubstituicoes } from '@/hooks/use-substituicoes'
 import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 import { MUTATIONS_ENABLED } from '@/lib/feature-flags'
+import { formatDateOnly } from '@/lib/date-only'
 import type { SubstituicaoItem } from '@/services/substituicoes'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,14 +38,7 @@ const ORDENAR_POR_VALIDOS = new Set(['data_inicio', 'data_fim', 'created'])
 const ORDEM_VALIDOS = new Set(['asc', 'desc'])
 
 function formatPeriodo(inicio: string, fim: string): string {
-  const formatar = (str: string) => {
-    try {
-      return format(parseISO(str), 'dd/MM/yyyy')
-    } catch {
-      return str
-    }
-  }
-  return `${formatar(inicio)} – ${formatar(fim)}`
+  return `${formatDateOnly(inicio)} – ${formatDateOnly(fim)}`
 }
 
 function SituacaoBadge({ situacao }: { situacao: SubstituicaoItem['situacao'] }) {

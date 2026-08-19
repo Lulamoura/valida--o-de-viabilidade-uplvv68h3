@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import type { SubstituicaoView } from '@/services/substituicoes'
 
 // ─────────────────────────────────────────────────────────────────────
@@ -95,8 +95,8 @@ const VALID_ID = '1234567890abcde'
 
 const FIXTURE_VIEW: SubstituicaoView = {
   id: VALID_ID,
-  data_inicio: '2099-03-10',
-  data_fim: '2099-03-20',
+  data_inicio: '2099-03-10T00:00:00.000Z',
+  data_fim: '2099-03-20T00:00:00.000Z',
   tipo_cobertura: 'integral',
   motivo: 'ferias',
   cancelada_em: null,
@@ -129,6 +129,7 @@ describe('SubstituicaoDetalhe', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     document.body.innerHTML = ''
   })
 
@@ -218,6 +219,18 @@ describe('SubstituicaoDetalhe', () => {
     // Botão "Ajustar" (link de ação).
     expect(await screen.findByText('Ajustar')).toBeInTheDocument()
     // Botão "Cancelar substituição" (abre o diálogo de confirmação).
+    expect(screen.getByText('Cancelar substituição')).toBeInTheDocument()
+  })
+
+  it('mantém o cancelamento disponível até o fim da data civil', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2099, 2, 20, 23, 30))
+    _useParams.mockReturnValue({ id: VALID_ID })
+    obterSubstituicaoMock.mockResolvedValue(FIXTURE_VIEW)
+
+    render(<SubstituicaoDetalhe />)
+    await act(async () => {})
+
     expect(screen.getByText('Cancelar substituição')).toBeInTheDocument()
   })
 

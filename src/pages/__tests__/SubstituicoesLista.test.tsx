@@ -68,8 +68,8 @@ import SubstituicoesLista from '@/pages/SubstituicoesLista'
 // ─────────────────────────────────────────────────────────────────────
 const FIXTURE_ITEM: SubstituicaoItem = {
   id: 'sub-lista-001',
-  data_inicio: '2025-02-10',
-  data_fim: '2025-02-20',
+  data_inicio: '2025-02-10T00:00:00.000Z',
+  data_fim: '2025-02-20T00:00:00.000Z',
   tipo_cobertura: 'integral',
   motivo: 'ferias',
   cancelada_em: null,
@@ -143,6 +143,7 @@ describe('SubstituicoesLista', () => {
 
     expect(await screen.findByText('Nova substituição')).toBeInTheDocument()
     expect(screen.getByText('Titular Fixtura')).toBeInTheDocument()
+    expect(screen.getByText('10/02/2025 – 20/02/2025')).toBeInTheDocument()
   })
 
   it('identifica de forma acessível a região rolável da tabela', async () => {
