@@ -29,6 +29,7 @@ const checks = [
     'RBAC',
     hook.includes('propostaPodeAcessar') && hook.includes("perfil === 'superadministrador'"),
   ],
+  ['fila somente propostas e negociação', hook.includes("['producao_proposta', 'negociacao']")],
   ['idempotência', hook.includes('com_idempotencia') && hook.includes('replay: true')],
   ['concorrência otimista', hook.includes('updated_esperado') && hook.includes('STALE_WRITE')],
   [

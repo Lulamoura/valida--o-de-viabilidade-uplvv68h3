@@ -80,23 +80,15 @@
       if (!ator || !ator.getBool('ativo_comercial'))
         return e.forbiddenError('Usuario comercial necessario')
       var perfil = propostaPerfil($app, ator)
-      var filtro = "inativo=false && (etapa='producao_proposta' || etapa='negociacao')"
-      if (perfil !== 'superadministrador') {
-        filtro += ator.getString('equipe_id')
-          ? " && (responsavel_id='" +
-            ator.id +
-            "' || equipe_id='" +
-            ator.getString('equipe_id') +
-            "')"
-          : " && responsavel_id='" + ator.id + "'"
-      }
-      var negocios = $app.findRecordsByFilter('com_negocios', filtro, '-updated', 100, 0),
+      var negocios = $app.findRecordsByFilter('com_negocios', 'inativo=false', '-updated', 100, 0),
         itens = []
       for (var i = 0; i < negocios.length; i++) {
         var n = negocios[i],
           proposta = null,
           versao = null,
           eventos = []
+        if (['producao_proposta', 'negociacao'].indexOf(n.getString('etapa')) < 0) continue
+        if (!propostaPodeAcessar(ator, perfil, n)) continue
         try {
           proposta = $app.findFirstRecordByData('com_propostas', 'negocio_id', n.id)
           var versoes = $app.findRecordsByFilter(
