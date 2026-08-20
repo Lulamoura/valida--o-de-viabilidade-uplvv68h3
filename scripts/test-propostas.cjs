@@ -37,7 +37,7 @@ const checks = [
   ['idempotência', hook.includes('com_idempotencia') && hook.includes('replay: true')],
   [
     'replay recupera JSON persistido',
-    hook.includes("typeof replay === 'string'") && hook.includes('JSON.parse(replay)'),
+    hook.includes("getString('resultado')") && hook.includes('JSON.parse(known[0].getString'),
   ],
   ['concorrência otimista', hook.includes('updated_esperado') && hook.includes('STALE_WRITE')],
   [
