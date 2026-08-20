@@ -234,11 +234,11 @@ export default function Index() {
   const resumo = data?.resumo
 
   return (
-    <main className="container mx-auto max-w-7xl space-y-6 px-4 py-8 animate-fade-in">
-      <section className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-xl sm:p-8">
-        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-          <div>
-            <div className="mb-3 flex flex-wrap gap-2">
+    <main className="container mx-auto max-w-7xl space-y-5 px-4 py-5 animate-fade-in sm:py-6">
+      <section className="rounded-2xl border border-blue-800/60 bg-gradient-to-r from-blue-950 via-blue-900 to-blue-700 p-5 text-white shadow-lg sm:p-6">
+        <div className="grid gap-4 md:grid-cols-[minmax(13rem,0.7fr)_minmax(28rem,1.3fr)] md:items-end">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap gap-2">
               <Badge variant="outline" className="border-blue-400/40 bg-blue-400/10 text-blue-200">
                 Dashboard V1
               </Badge>
@@ -251,17 +251,20 @@ export default function Index() {
                 </Badge>
               )}
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
-              Visão comercial de {user?.name || 'Usuário'}
+            <h1 className="text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl">
+              Visão comercial
+              <span className="mt-0.5 block text-lg font-semibold text-blue-100 sm:text-xl">
+                de {user?.name || 'Usuário'}
+              </span>
             </h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+            <p className="mt-2 max-w-xl text-sm leading-snug text-blue-100/85">
               Indicadores do modelo canônico PMais, com datas civis de Recife e valores em reais.
             </p>
           </div>
 
           <form
             onSubmit={applyPeriod}
-            className="grid gap-3 rounded-xl border border-white/10 bg-white/5 p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+            className="grid gap-3 rounded-xl border border-white/15 bg-blue-950/35 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
           >
             <div className="space-y-1.5">
               <Label htmlFor="dashboard-inicio" className="text-xs text-slate-200">
@@ -275,7 +278,7 @@ export default function Index() {
                 onChange={(event) =>
                   setDraftPeriod((current) => ({ ...current, inicio: event.target.value }))
                 }
-                className="border-white/20 bg-slate-950/60 text-white"
+                className="border-white/25 bg-blue-950/55 text-white"
               />
             </div>
             <div className="space-y-1.5">
@@ -290,7 +293,7 @@ export default function Index() {
                 onChange={(event) =>
                   setDraftPeriod((current) => ({ ...current, fim: event.target.value }))
                 }
-                className="border-white/20 bg-slate-950/60 text-white"
+                className="border-white/25 bg-blue-950/55 text-white"
               />
             </div>
             <Button type="submit" disabled={loading || draftPeriod.inicio > draftPeriod.fim}>
