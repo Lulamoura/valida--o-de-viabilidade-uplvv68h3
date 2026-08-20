@@ -328,14 +328,10 @@
         if (known[0].getString('payload_hash') !== hash) return e.json(409, { error: 'CONFLICT' })
         if (known[0].getString('estado') !== 'concluido')
           return e.json(409, { error: 'CONCORRENTE' })
-        var replay = known[0].get('resultado') || {}
-        if (typeof replay === 'string') {
-          try {
-            replay = JSON.parse(replay)
-          } catch (_) {
-            replay = {}
-          }
-        }
+        var replay = {}
+        try {
+          replay = JSON.parse(known[0].getString('resultado') || '{}')
+        } catch (_) {}
         return e.json(200, {
           negocio_id: replay.negocio_id,
           proposta_id: replay.proposta_id,
