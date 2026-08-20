@@ -80,7 +80,13 @@
       if (!ator || !ator.getBool('ativo_comercial'))
         return e.forbiddenError('Usuario comercial necessario')
       var perfil = propostaPerfil($app, ator)
-      var negocios = $app.findRecordsByFilter('com_negocios', 'inativo=false', '-updated', 100, 0),
+      var negocios = $app.findRecordsByFilter(
+          'com_negocios',
+          'inativo = false',
+          '-updated',
+          100,
+          0,
+        ),
         itens = []
       for (var i = 0; i < negocios.length; i++) {
         var n = negocios[i],
