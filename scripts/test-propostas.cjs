@@ -38,7 +38,9 @@ const checks = [
   ['concorrência otimista', hook.includes('updated_esperado') && hook.includes('STALE_WRITE')],
   [
     'auditoria server-side',
-    hook.includes('propostaAuditoria') && hook.includes("a.set('origem', 'server-side')"),
+    hook.includes('propostaAuditoria') &&
+      hook.includes("a.set('origem', 'server-side')") &&
+      hook.includes("a.set('acao', 'create')"),
   ],
   [
     'autor e data',

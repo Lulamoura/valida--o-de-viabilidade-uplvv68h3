@@ -33,7 +33,7 @@
     var a = new Record(app.findCollectionByNameOrId('com_auditoria'))
     a.set('collection_name', 'com_proposta_versoes')
     a.set('record_id', versao.id)
-    a.set('acao', 'evento')
+    a.set('acao', 'create')
     a.set('usuario_id', ator.id)
     a.set('comando', comando)
     a.set('command_idempotency_key', chave)
@@ -242,7 +242,7 @@
         var a = new Record(app.findCollectionByNameOrId('com_auditoria'))
         a.set('collection_name', 'com_proposta_versoes')
         a.set('record_id', versao.id)
-        a.set('acao', 'evento')
+        a.set('acao', 'create')
         a.set('usuario_id', ator.id)
         a.set('comando', comando)
         a.set('command_idempotency_key', chave)
@@ -486,7 +486,7 @@
         erro.indexOf('NAO_PREPARADA') >= 0
       )
         return e.json(409, { error: 'TRANSICAO_INVALIDA' })
-      if (erro) return e.json(500, { error: 'INTERNAL' })
+      if (erro) return e.json(500, { error: 'INTERNAL', detalhe: erro })
       return e.json(200, {
         negocio_id: resposta.negocio_id,
         proposta_id: resposta.proposta_id,
