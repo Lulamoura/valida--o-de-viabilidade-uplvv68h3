@@ -11,6 +11,7 @@ import {
   Menu,
   ListChecks,
   BellRing,
+  FileCheck2,
 } from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -66,6 +67,7 @@ export function Layout() {
           { label: 'Qualificação', path: '/qualificacao', icon: ListChecks },
           { label: 'Atividades', path: '/atividades', icon: CalendarClock },
           { label: 'SLAs e alertas', path: '/slas', icon: BellRing },
+          { label: 'Propostas', path: '/propostas', icon: FileCheck2 },
         ]
       : []),
     { label: 'Administração', path: '/foundation', icon: Layers },

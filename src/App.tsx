@@ -12,6 +12,7 @@ import SubstituicaoAjuste from './pages/SubstituicaoAjuste'
 import Qualificacoes from './pages/Qualificacoes'
 import Atividades from './pages/Atividades'
 import Slas from './pages/Slas'
+import Propostas from './pages/Propostas'
 
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
@@ -67,6 +68,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Slas />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/propostas"
+                element={
+                  <ProtectedRoute>
+                    <Propostas />
                   </ProtectedRoute>
                 }
               />
