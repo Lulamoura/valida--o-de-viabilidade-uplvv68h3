@@ -104,12 +104,15 @@ routerAdd(
     if (existentes.length) {
       if (existentes[0].getString('payload_hash') !== payloadHash)
         return e.json(409, { error: 'CONFLICT' })
-      var rr = existentes[0].get('resultado') || {}
+      // O JSVM pode expor JSON persistido como mapa dinâmico sem propriedades
+      // enumeráveis. Os IDs canônicos também estão em registros_afetados e o
+      // estado é derivado do payload já validado, evitando resposta vazia.
+      var afetados = existentes[0].get('registros_afetados') || []
       return e.json(200, {
-        negocio_id: rr.negocio_id || '',
-        etapa: rr.etapa || '',
-        qualificacao: rr.qualificacao || '',
-        historico_id: rr.historico_id || '',
+        negocio_id: afetados.length ? String(afetados[0]) : '',
+        etapa: modo === 'pre_qualificada' ? 'producao_proposta' : 'prospects',
+        qualificacao: modo === 'pre_qualificada' ? 'qualificada' : 'pendente',
+        historico_id: modo === 'pre_qualificada' && afetados.length > 1 ? String(afetados[1]) : '',
         replay: true,
       })
     }
