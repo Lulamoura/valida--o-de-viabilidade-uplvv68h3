@@ -9,6 +9,7 @@ const checks = [
     'rotas GET e POST',
     hook.includes('/backend/v1/propostas/fila') && hook.includes('/backend/v1/propostas/eventos'),
   ],
+  ['helpers isolados no JSVM', hook.includes(';(function () {') && hook.trim().endsWith('})()')],
   [
     'autenticacao e comercial ativo',
     hook.includes('$apis.requireAuth()') && hook.includes('ativo_comercial'),
