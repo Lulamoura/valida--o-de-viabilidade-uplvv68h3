@@ -2,21 +2,35 @@ import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeftRight,
+  BellRing,
   Building2,
   CalendarClock,
   ChevronRight,
+  FileCheck2,
+  KeyRound,
   Layers,
   LayoutDashboard,
-  LogOut,
-  Menu,
   ListChecks,
-  BellRing,
-  FileCheck2,
+  LogOut,
 } from 'lucide-react'
 
+import { ChangePasswordDialog } from '@/components/foundation/ChangePasswordDialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+  useSidebar,
+} from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 import { MUTATIONS_ENABLED } from '@/lib/feature-flags'
@@ -48,12 +62,13 @@ export function getSubstituicoesPageTitle(pathname: string, mutationsEnabled = t
   return null
 }
 
-export function Layout() {
+function LayoutContent() {
   const { user, signOut } = useAuth()
   const { perfilSlug, loading: perfilLoading } = useIsSuperAdmin()
+  const { setOpenMobile } = useSidebar()
   const location = useLocation()
   const navigate = useNavigate()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
 
   const podeVerSubstituicoes =
     !perfilLoading &&
@@ -102,134 +117,124 @@ export function Layout() {
     navigation.find((item) => isActive(item.path))?.label ??
     'Gestão Comercial PMais'
 
-  const Navigation = ({ onNavigate }: { onNavigate?: () => void }) => (
-    <nav aria-label="Navegação principal" className="space-y-1.5">
-      {navigation.map((item) => {
-        const active = isActive(item.path)
-        const Icon = item.icon
-
-        return (
-          <Link
-            key={item.path}
-            to={item.path}
-            onClick={onNavigate}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'group flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors',
-              active
-                ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white',
-            )}
-          >
-            <span className="flex items-center gap-3">
-              <Icon
-                aria-hidden="true"
-                className={cn(
-                  'h-4 w-4',
-                  active ? 'text-white' : 'text-slate-400 group-hover:text-white',
-                )}
-              />
-              {item.label}
-            </span>
-            {active && <ChevronRight aria-hidden="true" className="h-4 w-4 text-indigo-200" />}
-          </Link>
-        )
-      })}
-    </nav>
-  )
-
-  const UserPanel = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-3">
-        <Avatar className="h-9 w-9 border border-indigo-500 bg-indigo-700 text-white">
-          <AvatarFallback className="bg-indigo-700 text-xs font-bold text-white">
-            {userInitials}
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">{user?.name || 'Usuário'}</p>
-          <p className="truncate text-xs text-slate-400">{perfilSlug || user?.email}</p>
-        </div>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={handleLogout}
-        className="shrink-0 text-slate-400 hover:bg-slate-800 hover:text-rose-400"
-        aria-label="Sair do sistema"
-      >
-        <LogOut aria-hidden="true" className="h-4 w-4" />
-        {mobile && <span className="sr-only">Sair</span>}
-      </Button>
-    </div>
-  )
-
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
-      <aside className="fixed inset-y-0 z-30 hidden w-64 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 lg:flex">
-        <Link to="/" className="flex items-center gap-3 border-b border-slate-800 p-5">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
-            <Building2 aria-hidden="true" className="h-5 w-5" />
-          </span>
-          <span>
-            <span className="block text-lg font-bold tracking-tight text-white">
-              PMais Comercial
+    <>
+      <Sidebar collapsible="icon" className="border-r border-slate-800 bg-slate-900 text-slate-100">
+        <SidebarHeader className="border-b border-slate-800 bg-slate-900 p-0">
+          <Link
+            to="/"
+            className="flex items-center gap-3 overflow-hidden p-3.5 group-data-[collapsible=icon]:p-1"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
+              <Building2 aria-hidden="true" className="h-5 w-5" />
             </span>
-            <span className="block text-xs text-slate-400">Gestão Comercial</span>
-          </span>
-        </Link>
+            <span className="min-w-0 group-data-[collapsible=icon]:hidden">
+              <span className="block truncate text-lg font-bold tracking-tight text-white">
+                PMais Comercial
+              </span>
+              <span className="block truncate text-xs text-slate-400">Gestão Comercial</span>
+            </span>
+          </Link>
+        </SidebarHeader>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <Navigation />
-        </div>
+        <SidebarContent className="bg-slate-900 p-2">
+          <nav aria-label="Navegação principal">
+            <SidebarMenu>
+              {navigation.map((item) => {
+                const active = isActive(item.path)
+                const Icon = item.icon
 
-        <div className="border-t border-slate-800 bg-slate-950/50 p-4">
-          <UserPanel />
-        </div>
-      </aside>
+                return (
+                  <SidebarMenuItem key={item.path}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={active}
+                      tooltip={item.label}
+                      className={cn(
+                        'h-10 gap-3 px-3 text-sm font-medium',
+                        active
+                          ? 'bg-indigo-600 font-semibold text-white shadow-sm hover:bg-indigo-500 hover:text-white'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                      )}
+                    >
+                      <Link
+                        to={item.path}
+                        onClick={() => setOpenMobile(false)}
+                        aria-current={active ? 'page' : undefined}
+                      >
+                        <Icon
+                          aria-hidden="true"
+                          className={cn(
+                            'h-4 w-4 shrink-0',
+                            active ? 'text-white' : 'text-slate-400',
+                          )}
+                        />
+                        <span>{item.label}</span>
+                        {active && (
+                          <ChevronRight
+                            aria-hidden="true"
+                            className="ml-auto h-4 w-4 text-indigo-200 group-data-[collapsible=icon]:hidden"
+                          />
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </nav>
+        </SidebarContent>
 
-      <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
+        <SidebarFooter className="border-t border-slate-800 bg-slate-950/50 p-3 group-data-[collapsible=icon]:p-1.5">
+          <div className="flex items-center justify-between gap-2 overflow-hidden">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar className="h-9 w-9 shrink-0 border border-indigo-500 bg-indigo-700 text-white">
+                <AvatarFallback className="bg-indigo-700 text-xs font-bold text-white">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                <p className="truncate text-sm font-semibold text-white">
+                  {user?.name || 'Usuário'}
+                </p>
+                <p className="truncate text-xs text-slate-400">{perfilSlug || user?.email}</p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1 group-data-[collapsible=icon]:hidden">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setChangePasswordOpen(true)}
+                className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-indigo-400"
+                aria-label="Alterar minha senha"
+                title="Alterar minha senha"
+              >
+                <KeyRound aria-hidden="true" className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-rose-400"
+                aria-label="Sair do sistema"
+                title="Sair do sistema"
+              >
+                <LogOut aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
+
+      <SidebarInset className="min-w-0 bg-slate-50 font-sans text-slate-900">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-slate-700 lg:hidden"
-                  aria-label="Abrir menu principal"
-                  aria-expanded={mobileMenuOpen}
-                  aria-controls="mobile-navigation"
-                >
-                  <Menu aria-hidden="true" className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent
-                id="mobile-navigation"
-                side="left"
-                className="flex w-72 flex-col border-r border-slate-800 bg-slate-900 p-0 text-white"
-              >
-                <SheetHeader className="border-b border-slate-800 p-5 text-left">
-                  <SheetTitle className="flex items-center gap-3 text-white">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600">
-                      <Building2 aria-hidden="true" className="h-5 w-5" />
-                    </span>
-                    <span>
-                      <span className="block text-base font-bold">PMais Comercial</span>
-                      <span className="block text-xs font-normal text-slate-400">
-                        Módulo de Gestão
-                      </span>
-                    </span>
-                  </SheetTitle>
-                </SheetHeader>
-                <div className="flex-1 p-4" id="mobile-navigation-links">
-                  <Navigation onNavigate={() => setMobileMenuOpen(false)} />
-                </div>
-                <div className="border-t border-slate-800 bg-slate-950 p-4">
-                  <UserPanel mobile />
-                </div>
-              </SheetContent>
-            </Sheet>
+            <SidebarTrigger
+              className="h-9 w-9 text-slate-700 hover:bg-slate-100"
+              aria-label="Recolher ou expandir menu principal"
+              title="Recolher ou expandir menu principal"
+            />
             <h1 className="truncate text-xl font-bold tracking-tight text-slate-900">
               {pageTitle}
             </h1>
@@ -244,6 +249,16 @@ export function Layout() {
             <span className="max-w-[160px] truncate text-sm font-medium text-slate-800">
               {user?.name || 'Usuário'}
             </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setChangePasswordOpen(true)}
+              className="h-8 w-8 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
+              aria-label="Alterar minha senha"
+              title="Alterar minha senha"
+            >
+              <KeyRound aria-hidden="true" className="h-4 w-4" />
+            </Button>
           </div>
         </header>
 
@@ -255,8 +270,24 @@ export function Layout() {
           <span>Gestão Comercial PMais &copy; {new Date().getFullYear()}</span>
           <span className="text-slate-400">Sistema de Gestão Comercial</span>
         </footer>
-      </div>
-    </div>
+      </SidebarInset>
+
+      <ChangePasswordDialog
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
+        userId={user?.id || ''}
+        requireOldPassword
+        userName={user?.name}
+      />
+    </>
+  )
+}
+
+export function Layout() {
+  return (
+    <SidebarProvider>
+      <LayoutContent />
+    </SidebarProvider>
   )
 }
 
