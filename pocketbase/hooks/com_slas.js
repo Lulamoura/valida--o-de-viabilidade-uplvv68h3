@@ -27,7 +27,24 @@ routerAdd(
       return d.toISOString().slice(0, 10)
     }
     function feriados() {
+      var fixos = [
+        '2026-01-01',
+        '2026-04-03',
+        '2026-04-21',
+        '2026-05-01',
+        '2026-06-04',
+        '2026-06-24',
+        '2026-07-16',
+        '2026-09-07',
+        '2026-10-12',
+        '2026-11-02',
+        '2026-11-15',
+        '2026-11-20',
+        '2026-12-08',
+        '2026-12-25',
+      ]
       var out = {}
+      for (var f = 0; f < fixos.length; f++) out[fixos[f]] = true
       try {
         var rs = $app.findRecordsByFilter('com_calendario_feriados', 'ativo = true', '', 500, 0)
         for (var i = 0; i < rs.length; i++) out[rs[i].getString('data').slice(0, 10)] = true
@@ -160,8 +177,30 @@ routerAdd(
       erro = ''
     try {
       $app.runInTransaction(function (tx) {
-        var p = tx.findFirstRecordByData('com_parametros', 'chave', body.chave)
-        if (p.getString('updated') !== body.updated_esperado) throw new Error('STALE_WRITE')
+        var p = null
+        try {
+          p = tx.findFirstRecordByData('com_parametros', 'chave', body.chave)
+        } catch (_) {
+          if (body.updated_esperado !== 'DEFAULT') throw new Error('STALE_WRITE')
+          var defaults = {
+            'sla.lead_dias_uteis': '1',
+            'sla.proposta_dias_uteis': '5',
+            'sla.negociacao_dias_uteis': '2',
+            'sla.alerta_antecedencia_dias_uteis': '1',
+          }
+          p = new Record(tx.findCollectionByNameOrId('com_parametros'))
+          p.set('chave', body.chave)
+          p.set('valor', defaults[body.chave])
+          p.set('descricao', 'Parâmetro canônico de SLA')
+          p.set('versao', 1)
+          p.set('ativo', true)
+          p.set('tipo', 'numero')
+          p.set('unidade', 'dias_uteis')
+          p.set('regra_validacao', 'inteiro entre 1 e 60')
+          tx.save(p)
+        }
+        if (body.updated_esperado !== 'DEFAULT' && p.getString('updated') !== body.updated_esperado)
+          throw new Error('STALE_WRITE')
         var anterior = p.getString('valor'),
           versao = Number(p.get('versao') || 1) + 1
         p.set('valor', String(valor))
