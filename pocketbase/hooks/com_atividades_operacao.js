@@ -2,40 +2,18 @@
 // GET  /backend/v1/atividades/fila
 // POST /backend/v1/atividades/registrar
 
-function atividadePerfil(ator, app) {
-  try {
-    var id = ator.getString('perfil_id')
-    return id ? app.findRecordById('com_perfis', id).getString('slug') : ''
-  } catch (_) {
-    return ''
-  }
-}
-
-function atividadePodeAcessar(ator, perfil, negocio) {
-  if (perfil === 'superadministrador') return true
-  if (negocio.getString('responsavel_id') === ator.id) return true
-  var equipe = ator.getString('equipe_id')
-  return !!equipe && negocio.getString('equipe_id') === equipe
-}
-
-function atividadeCanonicalize(obj) {
-  if (obj === null || obj === undefined) return 'null'
-  if (typeof obj !== 'object') return JSON.stringify(obj)
-  var keys = Object.keys(obj).sort()
-  var parts = []
-  for (var i = 0; i < keys.length; i++)
-    parts.push(JSON.stringify(keys[i]) + ':' + atividadeCanonicalize(obj[keys[i]]))
-  return '{' + parts.join(',') + '}'
-}
-
-function atividadeRecordId(value) {
-  return /^[a-z0-9]{15}$/.test(value || '')
-}
-
 routerAdd(
   'GET',
   '/backend/v1/atividades/fila',
   (e) => {
+    function perfilDoAtor(ator, app) {
+      try {
+        var id = ator.getString('perfil_id')
+        return id ? app.findRecordById('com_perfis', id).getString('slug') : ''
+      } catch (_) {
+        return ''
+      }
+    }
     var ator = e.auth
     if (!ator) return e.unauthorizedError('Autenticacao necessaria')
     if (!ator.getBool('ativo_comercial')) return e.forbiddenError('Usuario comercial inativo')
@@ -53,7 +31,7 @@ routerAdd(
     )
       return e.json(400, { error: 'VALIDATION' })
 
-    var perfil = atividadePerfil(ator, $app)
+    var perfil = perfilDoAtor(ator, $app)
     var filtro = "inativo = false && resultado = ''"
     if (perfil !== 'superadministrador') {
       var equipe = ator.getString('equipe_id')
@@ -129,6 +107,32 @@ routerAdd(
   'POST',
   '/backend/v1/atividades/registrar',
   (e) => {
+    function perfilDoAtor(ator, app) {
+      try {
+        var id = ator.getString('perfil_id')
+        return id ? app.findRecordById('com_perfis', id).getString('slug') : ''
+      } catch (_) {
+        return ''
+      }
+    }
+    function podeAcessar(ator, perfil, negocio) {
+      if (perfil === 'superadministrador') return true
+      if (negocio.getString('responsavel_id') === ator.id) return true
+      var equipe = ator.getString('equipe_id')
+      return !!equipe && negocio.getString('equipe_id') === equipe
+    }
+    function canonicalize(obj) {
+      if (obj === null || obj === undefined) return 'null'
+      if (typeof obj !== 'object') return JSON.stringify(obj)
+      var keys = Object.keys(obj).sort()
+      var parts = []
+      for (var i = 0; i < keys.length; i++)
+        parts.push(JSON.stringify(keys[i]) + ':' + canonicalize(obj[keys[i]]))
+      return '{' + parts.join(',') + '}'
+    }
+    function recordId(value) {
+      return /^[a-z0-9]{15}$/.test(value || '')
+    }
     var ator = e.auth
     if (!ator) return e.unauthorizedError('Autenticacao necessaria')
     if (!ator.getBool('ativo_comercial')) return e.forbiddenError('Usuario comercial inativo')
@@ -194,8 +198,8 @@ routerAdd(
       return e.json(400, { error: 'VALIDATION' })
     if (op === 'planejar') {
       if (
-        !atividadeRecordId(body.negocio_id) ||
-        !atividadeRecordId(body.responsavel_id) ||
+        !recordId(body.negocio_id) ||
+        !recordId(body.responsavel_id) ||
         tipos.indexOf(body.tipo) === -1
       )
         return e.json(400, { error: 'VALIDATION' })
@@ -203,7 +207,7 @@ routerAdd(
       if (!body.planejada_para || isNaN(planejada.getTime()))
         return e.json(400, { error: 'DATA_INVALIDA' })
     } else {
-      if (!atividadeRecordId(body.atividade_id)) return e.json(400, { error: 'VALIDATION' })
+      if (!recordId(body.atividade_id)) return e.json(400, { error: 'VALIDATION' })
       if (op === 'realizar' && !resultado) return e.json(400, { error: 'RESULTADO_OBRIGATORIO' })
       if (op === 'cancelar' && !justificativa)
         return e.json(400, { error: 'JUSTIFICATIVA_OBRIGATORIA' })
@@ -214,7 +218,7 @@ routerAdd(
       var nome = permitidos[p]
       if (nome !== 'command_idempotency_key' && body[nome] !== undefined) payload[nome] = body[nome]
     }
-    var hash = $security.sha256(atividadeCanonicalize(payload))
+    var hash = $security.sha256(canonicalize(payload))
     var comando = 'registrar_atividade'
     var anteriores = []
     try {
@@ -247,12 +251,12 @@ routerAdd(
       $app.runInTransaction(function (tx) {
         var usuario = tx.findRecordById('users', ator.id)
         if (!usuario.getBool('ativo_comercial')) throw new Error('FORBIDDEN')
-        var perfil = atividadePerfil(usuario, tx)
+        var perfil = perfilDoAtor(usuario, tx)
         var atividade = null
         var negocio = null
         if (op === 'planejar') {
           negocio = tx.findRecordById('com_negocios', body.negocio_id)
-          if (!atividadePodeAcessar(usuario, perfil, negocio)) throw new Error('FORBIDDEN')
+          if (!podeAcessar(usuario, perfil, negocio)) throw new Error('FORBIDDEN')
           if (negocio.getBool('inativo') || negocio.getString('resultado'))
             throw new Error('NEGOCIO_FECHADO')
           if (negocio.getString('updated') !== body.updated_esperado) throw new Error('STALE_WRITE')
@@ -272,7 +276,7 @@ routerAdd(
         } else {
           atividade = tx.findRecordById('com_atividades', body.atividade_id)
           negocio = tx.findRecordById('com_negocios', atividade.getString('negocio_id'))
-          if (!atividadePodeAcessar(usuario, perfil, negocio)) throw new Error('FORBIDDEN')
+          if (!podeAcessar(usuario, perfil, negocio)) throw new Error('FORBIDDEN')
           if (atividade.getString('updated') !== body.updated_esperado)
             throw new Error('STALE_WRITE')
           if (atividade.getString('estado') !== 'planejada') throw new Error('JA_TERMINAL')
@@ -310,7 +314,7 @@ routerAdd(
         aud.set('command_idempotency_key', body.command_idempotency_key)
         aud.set('transacao_id', $security.sha256(body.command_idempotency_key + '|' + atividade.id))
         aud.set('evento_em', new Date())
-        aud.set('snapshot_hash', $security.sha256(atividadeCanonicalize(evidencia)))
+        aud.set('snapshot_hash', $security.sha256(canonicalize(evidencia)))
         aud.set('snapshot_hash_versao', '1')
         aud.set('evidencia_estruturada', evidencia)
         aud.set('perfil', perfil)

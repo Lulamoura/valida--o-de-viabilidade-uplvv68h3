@@ -12,13 +12,14 @@ function check(name, condition) {
 }
 
 check('rotas GET e POST', hook.includes("'GET'") && hook.includes("'POST'"))
+check('helpers isolados nos handlers do JSVM', !/^function /m.test(hook))
 check('autenticação obrigatória', hook.includes('$apis.requireAuth()'))
 check(
   'fila sinaliza três situações',
   ['sem_proxima_acao', 'vencida', 'programada'].every((v) => hook.includes(v)),
 )
 check('somente negócios abertos', hook.includes("inativo = false && resultado = ''"))
-check('escopo RBAC por responsável ou equipe', hook.includes('atividadePodeAcessar'))
+check('escopo RBAC por responsável ou equipe', hook.includes('podeAcessar'))
 check(
   'operações planejar realizar cancelar',
   ['planejar', 'realizar', 'cancelar'].every((v) => hook.includes(v)),
@@ -46,4 +47,4 @@ check(
   app.includes('path="/atividades"') && app.includes('<Atividades />'),
 )
 
-console.log(`\nRESULTADO: ${passed}/15 aprovados`)
+console.log(`\nRESULTADO: ${passed}/16 aprovados`)
