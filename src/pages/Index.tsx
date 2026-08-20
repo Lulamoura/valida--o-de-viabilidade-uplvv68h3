@@ -1,5 +1,15 @@
 import { useState, type FormEvent } from 'react'
-import { AlertCircle, BriefcaseBusiness, RefreshCw, Target, Trophy, UserCheck } from 'lucide-react'
+import {
+  AlertCircle,
+  BriefcaseBusiness,
+  CircleDollarSign,
+  ListChecks,
+  RefreshCw,
+  ShieldCheck,
+  Target,
+  Trophy,
+  UserCheck,
+} from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useDashboardResumo } from '@/hooks/use-dashboard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -74,6 +84,42 @@ function MetricCard({ title, value, detail, icon: Icon }: MetricCardProps) {
       <CardContent>
         <p className="text-2xl font-bold tracking-tight text-slate-950">{value}</p>
         <p className="mt-1 text-xs text-slate-500">{detail}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+interface DetailItem {
+  label: string
+  value: string
+}
+
+interface DetailCardProps {
+  title: string
+  description: string
+  items: DetailItem[]
+  icon: typeof BriefcaseBusiness
+}
+
+function DetailCard({ title, description, items, icon: Icon }: DetailCardProps) {
+  return (
+    <Card aria-label={title}>
+      <CardHeader className="space-y-1 pb-3">
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-blue-700" aria-hidden="true" />
+          <CardTitle className="text-base text-slate-900">{title}</CardTitle>
+        </div>
+        <p className="text-xs text-slate-500">{description}</p>
+      </CardHeader>
+      <CardContent>
+        <dl className="divide-y divide-slate-100">
+          {items.map((item) => (
+            <div key={item.label} className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="text-sm text-slate-600">{item.label}</dt>
+              <dd className="text-sm font-semibold text-slate-950">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
       </CardContent>
     </Card>
   )
@@ -237,6 +283,95 @@ export default function Index() {
             detail={`${resumo.cobertura.responsavel.preenchidos} de ${resumo.cobertura.responsavel.total} negócios`}
             icon={UserCheck}
           />
+        </section>
+      ) : null}
+
+      {resumo ? (
+        <section aria-labelledby="dashboard-details-title" className="space-y-4">
+          <div>
+            <h2 id="dashboard-details-title" className="text-lg font-bold text-slate-950">
+              Detalhamento comercial
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Composição, valores e qualidade cadastral do período selecionado.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <DetailCard
+              title="Composição dos negócios"
+              description="Distribuição pelo resultado canônico atual."
+              icon={BriefcaseBusiness}
+              items={[
+                { label: 'Abertos', value: String(resumo.situacao.abertos) },
+                { label: 'Ganhos', value: String(resumo.situacao.ganhos) },
+                { label: 'Perdidos', value: String(resumo.situacao.perdidos) },
+                { label: 'Desqualificados', value: String(resumo.situacao.desqualificados) },
+              ]}
+            />
+            <DetailCard
+              title="Qualificação"
+              description="Situação das decisões de qualificação registradas."
+              icon={ListChecks}
+              items={[
+                { label: 'Pendentes', value: String(resumo.qualificacao.pendentes) },
+                { label: 'Qualificadas', value: String(resumo.qualificacao.qualificadas) },
+                { label: 'Desqualificadas', value: String(resumo.qualificacao.desqualificadas) },
+              ]}
+            />
+            <DetailCard
+              title="Valores e tickets"
+              description="Valores monetários comprovados, apresentados em reais."
+              icon={CircleDollarSign}
+              items={[
+                {
+                  label: 'Total precificado',
+                  value: formatCurrency(resumo.valores.total_precificado_centavos),
+                },
+                {
+                  label: 'Valor perdido',
+                  value: formatCurrency(resumo.valores.perdido_centavos),
+                },
+                {
+                  label: 'Ticket médio precificado',
+                  value:
+                    resumo.valores.ticket_medio_precificado_centavos === null
+                      ? 'N/D'
+                      : formatCurrency(resumo.valores.ticket_medio_precificado_centavos),
+                },
+                {
+                  label: 'Ticket médio ganho',
+                  value:
+                    resumo.valores.ticket_medio_ganho_centavos === null
+                      ? 'N/D'
+                      : formatCurrency(resumo.valores.ticket_medio_ganho_centavos),
+                },
+              ]}
+            />
+            <DetailCard
+              title="Qualidade dos dados"
+              description="Cobertura e exceções relevantes do cadastro comercial."
+              icon={ShieldCheck}
+              items={[
+                {
+                  label: 'Cobertura de origem',
+                  value: formatPercent(resumo.cobertura.origem.percentual),
+                },
+                {
+                  label: 'Origem preenchida',
+                  value: `${resumo.cobertura.origem.preenchidos} de ${resumo.cobertura.origem.total}`,
+                },
+                {
+                  label: 'Negócios com valor zero',
+                  value: String(resumo.valores.negocios_valor_zero),
+                },
+                {
+                  label: 'Marcadores de um centavo',
+                  value: String(resumo.valores.negocios_marcador_um_centavo),
+                },
+              ]}
+            />
+          </div>
         </section>
       ) : null}
 

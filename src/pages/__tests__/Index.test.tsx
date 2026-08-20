@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 
 const useDashboardResumo = vi.hoisted(() => vi.fn())
 
@@ -95,6 +95,30 @@ describe('Dashboard V1', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar período' }))
 
     expect(useDashboardResumo).toHaveBeenLastCalledWith({ inicio: '2026-01-01', fim: '2026-06-30' })
+  })
+
+  it('detalha composição e qualificação sem inferir resultados', () => {
+    render(<Index />)
+
+    const composicao = screen.getByLabelText('Composição dos negócios')
+    const qualificacao = screen.getByLabelText('Qualificação')
+
+    expect(within(composicao).getByText('Perdidos')).toBeInTheDocument()
+    expect(within(composicao).getByText('Desqualificados')).toBeInTheDocument()
+    expect(within(qualificacao).getByText('Pendentes')).toBeInTheDocument()
+    expect(within(qualificacao).getByText('Desqualificadas')).toBeInTheDocument()
+  })
+
+  it('exibe valores, tickets e qualidade cadastral retornados pelo backend', () => {
+    render(<Index />)
+
+    const valores = screen.getByLabelText('Valores e tickets')
+    const qualidade = screen.getByLabelText('Qualidade dos dados')
+
+    expect(within(valores).getByText('R$ 3.000,00')).toBeInTheDocument()
+    expect(within(valores).getByText('Ticket médio ganho')).toBeInTheDocument()
+    expect(within(qualidade).getByText('Cobertura de origem')).toBeInTheDocument()
+    expect(within(qualidade).getByText('Marcadores de um centavo')).toBeInTheDocument()
   })
 
   it('mostra estado de carregamento acessível', () => {
