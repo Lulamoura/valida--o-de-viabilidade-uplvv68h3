@@ -29,6 +29,7 @@ check(
   'idempotência persistida e replay',
   hook.includes('com_idempotencia') && hook.includes('replay = true'),
 )
+check('claim idempotente preenche lease obrigatória', hook.includes("idem.set('lease_ate'"))
 check('auditoria server-side', hook.includes('com_auditoria') && hook.includes("'server-side'"))
 check('resultado obrigatório ao realizar', hook.includes('RESULTADO_OBRIGATORIO'))
 check('justificativa obrigatória ao cancelar', hook.includes('JUSTIFICATIVA_OBRIGATORIA'))
@@ -47,4 +48,4 @@ check(
   app.includes('path="/atividades"') && app.includes('<Atividades />'),
 )
 
-console.log(`\nRESULTADO: ${passed}/16 aprovados`)
+console.log(`\nRESULTADO: ${passed}/17 aprovados`)
