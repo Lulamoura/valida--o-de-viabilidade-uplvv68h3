@@ -107,12 +107,15 @@ routerAdd(
       // O JSVM pode expor JSON persistido como mapa dinâmico sem propriedades
       // enumeráveis. Os IDs canônicos também estão em registros_afetados e o
       // estado é derivado do payload já validado, evitando resposta vazia.
-      var afetados = existentes[0].get('registros_afetados') || []
+      var afetados = []
+      try {
+        afetados = JSON.parse(existentes[0].getString('registros_afetados') || '[]')
+      } catch (_) {}
       return e.json(200, {
-        negocio_id: afetados.length ? String(afetados[0]) : '',
+        negocio_id: afetados.length ? afetados[0] : '',
         etapa: modo === 'pre_qualificada' ? 'producao_proposta' : 'prospects',
         qualificacao: modo === 'pre_qualificada' ? 'qualificada' : 'pendente',
-        historico_id: modo === 'pre_qualificada' && afetados.length > 1 ? String(afetados[1]) : '',
+        historico_id: modo === 'pre_qualificada' && afetados.length > 1 ? afetados[1] : '',
         replay: true,
       })
     }
