@@ -30,7 +30,9 @@ const checks = [
   ['replay imutavel', /replay:\s*true/.test(src)],
   [
     'replay recupera ids canonicos',
-    src.includes("get('registros_afetados')") && src.includes('String(afetados[0])'),
+    src.includes("getString('registros_afetados')") &&
+      src.includes('JSON.parse') &&
+      src.includes('negocio_id: afetados.length ? afetados[0]'),
   ],
 ]
 let fail = 0
