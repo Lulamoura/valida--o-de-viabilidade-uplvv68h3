@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const pbSend = vi.hoisted(() => vi.fn())
-const mutationGate = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/pocketbase/client', () => ({ default: { send: pbSend } }))
-vi.mock('@/lib/feature-flags', () => ({ assertMutationsEnabled: mutationGate }))
 
 import {
   decidirQualificacao,
@@ -23,10 +21,9 @@ describe('qualificações', () => {
       method: 'GET',
       query: { pagina: '2', por_pagina: '10' },
     })
-    expect(mutationGate).not.toHaveBeenCalled()
   })
 
-  it('aplica o gate antes de enviar a decisão', async () => {
+  it('envia a decisão somente pelo endpoint protegido', async () => {
     const payload = {
       negocio_id: 'abc123def456ghi',
       decisao: 'qualificada' as const,
@@ -36,7 +33,6 @@ describe('qualificações', () => {
       command_idempotency_key: 'qualificacao:abc:key',
     }
     await decidirQualificacao(payload)
-    expect(mutationGate).toHaveBeenCalledWith('/backend/v1/qualificacoes/decidir')
     expect(pbSend).toHaveBeenCalledWith(
       '/backend/v1/qualificacoes/decidir',
       expect.objectContaining({ method: 'POST' }),

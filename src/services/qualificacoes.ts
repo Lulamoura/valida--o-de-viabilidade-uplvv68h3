@@ -1,5 +1,4 @@
 import pb from '@/lib/pocketbase/client'
-import { assertMutationsEnabled } from '@/lib/feature-flags'
 
 export interface QualificacaoPendente {
   id: string
@@ -38,7 +37,6 @@ export function listarQualificacoesPendentes(pagina = 1, porPagina = 20) {
 }
 
 export function decidirQualificacao(payload: DecidirQualificacaoPayload) {
-  assertMutationsEnabled('/backend/v1/qualificacoes/decidir')
   return pb.send<{ negocio_id: string; qualificacao: string; historico_id: string }>(
     '/backend/v1/qualificacoes/decidir',
     {

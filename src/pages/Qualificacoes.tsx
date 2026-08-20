@@ -16,7 +16,6 @@ import {
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import { MUTATIONS_ENABLED } from '@/lib/feature-flags'
 import {
   decidirQualificacao,
   listarQualificacoesPendentes,
@@ -102,14 +101,6 @@ export default function Qualificacoes() {
         </Button>
       </div>
 
-      {!MUTATIONS_ENABLED && (
-        <Alert>
-          <AlertTitle>Operação em modo de consulta</AlertTitle>
-          <AlertDescription>
-            As decisões ficam disponíveis somente no ambiente com mutações autorizadas.
-          </AlertDescription>
-        </Alert>
-      )}
       {error && (
         <Alert variant="destructive">
           <AlertTitle>Falha ao carregar</AlertTitle>
@@ -156,22 +147,20 @@ export default function Qualificacoes() {
                   <span className="mx-2">•</span>
                   <span>Responsável: {item.responsavel?.nome || 'não informado'}</span>
                 </div>
-                {MUTATIONS_ENABLED && (
-                  <div className="flex gap-2">
-                    <Button className="flex-1 gap-2" onClick={() => abrir(item, 'qualificada')}>
-                      <CheckCircle2 className="h-4 w-4" />
-                      Qualificar
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="flex-1 gap-2 text-rose-700"
-                      onClick={() => abrir(item, 'desqualificada')}
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Desqualificar
-                    </Button>
-                  </div>
-                )}
+                <div className="flex gap-2">
+                  <Button className="flex-1 gap-2" onClick={() => abrir(item, 'qualificada')}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Qualificar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 gap-2 text-rose-700"
+                    onClick={() => abrir(item, 'desqualificada')}
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Desqualificar
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
