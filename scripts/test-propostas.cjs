@@ -35,6 +35,10 @@ const checks = [
   ],
   ['fila somente propostas e negociação', hook.includes("['producao_proposta', 'negociacao']")],
   ['idempotência', hook.includes('com_idempotencia') && hook.includes('replay: true')],
+  [
+    'replay recupera JSON persistido',
+    hook.includes("typeof replay === 'string'") && hook.includes('JSON.parse(replay)'),
+  ],
   ['concorrência otimista', hook.includes('updated_esperado') && hook.includes('STALE_WRITE')],
   [
     'auditoria server-side',

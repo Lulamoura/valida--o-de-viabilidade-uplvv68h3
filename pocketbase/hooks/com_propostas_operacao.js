@@ -329,6 +329,13 @@
         if (known[0].getString('estado') !== 'concluido')
           return e.json(409, { error: 'CONCORRENTE' })
         var replay = known[0].get('resultado') || {}
+        if (typeof replay === 'string') {
+          try {
+            replay = JSON.parse(replay)
+          } catch (_) {
+            replay = {}
+          }
+        }
         return e.json(200, {
           negocio_id: replay.negocio_id,
           proposta_id: replay.proposta_id,
@@ -486,7 +493,7 @@
         erro.indexOf('NAO_PREPARADA') >= 0
       )
         return e.json(409, { error: 'TRANSICAO_INVALIDA' })
-      if (erro) return e.json(500, { error: 'INTERNAL', detalhe: erro })
+      if (erro) return e.json(500, { error: 'INTERNAL' })
       return e.json(200, {
         negocio_id: resposta.negocio_id,
         proposta_id: resposta.proposta_id,
