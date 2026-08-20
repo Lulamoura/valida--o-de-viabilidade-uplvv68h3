@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Trophy,
 } from 'lucide-react'
 
 import { ChangePasswordDialog } from '@/components/foundation/ChangePasswordDialog'
@@ -83,6 +84,7 @@ function LayoutContent() {
           { label: 'Atividades', path: '/atividades', icon: CalendarClock },
           { label: 'SLAs e alertas', path: '/slas', icon: BellRing },
           { label: 'Propostas', path: '/propostas', icon: FileCheck2 },
+          { label: 'Fechamentos', path: '/fechamentos', icon: Trophy },
         ]
       : []),
     { label: 'Administração', path: '/foundation', icon: Layers },
