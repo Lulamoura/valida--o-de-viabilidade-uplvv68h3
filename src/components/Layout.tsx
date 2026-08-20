@@ -153,7 +153,7 @@ function LayoutContent() {
                       className={cn(
                         'h-10 gap-3 px-3 text-sm font-medium',
                         active
-                          ? 'bg-indigo-600 font-semibold text-white shadow-sm hover:bg-indigo-500 hover:text-white'
+                          ? '!bg-indigo-600 font-semibold !text-white shadow-sm hover:!bg-indigo-500 hover:!text-white'
                           : 'text-slate-300 hover:bg-slate-800 hover:text-white',
                       )}
                     >
