@@ -241,8 +241,12 @@ routerAdd(
       if (ar.getString('payload_hash') !== hash) return e.json(409, { error: 'CONFLICT' })
       if (ar.getString('estado') === 'executando') return e.json(409, { error: 'CONCORRENTE' })
       var antigo = ar.get('resultado') || {}
-      antigo.replay = true
-      return e.json(200, antigo)
+      return e.json(200, {
+        atividade_id: antigo.atividade_id || '',
+        negocio_id: antigo.negocio_id || '',
+        estado: antigo.estado || '',
+        replay: true,
+      })
     }
 
     var resposta = null

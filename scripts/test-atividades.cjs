@@ -27,8 +27,9 @@ check(
 check('concorrência otimista', hook.includes('updated_esperado') && hook.includes('STALE_WRITE'))
 check(
   'idempotência persistida e replay',
-  hook.includes('com_idempotencia') && hook.includes('replay = true'),
+  hook.includes('com_idempotencia') && hook.includes('replay: true'),
 )
+check('replay constrói resposta nova', !hook.includes('antigo.replay = true'))
 check('claim idempotente preenche lease obrigatória', hook.includes("idem.set('lease_ate'"))
 check('auditoria server-side', hook.includes('com_auditoria') && hook.includes("'server-side'"))
 check('resultado obrigatório ao realizar', hook.includes('RESULTADO_OBRIGATORIO'))
@@ -48,4 +49,4 @@ check(
   app.includes('path="/atividades"') && app.includes('<Atividades />'),
 )
 
-console.log(`\nRESULTADO: ${passed}/17 aprovados`)
+console.log(`\nRESULTADO: ${passed}/18 aprovados`)
