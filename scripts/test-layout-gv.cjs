@@ -10,7 +10,7 @@ const tests = [
   ['atalho de teclado e estado persistente', layout.includes('<SidebarProvider>')],
   [
     'identidade visual slate e indigo',
-    layout.includes('bg-slate-900') && layout.includes('bg-indigo-600'),
+    layout.includes('bg-slate-900') && layout.includes('!bg-indigo-600'),
   ],
   [
     'chave junto ao usuário',
