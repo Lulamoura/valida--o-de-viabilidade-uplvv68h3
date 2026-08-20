@@ -19,6 +19,10 @@ var checks = [
     'idempotência persistida',
     source.includes("'com_idempotencia'") && source.includes("'decidir_qualificacao'"),
   ],
+  [
+    'replay conhecido é resolvido antes da transação',
+    source.indexOf('var replayExistente') < source.indexOf('$app.runInTransaction'),
+  ],
   ['concorrência otimista', source.includes('updated_esperado') && source.includes('STALE_WRITE')],
   ['histórico append-only', source.includes("'com_qualificacao_historico'")],
   [
