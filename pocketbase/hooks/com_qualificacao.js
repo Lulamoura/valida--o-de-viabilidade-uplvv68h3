@@ -157,6 +157,40 @@ routerAdd(
     var payloadHash = $security.sha256(canonicalize(payload))
     var resposta = null
     var txError = ''
+
+    // Replay conhecido é resolvido antes de abrir uma nova transação. Em
+    // SQLite, tentar o INSERT duplicado dentro da transação pode invalidar o
+    // contexto antes da releitura do registro vencedor.
+    var replayExistente = []
+    try {
+      replayExistente = $app.findRecordsByFilter(
+        'com_idempotencia',
+        "ator_id='" +
+          ator.id +
+          "' && comando='decidir_qualificacao' && command_idempotency_key='" +
+          body.command_idempotency_key +
+          "'",
+        '',
+        1,
+        0,
+      )
+    } catch (_) {}
+    if (replayExistente.length) {
+      var replayRec = replayExistente[0]
+      if (replayRec.getString('payload_hash') !== payloadHash)
+        return e.json(409, { error: 'CONFLICT' })
+      if (replayRec.getString('estado') === 'executando')
+        return e.json(409, { error: 'CONCORRENTE' })
+      if (replayRec.getString('estado') !== 'concluido') return e.json(409, { error: 'CONFLICT' })
+      var replayResultado = replayRec.get('resultado') || {}
+      return e.json(200, {
+        negocio_id: replayResultado.negocio_id || body.negocio_id,
+        qualificacao: replayResultado.qualificacao || body.decisao,
+        historico_id: replayResultado.historico_id || '',
+        replay: true,
+      })
+    }
+
     try {
       $app.runInTransaction(function (txApp) {
         var idemCol = txApp.findCollectionByNameOrId('com_idempotencia')
