@@ -177,11 +177,13 @@ routerAdd(
       erro = ''
     try {
       $app.runInTransaction(function (tx) {
-        var p = null
+        var p = null,
+          criado = false
         try {
           p = tx.findFirstRecordByData('com_parametros', 'chave', body.chave)
         } catch (_) {
           if (body.updated_esperado !== 'DEFAULT') throw new Error('STALE_WRITE')
+          criado = true
           var defaults = {
             'sla.lead_dias_uteis': '1',
             'sla.proposta_dias_uteis': '5',
@@ -199,12 +201,14 @@ routerAdd(
           p.set('regra_validacao', 'inteiro entre 1 e 60')
           tx.save(p)
         }
-        if (body.updated_esperado !== 'DEFAULT' && p.getString('updated') !== body.updated_esperado)
+        if (
+          (!criado && body.updated_esperado === 'DEFAULT') ||
+          (body.updated_esperado !== 'DEFAULT' && p.getString('updated') !== body.updated_esperado)
+        )
           throw new Error('STALE_WRITE')
         var anterior = p.getString('valor'),
           versao = Number(p.get('versao') || 1) + 1
         p.set('valor', String(valor))
-        p.set('versao', versao)
         tx.save(p)
         var evidencia = {
           chave: body.chave,
@@ -228,19 +232,21 @@ routerAdd(
         a.set('snapshot_hash_versao', '1')
         a.set('sequencia', versao)
         tx.save(a)
-        resposta = {
-          id: p.id,
-          chave: body.chave,
-          valor: String(valor),
-          versao: versao,
-          updated: p.getString('updated'),
-        }
+        resposta = { id: p.id }
       })
     } catch (err) {
       erro = String(err)
     }
     if (erro.indexOf('STALE_WRITE') !== -1) return e.json(409, { error: 'STALE_WRITE' })
     if (erro) return e.json(500, { error: 'INTERNAL' })
+    var salvo = $app.findRecordById('com_parametros', resposta.id)
+    resposta = {
+      id: salvo.id,
+      chave: body.chave,
+      valor: salvo.getString('valor'),
+      versao: Number(salvo.get('versao') || 1),
+      updated: salvo.getString('updated'),
+    }
     return e.json(200, resposta)
   },
   $apis.requireAuth(),

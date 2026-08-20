@@ -36,7 +36,14 @@ const checks = [
     hook.includes("body.updated_esperado !== 'DEFAULT'") &&
       hook.includes("new Record(tx.findCollectionByNameOrId('com_parametros'))"),
   ],
-  ['concorrencia otimista', hook.includes('updated_esperado') && hook.includes('STALE_WRITE')],
+  [
+    'concorrencia otimista inclusive contra DEFAULT obsoleto',
+    hook.includes("!criado && body.updated_esperado === 'DEFAULT'") && hook.includes('STALE_WRITE'),
+  ],
+  [
+    'versao delegada ao historico canonico',
+    !hook.includes("p.set('versao', versao)") && hook.includes("salvo.get('versao')"),
+  ],
   [
     'auditoria server side',
     hook.includes('alterar_parametro_sla') && hook.includes("'server-side'"),
