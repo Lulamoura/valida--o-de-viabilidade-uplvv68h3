@@ -486,7 +486,7 @@
         erro.indexOf('NAO_PREPARADA') >= 0
       )
         return e.json(409, { error: 'TRANSICAO_INVALIDA' })
-      if (erro) return e.json(500, { error: 'INTERNAL' })
+      if (erro) return e.json(500, { error: 'INTERNAL', detalhe: erro })
       return e.json(200, {
         negocio_id: resposta.negocio_id,
         proposta_id: resposta.proposta_id,
