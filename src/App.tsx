@@ -13,6 +13,7 @@ import Qualificacoes from './pages/Qualificacoes'
 import Atividades from './pages/Atividades'
 import Slas from './pages/Slas'
 import Propostas from './pages/Propostas'
+import Fechamentos from './pages/Fechamentos'
 
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
@@ -76,6 +77,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Propostas />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/fechamentos"
+                element={
+                  <ProtectedRoute>
+                    <Fechamentos />
                   </ProtectedRoute>
                 }
               />
