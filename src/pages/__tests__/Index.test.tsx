@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 
 const useDashboardResumo = vi.hoisted(() => vi.fn())
+const getEquipes = vi.hoisted(() => vi.fn())
+const getUsers = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({ user: { id: 'u1', name: 'Spok Agente Digital' } }),
 }))
 
 vi.mock('@/hooks/use-dashboard', () => ({ useDashboardResumo }))
+vi.mock('@/services/foundation', () => ({ getEquipes }))
+vi.mock('@/services/users', () => ({ getUsers }))
 
 import Index, { createDefaultDashboardPeriod } from '@/pages/Index'
 
@@ -57,6 +61,14 @@ const dashboardResponse = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  getEquipes.mockResolvedValue([
+    { id: 'team1', nome: 'Equipe Recife', ativo: true },
+    { id: 'team2', nome: 'Equipe inativa', ativo: false },
+  ])
+  getUsers.mockResolvedValue([
+    { id: 'user1', name: 'Ana Gestora', ativo_comercial: true },
+    { id: 'user2', name: 'Bruno Inativo', ativo_comercial: false },
+  ])
   useDashboardResumo.mockReturnValue({
     data: dashboardResponse,
     loading: false,
@@ -95,6 +107,41 @@ describe('Dashboard V1', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar período' }))
 
     expect(useDashboardResumo).toHaveBeenLastCalledWith({ inicio: '2026-01-01', fim: '2026-06-30' })
+  })
+
+  it('aplica e limpa filtros de equipe, responsável e negócios inativos', async () => {
+    render(<Index />)
+
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Equipe' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Equipe Recife' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Responsável' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Bruno Inativo (inativo)' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Incluir negócios inativos' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
+
+    expect(useDashboardResumo).toHaveBeenLastCalledWith({
+      inicio: expect.any(String),
+      fim: expect.any(String),
+      equipe_id: 'team1',
+      responsavel_id: 'user2',
+      incluir_inativos: true,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar' }))
+    expect(useDashboardResumo).toHaveBeenLastCalledWith({
+      inicio: expect.any(String),
+      fim: expect.any(String),
+    })
+  })
+
+  it('mantém o resumo disponível quando as opções de filtro falham', async () => {
+    getEquipes.mockRejectedValueOnce(new Error('falha controlada'))
+    render(<Index />)
+
+    expect(
+      await screen.findByText(/As opções de equipe e responsável não puderam ser carregadas/),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Detalhamento comercial')).toBeInTheDocument()
   })
 
   it('detalha composição e qualificação sem inferir resultados', () => {
