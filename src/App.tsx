@@ -9,6 +9,7 @@ import SubstituicoesLista from './pages/SubstituicoesLista'
 import SubstituicaoDetalhe from './pages/SubstituicaoDetalhe'
 import SubstituicaoNova from './pages/SubstituicaoNova'
 import SubstituicaoAjuste from './pages/SubstituicaoAjuste'
+import Qualificacoes from './pages/Qualificacoes'
 
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
@@ -40,6 +41,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Foundation />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/qualificacao"
+                element={
+                  <ProtectedRoute>
+                    <Qualificacoes />
                   </ProtectedRoute>
                 }
               />

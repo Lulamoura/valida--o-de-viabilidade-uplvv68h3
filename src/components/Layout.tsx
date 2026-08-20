@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  ListChecks,
 } from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -58,6 +59,9 @@ export function Layout() {
 
   const navigation: NavigationItem[] = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    ...(user?.ativo_comercial === true
+      ? [{ label: 'Qualificação', path: '/qualificacao', icon: ListChecks }]
+      : []),
     { label: 'Administração', path: '/foundation', icon: Layers },
     ...(podeVerSubstituicoes
       ? [{ label: 'Substituições', path: '/substituicoes', icon: ArrowLeftRight }]
