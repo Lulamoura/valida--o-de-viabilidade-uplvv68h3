@@ -28,6 +28,10 @@ const checks = [
   ['proxima acao criada', src.includes("'com_atividades'") && src.includes("'planejada'")],
   ['autor autenticado', /h\.set\('autor_id',\s*ator\.id\)/.test(src)],
   ['replay imutavel', /replay:\s*true/.test(src)],
+  [
+    'replay recupera ids canonicos',
+    src.includes("get('registros_afetados')") && src.includes('String(afetados[0])'),
+  ],
 ]
 let fail = 0
 for (const [n, ok] of checks) {
