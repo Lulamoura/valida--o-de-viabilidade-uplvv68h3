@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeftRight,
   Building2,
+  CalendarClock,
   ChevronRight,
   Layers,
   LayoutDashboard,
@@ -60,7 +61,10 @@ export function Layout() {
   const navigation: NavigationItem[] = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
     ...(user?.ativo_comercial === true
-      ? [{ label: 'Qualificação', path: '/qualificacao', icon: ListChecks }]
+      ? [
+          { label: 'Qualificação', path: '/qualificacao', icon: ListChecks },
+          { label: 'Atividades', path: '/atividades', icon: CalendarClock },
+        ]
       : []),
     { label: 'Administração', path: '/foundation', icon: Layers },
     ...(podeVerSubstituicoes
