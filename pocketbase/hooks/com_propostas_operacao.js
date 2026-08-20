@@ -76,6 +76,43 @@
     'GET',
     '/backend/v1/propostas/fila',
     (e) => {
+      function propostaPerfil(app, user) {
+        try {
+          return app.findRecordById('com_perfis', user.getString('perfil_id')).getString('slug')
+        } catch (_) {
+          return ''
+        }
+      }
+      function propostaPodeAcessar(user, perfil, negocio) {
+        if (perfil === 'superadministrador') return true
+        if (negocio.getString('responsavel_id') === user.id) return true
+        return (
+          !!user.getString('equipe_id') &&
+          negocio.getString('equipe_id') === user.getString('equipe_id')
+        )
+      }
+      function propostaEventos(app, versaoId) {
+        var eventos = []
+        try {
+          var rows = app.findRecordsByFilter(
+            'com_auditoria',
+            "record_id='" + versaoId + "' && escopo='proposta'",
+            'evento_em',
+            100,
+            0,
+          )
+          for (var j = 0; j < rows.length; j++)
+            eventos.push({
+              id: rows[j].id,
+              tipo: rows[j].getString('comando').replace('proposta_', ''),
+              autor_id: rows[j].getString('usuario_id'),
+              data_hora: rows[j].getString('evento_em') || rows[j].getString('created'),
+              justificativa: rows[j].getString('justificativa') || null,
+              evidencia: rows[j].get('evidencia_estruturada') || {},
+            })
+        } catch (_) {}
+        return eventos
+      }
       var ator = e.auth
       if (!ator || !ator.getBool('ativo_comercial'))
         return e.forbiddenError('Usuario comercial necessario')
@@ -144,7 +181,7 @@
         }
         return e.json(200, { itens: itens })
       } catch (err) {
-        return e.json(500, { error: 'FILA_PROPOSTAS', detalhe: String(err) })
+        return e.json(500, { error: 'FILA_PROPOSTAS' })
       }
     },
     $apis.requireAuth(),
@@ -153,6 +190,73 @@
     'POST',
     '/backend/v1/propostas/eventos',
     (e) => {
+      function propostaCanonicalize(obj) {
+        if (obj === null || obj === undefined) return 'null'
+        if (typeof obj !== 'object') return JSON.stringify(obj)
+        var keys = Object.keys(obj).sort(),
+          parts = []
+        for (var ci = 0; ci < keys.length; ci++)
+          parts.push(JSON.stringify(keys[ci]) + ':' + propostaCanonicalize(obj[keys[ci]]))
+        return '{' + parts.join(',') + '}'
+      }
+      function propostaPerfil(app, user) {
+        try {
+          return app.findRecordById('com_perfis', user.getString('perfil_id')).getString('slug')
+        } catch (_) {
+          return ''
+        }
+      }
+      function propostaPodeAcessar(user, perfil, negocio) {
+        if (perfil === 'superadministrador') return true
+        if (negocio.getString('responsavel_id') === user.id) return true
+        return (
+          !!user.getString('equipe_id') &&
+          negocio.getString('equipe_id') === user.getString('equipe_id')
+        )
+      }
+      function propostaEventos(app, versaoId) {
+        var eventos = []
+        try {
+          var rows = app.findRecordsByFilter(
+            'com_auditoria',
+            "record_id='" + versaoId + "' && escopo='proposta'",
+            'evento_em',
+            100,
+            0,
+          )
+          for (var ei = 0; ei < rows.length; ei++)
+            eventos.push({ tipo: rows[ei].getString('comando').replace('proposta_', '') })
+        } catch (_) {}
+        return eventos
+      }
+      function propostaAuditoria(
+        app,
+        ator,
+        perfil,
+        comando,
+        versao,
+        chave,
+        justificativa,
+        evidencia,
+      ) {
+        var a = new Record(app.findCollectionByNameOrId('com_auditoria'))
+        a.set('collection_name', 'com_proposta_versoes')
+        a.set('record_id', versao.id)
+        a.set('acao', 'evento')
+        a.set('usuario_id', ator.id)
+        a.set('comando', comando)
+        a.set('command_idempotency_key', chave)
+        a.set('evento_em', new Date())
+        a.set('justificativa', justificativa || '')
+        a.set('perfil', perfil)
+        a.set('escopo', 'proposta')
+        a.set('origem', 'server-side')
+        a.set('evidencia_estruturada', evidencia)
+        a.set('snapshot_hash', $security.sha256(propostaCanonicalize(evidencia)))
+        a.set('snapshot_hash_versao', '1')
+        app.save(a)
+        return a
+      }
       var ator = e.auth
       if (!ator || !ator.getBool('ativo_comercial'))
         return e.forbiddenError('Usuario comercial necessario')
