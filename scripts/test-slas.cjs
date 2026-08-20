@@ -17,6 +17,10 @@ const checks = [
     'feriados canonicos',
     hook.includes('com_calendario_feriados') && migration.includes('com_calendario_feriados'),
   ],
+  [
+    'calendario Recife independente da migration',
+    hook.includes("'2026-06-24'") && hook.includes("'2026-07-16'"),
+  ],
   ['lead 1 dia util', migration.includes("sla.lead_dias_uteis', '1")],
   ['proposta 5 dias uteis', migration.includes("sla.proposta_dias_uteis', '5")],
   ['negociacao 2 dias uteis', /['"]sla\.negociacao_dias_uteis['"],\s*['"]2['"]/.test(migration)],
@@ -26,6 +30,11 @@ const checks = [
   [
     'parametro SuperAdmin',
     hook.includes("perfil !== 'superadministrador'") && hook.includes('SuperAdmin necessario'),
+  ],
+  [
+    'bootstrap transacional de parametro ausente',
+    hook.includes("body.updated_esperado !== 'DEFAULT'") &&
+      hook.includes("new Record(tx.findCollectionByNameOrId('com_parametros'))"),
   ],
   ['concorrencia otimista', hook.includes('updated_esperado') && hook.includes('STALE_WRITE')],
   [
