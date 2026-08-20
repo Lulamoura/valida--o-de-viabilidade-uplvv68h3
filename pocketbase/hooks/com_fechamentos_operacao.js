@@ -1,7 +1,5 @@
 // T4.6 — Ganho, Perda e reativação transacionais e auditáveis.
 ;(function () {
-  var MOTIVOS = ['preco', 'fechou_com_outra_empresa', 'perdeu_contato', 'desistiu', 'nao_atendido']
-
   routerAdd(
     'GET',
     '/backend/v1/fechamentos/fila',
@@ -170,19 +168,48 @@
       if (!ator || !ator.getBool('ativo_comercial'))
         return e.forbiddenError('Usuario comercial necessario')
       if (!body.command_idempotency_key) return e.badRequestError('IDEMPOTENCY_KEY_OBRIGATORIA')
+      var motivos = [
+          'preco',
+          'fechou_com_outra_empresa',
+          'perdeu_contato',
+          'desistiu',
+          'nao_atendido',
+        ],
+        comando = 'fechamento_decidir',
+        payload = {
+          negocio_id: body.negocio_id,
+          decisao: body.decisao,
+          motivo: body.motivo || null,
+          evidencia_formal: body.evidencia_formal || null,
+          valor_efetivo_centavos: Number(body.valor_efetivo_centavos || 0),
+          data_alvo_recuperacao: body.data_alvo_recuperacao || null,
+          antecedencia_dias: Number(body.antecedencia_dias || 60),
+          updated_esperado: body.updated_esperado,
+        },
+        hash = $security.sha256(JSON.stringify(payload))
       try {
         var known = $app.findRecordsByFilter(
           'com_idempotencia',
-          "chave='" + body.command_idempotency_key + "'",
+          "ator_id='" +
+            ator.id +
+            "' && comando='" +
+            comando +
+            "' && command_idempotency_key='" +
+            body.command_idempotency_key +
+            "'",
           '',
           1,
           0,
         )
-        if (known.length)
+        if (known.length) {
+          if (known[0].getString('payload_hash') !== hash) return e.json(409, { error: 'CONFLICT' })
+          if (known[0].getString('estado') !== 'concluido')
+            return e.json(409, { error: 'CONCORRENTE' })
           return e.json(
             200,
             Object.assign({ replay: true }, JSON.parse(known[0].getString('resultado'))),
           )
+        }
       } catch (_) {}
       var negocio
       try {
@@ -214,7 +241,7 @@
         if (!(body.valor_efetivo_centavos > 0))
           return e.badRequestError('VALOR_EFETIVO_OBRIGATORIO')
       } else if (body.decisao === 'perdido') {
-        if (MOTIVOS.indexOf(body.motivo) < 0) return e.badRequestError('MOTIVO_PERDA_INVALIDO')
+        if (motivos.indexOf(body.motivo) < 0) return e.badRequestError('MOTIVO_PERDA_INVALIDO')
         if (body.motivo === 'perdeu_contato') {
           var ts = $app.findRecordsByFilter(
             'com_atividades',
@@ -269,10 +296,20 @@
           agenda_id: agenda ? agenda.id : null,
         }
         var idem = new Record(tx.findCollectionByNameOrId('com_idempotencia'))
-        idem.set('chave', body.command_idempotency_key)
-        idem.set('operacao', 'fechamento_decidir')
-        idem.set('resultado', JSON.stringify(resposta))
-        idem.set('estado', 'concluida')
+        idem.set('command_idempotency_key', body.command_idempotency_key)
+        idem.set('comando', comando)
+        idem.set('ator_id', ator.id)
+        idem.set('payload_hash', hash)
+        idem.set('estado', 'concluido')
+        idem.set('codigo_retorno', '200')
+        idem.set('resultado', resposta)
+        idem.set('registros_afetados', agenda ? [negocio.id, agenda.id] : [negocio.id])
+        idem.set('executor_id', 'pb-primary')
+        idem.set('lease_ate', new Date(Date.now() + 300000))
+        idem.set('tentativa', 1)
+        idem.set('claim_version', 1)
+        idem.set('inicio_em', new Date())
+        idem.set('conclusao_em', new Date())
         tx.save(idem)
       })
       return e.json(200, Object.assign({ replay: false }, resposta))
@@ -309,19 +346,37 @@
       e.bindBody(body)
       if (!ator || !ator.getBool('ativo_comercial'))
         return e.forbiddenError('Usuario comercial necessario')
+      if (!body.command_idempotency_key) return e.badRequestError('IDEMPOTENCY_KEY_OBRIGATORIA')
+      var comando = 'fechamento_reativar',
+        payload = {
+          negocio_perdido_id: body.negocio_perdido_id,
+          agenda_id: body.agenda_id,
+          updated_esperado: body.updated_esperado,
+        },
+        hash = $security.sha256(JSON.stringify(payload))
       try {
         var known = $app.findRecordsByFilter(
           'com_idempotencia',
-          "chave='" + body.command_idempotency_key + "'",
+          "ator_id='" +
+            ator.id +
+            "' && comando='" +
+            comando +
+            "' && command_idempotency_key='" +
+            body.command_idempotency_key +
+            "'",
           '',
           1,
           0,
         )
-        if (known.length)
+        if (known.length) {
+          if (known[0].getString('payload_hash') !== hash) return e.json(409, { error: 'CONFLICT' })
+          if (known[0].getString('estado') !== 'concluido')
+            return e.json(409, { error: 'CONCORRENTE' })
           return e.json(
             200,
             Object.assign({ replay: true }, JSON.parse(known[0].getString('resultado'))),
           )
+        }
       } catch (_) {}
       var original = $app.findRecordById('com_negocios', body.negocio_perdido_id),
         perfil = fechamentoPerfil(ator)
@@ -356,10 +411,20 @@
           agenda_id: agenda.id,
         }
         var idem = new Record(tx.findCollectionByNameOrId('com_idempotencia'))
-        idem.set('chave', body.command_idempotency_key)
-        idem.set('operacao', 'fechamento_reativar')
-        idem.set('resultado', JSON.stringify(resposta))
-        idem.set('estado', 'concluida')
+        idem.set('command_idempotency_key', body.command_idempotency_key)
+        idem.set('comando', comando)
+        idem.set('ator_id', ator.id)
+        idem.set('payload_hash', hash)
+        idem.set('estado', 'concluido')
+        idem.set('codigo_retorno', '200')
+        idem.set('resultado', resposta)
+        idem.set('registros_afetados', [original.id, novo.id, agenda.id])
+        idem.set('executor_id', 'pb-primary')
+        idem.set('lease_ate', new Date(Date.now() + 300000))
+        idem.set('tentativa', 1)
+        idem.set('claim_version', 1)
+        idem.set('inicio_em', new Date())
+        idem.set('conclusao_em', new Date())
         tx.save(idem)
         var a = new Record(tx.findCollectionByNameOrId('com_auditoria'))
         a.set('collection_name', 'com_negocios')
