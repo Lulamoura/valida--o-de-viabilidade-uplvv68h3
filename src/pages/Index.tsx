@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import {
   AlertCircle,
   BriefcaseBusiness,
@@ -9,9 +9,14 @@ import {
   Target,
   Trophy,
   UserCheck,
+  Users,
+  X,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useDashboardResumo } from '@/hooks/use-dashboard'
+import { getEquipes } from '@/services/foundation'
+import { getUsers } from '@/services/users'
+import type { DashboardResumoParams } from '@/services/dashboard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,6 +24,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 const RECIFE_TIME_ZONE = 'America/Recife'
 
@@ -150,12 +163,72 @@ export default function Index() {
   const { user } = useAuth()
   const [draftPeriod, setDraftPeriod] = useState(createDefaultDashboardPeriod)
   const [period, setPeriod] = useState(draftPeriod)
-  const { data, loading, error, refresh } = useDashboardResumo(period)
+  const [draftFilters, setDraftFilters] = useState({
+    equipe_id: 'todos',
+    responsavel_id: 'todos',
+    incluir_inativos: false,
+  })
+  const [filters, setFilters] = useState<
+    Pick<DashboardResumoParams, 'equipe_id' | 'responsavel_id' | 'incluir_inativos'>
+  >({})
+  const [filterOptions, setFilterOptions] = useState({
+    equipes: [] as Array<{ id: string; nome: string }>,
+    responsaveis: [] as Array<{ id: string; nome: string; ativo: boolean }>,
+  })
+  const [filterOptionsError, setFilterOptionsError] = useState(false)
+  const { data, loading, error, refresh } = useDashboardResumo({ ...period, ...filters })
+
+  useEffect(() => {
+    let active = true
+    Promise.all([getEquipes(), getUsers()])
+      .then(([equipes, responsaveis]) => {
+        if (!active) return
+        setFilterOptions({
+          equipes: equipes
+            .filter((equipe) => equipe.ativo !== false)
+            .map((equipe) => ({
+              id: equipe.id,
+              nome: String(equipe.nome || equipe.slug || equipe.id),
+            }))
+            .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+          responsaveis: responsaveis
+            .map((responsavel) => ({
+              id: responsavel.id,
+              nome: String(responsavel.name || responsavel.email || responsavel.id),
+              ativo: responsavel.ativo_comercial !== false,
+            }))
+            .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+        })
+        setFilterOptionsError(false)
+      })
+      .catch(() => {
+        if (active) setFilterOptionsError(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   function applyPeriod(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!draftPeriod.inicio || !draftPeriod.fim || draftPeriod.inicio > draftPeriod.fim) return
     setPeriod(draftPeriod)
+  }
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setFilters({
+      ...(draftFilters.equipe_id === 'todos' ? {} : { equipe_id: draftFilters.equipe_id }),
+      ...(draftFilters.responsavel_id === 'todos'
+        ? {}
+        : { responsavel_id: draftFilters.responsavel_id }),
+      ...(draftFilters.incluir_inativos ? { incluir_inativos: true } : {}),
+    })
+  }
+
+  function clearFilters() {
+    setDraftFilters({ equipe_id: 'todos', responsavel_id: 'todos', incluir_inativos: false })
+    setFilters({})
   }
 
   const resumo = data?.resumo
@@ -226,6 +299,105 @@ export default function Index() {
           </form>
         </div>
       </section>
+
+      <Card aria-labelledby="dashboard-filters-title">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-blue-700" aria-hidden="true" />
+            <CardTitle id="dashboard-filters-title" className="text-base text-slate-900">
+              Filtros de gestão
+            </CardTitle>
+          </div>
+          <p className="text-xs text-slate-500">
+            Refine os indicadores por equipe, responsável e situação cadastral.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={applyFilters}
+            className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto] xl:items-end"
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="dashboard-equipe">Equipe</Label>
+              <Select
+                value={draftFilters.equipe_id}
+                onValueChange={(value) =>
+                  setDraftFilters((current) => ({ ...current, equipe_id: value }))
+                }
+              >
+                <SelectTrigger id="dashboard-equipe" aria-label="Equipe">
+                  <SelectValue placeholder="Todas as equipes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas as equipes</SelectItem>
+                  {filterOptions.equipes.map((equipe) => (
+                    <SelectItem key={equipe.id} value={equipe.id}>
+                      {equipe.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="dashboard-responsavel">Responsável</Label>
+              <Select
+                value={draftFilters.responsavel_id}
+                onValueChange={(value) =>
+                  setDraftFilters((current) => ({ ...current, responsavel_id: value }))
+                }
+              >
+                <SelectTrigger id="dashboard-responsavel" aria-label="Responsável">
+                  <SelectValue placeholder="Todos os responsáveis" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os responsáveis</SelectItem>
+                  {filterOptions.responsaveis.map((responsavel) => (
+                    <SelectItem key={responsavel.id} value={responsavel.id}>
+                      {responsavel.nome}
+                      {responsavel.ativo ? '' : ' (inativo)'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex min-h-10 items-center gap-2 rounded-md border px-3 py-2">
+              <Switch
+                id="dashboard-inativos"
+                checked={draftFilters.incluir_inativos}
+                onCheckedChange={(checked) =>
+                  setDraftFilters((current) => ({ ...current, incluir_inativos: checked }))
+                }
+              />
+              <Label htmlFor="dashboard-inativos" className="cursor-pointer text-sm">
+                Incluir negócios inativos
+              </Label>
+            </div>
+
+            <div className="flex gap-2">
+              <Button type="submit" disabled={loading}>
+                Aplicar filtros
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={clearFilters}
+                disabled={loading || Object.keys(filters).length === 0}
+              >
+                <X className="mr-2 h-4 w-4" /> Limpar
+              </Button>
+            </div>
+          </form>
+
+          {filterOptionsError ? (
+            <p role="status" className="mt-3 text-xs text-amber-700">
+              As opções de equipe e responsável não puderam ser carregadas. O resumo geral continua
+              disponível.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {error && (
         <Alert variant="destructive">
