@@ -4,12 +4,13 @@ import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
 import {
   getNegocios,
   getEmpresas,
-  createNegocio,
   updateNegocio,
   changeNegocioResponsavel,
   getNegocioHistorico,
   getDefaultEtapa,
+  getContatos,
 } from '@/services/commercial'
+import { criarOportunidade, mapEntradaError, novaChaveEntrada } from '@/services/entradas'
 import { getEquipes } from '@/services/foundation'
 import { getActiveUsers } from '@/services/users'
 import { useAuth } from '@/hooks/use-auth'
@@ -56,6 +57,7 @@ export function NegociosTab() {
   const [empresas, setEmpresas] = useState<RecordModel[]>([])
   const [equipes, setEquipes] = useState<RecordModel[]>([])
   const [activeUsers, setActiveUsers] = useState<RecordModel[]>([])
+  const [contatos, setContatos] = useState<RecordModel[]>([])
   const [defaultEtapa, setDefaultEtapa] = useState('prospects')
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<RecordModel | null>(null)
@@ -68,6 +70,16 @@ export function NegociosTab() {
     etapa: 'prospects',
     resultado: '',
     descricao: '',
+    modo: 'pendente',
+    contato_principal_id: '',
+    origem_canal: '',
+    modalidade: '',
+    necessidade: '',
+    localizacao: '',
+    dimensao_estimada: '',
+    prazo_cliente: '',
+    proxima_acao: '',
+    proxima_acao_em: '',
   })
   const [justificativa, setJustificativa] = useState('')
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -75,16 +87,18 @@ export function NegociosTab() {
   const [histRecords, setHistRecords] = useState<RecordModel[]>([])
 
   const load = async () => {
-    const [neg, eq, au, em] = await Promise.all([
+    const [neg, eq, au, em, co] = await Promise.all([
       getNegocios(),
       getEquipes(),
       getActiveUsers(),
       getEmpresas(),
+      getContatos(),
     ])
     setRecords(neg)
     setEquipes(eq)
     setActiveUsers(au)
     setEmpresas(em)
+    setContatos(co)
   }
   useEffect(() => {
     load()
@@ -107,6 +121,16 @@ export function NegociosTab() {
       etapa: defaultEtapa,
       resultado: '',
       descricao: '',
+      modo: 'pendente',
+      contato_principal_id: '',
+      origem_canal: '',
+      modalidade: '',
+      necessidade: '',
+      localizacao: '',
+      dimensao_estimada: '',
+      prazo_cliente: '',
+      proxima_acao: '',
+      proxima_acao_em: '',
     })
     setJustificativa('')
     setErrors({})
@@ -150,11 +174,30 @@ export function NegociosTab() {
           await updateNegocio(editing.id, data)
         }
       } else {
-        await createNegocio(data)
+        await criarOportunidade({
+          titulo: form.titulo,
+          empresa_id: form.empresa_id,
+          contato_principal_id: form.contato_principal_id || undefined,
+          equipe_id: form.equipe_id || undefined,
+          responsavel_id: form.responsavel_id,
+          captador_id: user?.id,
+          origem_canal: form.origem_canal,
+          modo: form.modo,
+          modalidade: form.modalidade || undefined,
+          necessidade: form.necessidade || undefined,
+          localizacao: form.localizacao || undefined,
+          dimensao_estimada: form.dimensao_estimada || undefined,
+          prazo_cliente: form.prazo_cliente || undefined,
+          proxima_acao: form.proxima_acao || undefined,
+          proxima_acao_em: form.proxima_acao_em || undefined,
+          descricao: form.descricao || undefined,
+          command_idempotency_key: novaChaveEntrada(),
+        })
       }
       setOpen(false)
     } catch (err) {
-      setErrors(extractFieldErrors(err))
+      const fieldErrors = extractFieldErrors(err)
+      setErrors(Object.keys(fieldErrors).length ? fieldErrors : { entrada: mapEntradaError(err) })
     }
   }
 
@@ -268,52 +311,56 @@ export function NegociosTab() {
                   )}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Valor (R$)</Label>
-                  <Input
-                    type="number"
-                    value={form.valor}
-                    onChange={(e) => setForm({ ...form, valor: e.target.value })}
-                  />
+              {editing && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Valor (R$)</Label>
+                    <Input
+                      type="number"
+                      value={form.valor}
+                      onChange={(e) => setForm({ ...form, valor: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Etapa</Label>
+                    <Select
+                      value={form.etapa || ''}
+                      onValueChange={(v) => setForm({ ...form, etapa: v, resultado: '' })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ETAPA_OPTIONS.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {getEtapaLabel(s)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+              )}
+              {editing && (
                 <div>
-                  <Label>Etapa</Label>
+                  <Label>Resultado</Label>
                   <Select
-                    value={form.etapa || ''}
-                    onValueChange={(v) => setForm({ ...form, etapa: v, resultado: '' })}
+                    value={form.resultado || ''}
+                    onValueChange={(v) => setForm({ ...form, resultado: v, etapa: '' })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="—" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ETAPA_OPTIONS.map((s) => (
+                      {RESULTADO_OPTIONS.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {getEtapaLabel(s)}
+                          {getResultadoLabel(s)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <div>
-                <Label>Resultado</Label>
-                <Select
-                  value={form.resultado || ''}
-                  onValueChange={(v) => setForm({ ...form, resultado: v, etapa: '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="—" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RESULTADO_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {getResultadoLabel(s)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              )}
               <div>
                 <Label>Descrição</Label>
                 <Textarea
@@ -321,6 +368,115 @@ export function NegociosTab() {
                   onChange={(e) => setForm({ ...form, descricao: e.target.value })}
                 />
               </div>
+              {!editing && (
+                <div className="space-y-3 rounded-md border p-3">
+                  <div>
+                    <Label>Modo de entrada</Label>
+                    <Select value={form.modo} onValueChange={(v) => setForm({ ...form, modo: v })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendente">Qualificação pendente</SelectItem>
+                        <SelectItem value="pre_qualificada">Pré-qualificada</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Origem / canal *</Label>
+                    <Input
+                      value={form.origem_canal}
+                      onChange={(e) => setForm({ ...form, origem_canal: e.target.value })}
+                    />
+                  </div>
+                  {form.modo === 'pre_qualificada' && (
+                    <>
+                      <div>
+                        <Label>Contato estabelecido *</Label>
+                        <Select
+                          value={form.contato_principal_id}
+                          onValueChange={(v) => setForm({ ...form, contato_principal_id: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {contatos.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.nome || c.email}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Modalidade *</Label>
+                        <Select
+                          value={form.modalidade}
+                          onValueChange={(v) => setForm({ ...form, modalidade: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pontual">Pontual</SelectItem>
+                            <SelectItem value="recorrente">Recorrente</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Necessidade *</Label>
+                        <Textarea
+                          value={form.necessidade}
+                          onChange={(e) => setForm({ ...form, necessidade: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label>Localização</Label>
+                          <Input
+                            value={form.localizacao}
+                            onChange={(e) => setForm({ ...form, localizacao: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label>Dimensão estimada *</Label>
+                          <Input
+                            value={form.dimensao_estimada}
+                            onChange={(e) =>
+                              setForm({ ...form, dimensao_estimada: e.target.value })
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Prazo do cliente *</Label>
+                        <Input
+                          type="date"
+                          value={form.prazo_cliente}
+                          onChange={(e) => setForm({ ...form, prazo_cliente: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Próxima ação *</Label>
+                        <Textarea
+                          value={form.proxima_acao}
+                          onChange={(e) => setForm({ ...form, proxima_acao: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Data/hora da próxima ação *</Label>
+                        <Input
+                          type="datetime-local"
+                          value={form.proxima_acao_em}
+                          onChange={(e) => setForm({ ...form, proxima_acao_em: e.target.value })}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {errors.entrada && <p className="text-sm text-red-500">{errors.entrada}</p>}
               <Button onClick={submit} className="w-full">
                 Salvar
               </Button>

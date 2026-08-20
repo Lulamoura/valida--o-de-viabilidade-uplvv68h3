@@ -10,6 +10,8 @@ export const createEmpresa = (data: Record<string, any>) =>
 export const updateEmpresa = (id: string, data: Record<string, any>) =>
   pb.collection('com_empresas').update(id, data)
 export const deleteEmpresa = (id: string) => pb.collection('com_empresas').delete(id)
+export const getContatos = (): Promise<RecordModel[]> =>
+  pb.collection('com_contatos').getFullList({ sort: 'nome' })
 
 export const getNegocios = (): Promise<RecordModel[]> =>
   pb
