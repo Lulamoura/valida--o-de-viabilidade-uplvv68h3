@@ -79,69 +79,73 @@
       var ator = e.auth
       if (!ator || !ator.getBool('ativo_comercial'))
         return e.forbiddenError('Usuario comercial necessario')
-      var perfil = propostaPerfil($app, ator)
-      var negocios = $app.findRecordsByFilter(
-          'com_negocios',
-          'inativo = false',
-          '-updated',
-          100,
-          0,
-        ),
-        itens = []
-      for (var i = 0; i < negocios.length; i++) {
-        var n = negocios[i],
-          proposta = null,
-          versao = null,
-          eventos = []
-        if (['producao_proposta', 'negociacao'].indexOf(n.getString('etapa')) < 0) continue
-        if (!propostaPodeAcessar(ator, perfil, n)) continue
-        try {
-          proposta = $app.findFirstRecordByData('com_propostas', 'negocio_id', n.id)
-          var versoes = $app.findRecordsByFilter(
-            'com_proposta_versoes',
-            "proposta_id='" + proposta.id + "'",
-            '-numero',
-            1,
+      try {
+        var perfil = propostaPerfil($app, ator)
+        var negocios = $app.findRecordsByFilter(
+            'com_negocios',
+            'inativo = false',
+            '-updated',
+            100,
             0,
-          )
-          if (versoes.length) {
-            versao = versoes[0]
-            eventos = propostaEventos($app, versao.id)
-          }
-        } catch (_) {}
-        itens.push({
-          negocio: {
-            id: n.id,
-            titulo: n.getString('titulo'),
-            etapa: n.getString('etapa'),
-            updated: n.getString('updated'),
-          },
-          proposta:
-            proposta && versao
-              ? {
-                  id: proposta.id,
-                  identificador: proposta.getString('identificador'),
-                  versao_id: versao.id,
-                  numero: versao.getInt('numero'),
-                  estado: versao.getString('estado'),
-                  modalidade: versao.getString('modalidade'),
-                  valor_total_centavos: versao.getInt('valor_total_centavos'),
-                  valor_mensal_centavos: versao.getInt('valor_mensal_centavos'),
-                  destinatario: versao.getString('destinatario') || null,
-                  canal_envio: versao.getString('canal_envio') || null,
-                  updated: versao.getString('updated'),
-                  aprovada: eventos.some(function (x) {
-                    return x.tipo === 'aprovada'
-                  }),
-                  visualizada: eventos.some(function (x) {
-                    return x.tipo === 'visualizada'
-                  }),
-                  eventos: eventos,
-                }
-              : null,
-        })
+          ),
+          itens = []
+        for (var i = 0; i < negocios.length; i++) {
+          var n = negocios[i],
+            proposta = null,
+            versao = null,
+            eventos = []
+          if (['producao_proposta', 'negociacao'].indexOf(n.getString('etapa')) < 0) continue
+          if (!propostaPodeAcessar(ator, perfil, n)) continue
+          try {
+            proposta = $app.findFirstRecordByData('com_propostas', 'negocio_id', n.id)
+            var versoes = $app.findRecordsByFilter(
+              'com_proposta_versoes',
+              "proposta_id='" + proposta.id + "'",
+              '-numero',
+              1,
+              0,
+            )
+            if (versoes.length) {
+              versao = versoes[0]
+              eventos = propostaEventos($app, versao.id)
+            }
+          } catch (_) {}
+          itens.push({
+            negocio: {
+              id: n.id,
+              titulo: n.getString('titulo'),
+              etapa: n.getString('etapa'),
+              updated: n.getString('updated'),
+            },
+            proposta:
+              proposta && versao
+                ? {
+                    id: proposta.id,
+                    identificador: proposta.getString('identificador'),
+                    versao_id: versao.id,
+                    numero: versao.getInt('numero'),
+                    estado: versao.getString('estado'),
+                    modalidade: versao.getString('modalidade'),
+                    valor_total_centavos: versao.getInt('valor_total_centavos'),
+                    valor_mensal_centavos: versao.getInt('valor_mensal_centavos'),
+                    destinatario: versao.getString('destinatario') || null,
+                    canal_envio: versao.getString('canal_envio') || null,
+                    updated: versao.getString('updated'),
+                    aprovada: eventos.some(function (x) {
+                      return x.tipo === 'aprovada'
+                    }),
+                    visualizada: eventos.some(function (x) {
+                      return x.tipo === 'visualizada'
+                    }),
+                    eventos: eventos,
+                  }
+                : null,
+          })
+        }
+        return e.json(200, { itens: itens })
+      } catch (err) {
+        return e.json(500, { error: 'FILA_PROPOSTAS', detalhe: String(err) })
       }
-      return e.json(200, { itens: itens })
     },
     $apis.requireAuth(),
   )
