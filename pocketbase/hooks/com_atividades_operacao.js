@@ -336,6 +336,7 @@ routerAdd(
         idem.set('payload_hash', hash)
         idem.set('estado', 'concluido')
         idem.set('executor_id', 'pb-primary')
+        idem.set('lease_ate', new Date(Date.now() + 300000))
         idem.set('tentativa', 1)
         idem.set('claim_version', 1)
         idem.set('inicio_em', new Date())
