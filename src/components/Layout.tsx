@@ -150,6 +150,7 @@ function LayoutContent() {
                       asChild
                       isActive={active}
                       tooltip={item.label}
+                      style={active ? { backgroundColor: '#4f46e5', color: '#ffffff' } : undefined}
                       className={cn(
                         'h-10 gap-3 px-3 text-sm font-medium',
                         active
