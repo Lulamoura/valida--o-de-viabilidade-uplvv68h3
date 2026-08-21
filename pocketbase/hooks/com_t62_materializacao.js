@@ -20,6 +20,15 @@
     ['sla.alerta_antecedencia_dias_uteis', '1', 'Antecedência padrão dos alertas de SLA'],
   ]
   var PERMISSOES = ['empresas.view', 'negocios.view', 'dashboard.view']
+  var ETAPAS_SNAPSHOT = [
+    'CONTA_ALVO',
+    'PERFIL_DESTINO',
+    'VINCULOS',
+    'PERMISSOES',
+    'SLA',
+    'CALENDARIO',
+    'REGRAS',
+  ]
 
   function canonicalize(obj) {
     if (obj === null || obj === undefined) return 'null'
@@ -58,98 +67,120 @@
   }
 
   function snapshot(app) {
-    // A conta-alvo é fechada pelo ID imutável criado no gate T6.2. O e-mail
-    // permanece como segunda trava, mas não é usado como índice de busca:
-    // campos de autenticação podem estar ocultos pelas regras da coleção.
-    var shirleide = app.findRecordById('users', ID_SHIRLEIDE)
-    if (shirleide.getString('email').toLowerCase() !== EMAIL_SHIRLEIDE)
-      throw new Error('CONTA_ALVO_DIVERGENTE')
-    var profile = primeiro(app, 'com_perfis', "slug='" + PERFIL_SLUG + "'")
-    var bindings = app.findRecordsByFilter(
-      'com_usuarios_equipes',
-      "usuario_id='" + shirleide.id + "'",
-      'id',
-      50,
-      0,
-    )
-    var bindingState = []
-    for (var b = 0; b < bindings.length; b++)
-      bindingState.push({
-        id: bindings[b].id,
-        perfil_id: bindings[b].getString('perfil_id'),
-        escopo: bindings[b].getString('escopo'),
-        ativo: bindings[b].getBool('ativo'),
-      })
+    var etapa = 'CONTA_ALVO'
+    try {
+      // A conta-alvo é fechada pelo ID imutável criado no gate T6.2. O e-mail
+      // permanece como segunda trava, mas não é usado como índice de busca.
+      var shirleide = app.findRecordById('users', ID_SHIRLEIDE)
+      if (shirleide.getString('email').toLowerCase() !== EMAIL_SHIRLEIDE)
+        throw new Error('CONTA_ALVO_DIVERGENTE')
 
-    var profilePermissions = []
-    if (profile) {
-      var links = app.findRecordsByFilter(
-        'com_perfil_permissoes',
-        "perfil_id='" + profile.id + "'",
+      etapa = 'PERFIL_DESTINO'
+      var profile = primeiro(app, 'com_perfis', "slug='" + PERFIL_SLUG + "'")
+
+      etapa = 'VINCULOS'
+      var bindings = app.findRecordsByFilter(
+        'com_usuarios_equipes',
+        "usuario_id='" + shirleide.id + "'",
         'id',
-        100,
+        50,
         0,
       )
-      for (var p = 0; p < links.length; p++) {
-        var permissionSlug = ''
-        try {
-          permissionSlug = app
-            .findRecordById('com_permissoes', links[p].getString('permissao_id'))
-            .getString('slug')
-        } catch (_) {}
-        profilePermissions.push({
-          id: links[p].id,
-          slug: permissionSlug,
-          escopo: links[p].getString('escopo'),
+      var bindingState = []
+      for (var b = 0; b < bindings.length; b++)
+        bindingState.push({
+          id: bindings[b].id,
+          perfil_id: bindings[b].getString('perfil_id'),
+          escopo: bindings[b].getString('escopo'),
+          ativo: bindings[b].getBool('ativo'),
         })
+
+      etapa = 'PERMISSOES'
+      var profilePermissions = []
+      if (profile) {
+        var links = app.findRecordsByFilter(
+          'com_perfil_permissoes',
+          "perfil_id='" + profile.id + "'",
+          'id',
+          100,
+          0,
+        )
+        for (var p = 0; p < links.length; p++) {
+          var permissionSlug = ''
+          try {
+            permissionSlug = app
+              .findRecordById('com_permissoes', links[p].getString('permissao_id'))
+              .getString('slug')
+          } catch (_) {}
+          profilePermissions.push({
+            id: links[p].id,
+            slug: permissionSlug,
+            escopo: links[p].getString('escopo'),
+          })
+        }
       }
-    }
 
-    var slaState = []
-    for (var s = 0; s < SLA.length; s++) {
-      var parametro = primeiro(app, 'com_parametros', "chave='" + SLA[s][0] + "'")
-      slaState.push(
-        parametro
-          ? {
-              chave: SLA[s][0],
-              id: parametro.id,
-              valor: parametro.getString('valor'),
-              ativo: parametro.getBool('ativo'),
-            }
-          : { chave: SLA[s][0], id: null, valor: null, ativo: false },
-      )
-    }
+      etapa = 'SLA'
+      var slaState = []
+      for (var s = 0; s < SLA.length; s++) {
+        var parametro = primeiro(app, 'com_parametros', "chave='" + SLA[s][0] + "'")
+        slaState.push(
+          parametro
+            ? {
+                chave: SLA[s][0],
+                id: parametro.id,
+                valor: parametro.getString('valor'),
+                ativo: parametro.getBool('ativo'),
+              }
+            : { chave: SLA[s][0], id: null, valor: null, ativo: false },
+        )
+      }
 
-    var calendarioExiste = true
-    try {
-      app.findCollectionByNameOrId('com_calendario_feriados')
+      etapa = 'CALENDARIO'
+      var calendarioExiste = true
+      try {
+        app.findCollectionByNameOrId('com_calendario_feriados')
+      } catch (_) {
+        calendarioExiste = false
+      }
+
+      etapa = 'REGRAS'
+      var users = app.findCollectionByNameOrId('users')
+      var audit = app.findCollectionByNameOrId('com_auditoria')
+      return {
+        shirleide: {
+          id: shirleide.id,
+          ativo_comercial: shirleide.getBool('ativo_comercial'),
+          perfil_id: shirleide.getString('perfil_id'),
+          perfil_slug: perfilSlug(app, shirleide),
+          updated: shirleide.getString('updated'),
+        },
+        perfil: profile
+          ? { id: profile.id, ativo: profile.getBool('ativo'), nome: profile.getString('nome') }
+          : null,
+        bindings: bindingState,
+        permissoes: profilePermissions,
+        sla: slaState,
+        calendario_existe: calendarioExiste,
+        regras: {
+          users_list: regra(users, 'listRule'),
+          users_view: regra(users, 'viewRule'),
+          auditoria_list: regra(audit, 'listRule'),
+          auditoria_view: regra(audit, 'viewRule'),
+        },
+      }
     } catch (_) {
-      calendarioExiste = false
+      throw new Error('SNAPSHOT_' + etapa)
     }
-    var users = app.findCollectionByNameOrId('users')
-    var audit = app.findCollectionByNameOrId('com_auditoria')
-    return {
-      shirleide: {
-        id: shirleide.id,
-        ativo_comercial: shirleide.getBool('ativo_comercial'),
-        perfil_id: shirleide.getString('perfil_id'),
-        perfil_slug: perfilSlug(app, shirleide),
-        updated: shirleide.getString('updated'),
-      },
-      perfil: profile
-        ? { id: profile.id, ativo: profile.getBool('ativo'), nome: profile.getString('nome') }
-        : null,
-      bindings: bindingState,
-      permissoes: profilePermissions,
-      sla: slaState,
-      calendario_existe: calendarioExiste,
-      regras: {
-        users_list: regra(users, 'listRule'),
-        users_view: regra(users, 'viewRule'),
-        auditoria_list: regra(audit, 'listRule'),
-        auditoria_view: regra(audit, 'viewRule'),
-      },
+  }
+
+  function codigoSnapshot(err) {
+    var text = String(err || '')
+    for (var i = 0; i < ETAPAS_SNAPSHOT.length; i++) {
+      var code = 'SNAPSHOT_' + ETAPAS_SNAPSHOT[i]
+      if (text.indexOf(code) >= 0) return code
     }
+    return 'SNAPSHOT_INDISPONIVEL'
   }
 
   function fingerprint(app) {
@@ -210,7 +241,12 @@
         body.modo !== 'dry_run'
       )
         return e.json(400, { error: 'CONTRATO_DRY_RUN_INVALIDO' })
-      var state = snapshot($app)
+      var state
+      try {
+        state = snapshot($app)
+      } catch (err) {
+        return e.json(409, { error: codigoSnapshot(err) })
+      }
       return e.json(200, {
         modo: 'dry_run',
         somente_leitura: true,
@@ -289,7 +325,12 @@
         return e.json(200, Object.assign({ replay: true }, replay))
       }
 
-      var atual = fingerprint($app)
+      var atual
+      try {
+        atual = fingerprint($app)
+      } catch (err) {
+        return e.json(409, { error: codigoSnapshot(err) })
+      }
       if (atual !== body.fingerprint_estado)
         return e.json(409, { error: 'STALE_WRITE', fingerprint_atual: atual })
 
@@ -468,6 +509,7 @@
       }
       if (erro.indexOf('STALE_WRITE') >= 0) return e.json(409, { error: 'STALE_WRITE' })
       if (erro.indexOf('CONTA_ALVO_ATIVA') >= 0) return e.json(409, { error: 'CONTA_ALVO_ATIVA' })
+      if (erro.indexOf('SNAPSHOT_') >= 0) return e.json(409, { error: codigoSnapshot(erro) })
       if (erro.indexOf('FORBIDDEN') >= 0) return e.json(403, { error: 'FORBIDDEN' })
       if (erro) return e.json(500, { error: 'INTERNAL' })
       return e.json(200, Object.assign({ replay: false }, resposta))
