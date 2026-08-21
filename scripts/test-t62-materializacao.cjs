@@ -3,12 +3,18 @@ const fs = require('fs')
 const source = fs.readFileSync('pocketbase/hooks/com_t62_materializacao.js', 'utf8')
 const checks = [
   [
+    'diagnóstico GET autenticado e versionado',
+    source.includes("ROTA + '/diagnostico'") &&
+      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v3'") &&
+      source.includes('handler_alcancado: true'),
+  ],
+  [
     'rotas dry-run e execução separadas',
     source.includes("ROTA + '/dry-run'") && source.includes("ROTA + '/executar'"),
   ],
   [
-    'autenticação obrigatória nas duas rotas',
-    (source.match(/\$apis\.requireAuth\(\)/g) || []).length === 2,
+    'autenticação obrigatória nas três rotas',
+    (source.match(/\$apis\.requireAuth\(\)/g) || []).length === 3,
   ],
   [
     'SuperAdmin comercial obrigatório',
@@ -107,6 +113,11 @@ const checks = [
   [
     'pré-handler possui códigos fechados',
     source.includes("error: 'PRECHECK_AUTH'") && source.includes("error: 'PRECHECK_BODY'"),
+  ],
+  [
+    'diagnóstico GET sem primitivas de escrita',
+    source.includes('mutacoes_executadas: 0') &&
+      !source.match(/ROTA \+ '\/diagnostico'[\s\S]{0,500}(save|runInTransaction|delete)\(/),
   ],
 ]
 
