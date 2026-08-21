@@ -5,16 +5,26 @@ const checks = [
   [
     'diagnóstico GET autenticado e versionado',
     source.includes("ROTA + '/diagnostico'") &&
-      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v3'") &&
-      source.includes('handler_alcancado: true'),
+      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v4'") &&
+      source.includes('handler_alcancado: true') &&
+      source.match(/ROTA \+ '\/diagnostico'[\s\S]{0,300}autenticarSeguro\(e\)/),
   ],
   [
     'rotas dry-run e execução separadas',
     source.includes("ROTA + '/dry-run'") && source.includes("ROTA + '/executar'"),
   ],
   [
-    'autenticação obrigatória nas três rotas',
-    (source.match(/\$apis\.requireAuth\(\)/g) || []).length === 3,
+    'middleware de autenticação preservado nas duas rotas mutantes',
+    (source.match(/\$apis\.requireAuth\(\)/g) || []).length === 2,
+  ],
+  [
+    'diagnóstico autentica internamente sem middleware pré-handler',
+    (() => {
+      const start = source.indexOf("ROTA + '/diagnostico'")
+      const end = source.indexOf("ROTA + '/dry-run'", start)
+      const block = source.slice(start, end)
+      return block.includes('autenticarSeguro(e)') && !block.includes('$apis.requireAuth()')
+    })(),
   ],
   [
     'SuperAdmin comercial obrigatório',
