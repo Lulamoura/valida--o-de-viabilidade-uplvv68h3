@@ -54,8 +54,11 @@ const checks = [
   ],
   ['escopo próprios imposto', (source.match(/set\('escopo', 'proprios'\)/g) || []).length >= 2],
   [
-    'Shirleide exata e obrigatoriamente inativa',
-    source.includes('comercial06@pmaisservicos.com.br') && source.includes('CONTA_ALVO_ATIVA'),
+    'Shirleide fechada por ID, e-mail e obrigatoriamente inativa',
+    source.includes("ID_SHIRLEIDE = 'pmdghnoqc5x3rnn'") &&
+      source.includes('comercial06@pmaisservicos.com.br') &&
+      source.includes('CONTA_ALVO_DIVERGENTE') &&
+      source.includes('CONTA_ALVO_ATIVA'),
   ],
   [
     'regras de usuários fechadas',
