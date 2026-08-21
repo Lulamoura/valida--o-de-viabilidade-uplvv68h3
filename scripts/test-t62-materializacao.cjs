@@ -4,26 +4,26 @@ const source = fs.readFileSync('pocketbase/hooks/com_t62_materializacao.js', 'ut
 const checks = [
   [
     'diagnóstico GET autenticado e versionado',
-    source.includes("ROTA + '/diagnostico-v4'") &&
-      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v4'") &&
+    source.includes("ROTA + '/diagnostico-v5'") &&
+      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v5'") &&
       source.includes('handler_alcancado: true') &&
-      source.match(/ROTA \+ '\/diagnostico-v4'[\s\S]{0,300}autenticarSeguro\(e\)/),
+      source.match(/ROTA \+ '\/diagnostico-v5'[\s\S]{0,300}autenticarSeguro\(e\)/),
   ],
   [
     'rotas dry-run e execução separadas',
     source.includes("ROTA + '/dry-run'") && source.includes("ROTA + '/executar'"),
   ],
   [
-    'middleware de autenticação preservado nas duas rotas mutantes',
+    'middleware genérico preservado nas duas rotas mutantes',
     (source.match(/\$apis\.requireAuth\(\)/g) || []).length === 2,
   ],
   [
-    'diagnóstico autentica internamente sem middleware pré-handler',
+    'diagnóstico exige coleção users e valida SuperAdmin internamente',
     (() => {
-      const start = source.indexOf("ROTA + '/diagnostico-v4'")
+      const start = source.indexOf("ROTA + '/diagnostico-v5'")
       const end = source.indexOf("ROTA + '/dry-run'", start)
       const block = source.slice(start, end)
-      return block.includes('autenticarSeguro(e)') && !block.includes('$apis.requireAuth()')
+      return block.includes('autenticarSeguro(e)') && block.includes("$apis.requireAuth('users')")
     })(),
   ],
   [
