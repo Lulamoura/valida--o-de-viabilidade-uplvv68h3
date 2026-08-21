@@ -5,6 +5,7 @@
 ;(function () {
   var ROTA = '/backend/v1/admin/t6-2/materializacao'
   var COMANDO = 't62_materializar_menor_privilegio'
+  var HOOK_VERSION = 't62-materializacao-precheck-v3'
   var ID_SHIRLEIDE = 'pmdghnoqc5x3rnn'
   var EMAIL_SHIRLEIDE = 'comercial06@pmaisservicos.com.br'
   var PERFIL_SLUG = 'negociacao-propria'
@@ -241,6 +242,22 @@
       regras_users_auditoria_atualizar: true,
     }
   }
+
+  routerAdd(
+    'GET',
+    ROTA + '/diagnostico',
+    function (e) {
+      var auth = autenticarSeguro(e)
+      if (auth.erro) return auth.erro
+      return e.json(200, {
+        hook_version: HOOK_VERSION,
+        handler_alcancado: true,
+        somente_leitura: true,
+        mutacoes_executadas: 0,
+      })
+    },
+    $apis.requireAuth(),
+  )
 
   routerAdd(
     'POST',
