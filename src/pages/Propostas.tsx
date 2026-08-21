@@ -13,10 +13,13 @@ import {
   type EventoProposta,
   type ItemProposta,
 } from '@/services/propostas'
+import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 
 const reais = (centavos: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(centavos / 100)
 export default function Propostas() {
+  const { perfilSlug } = useIsSuperAdmin()
+  const somenteNegociacao = perfilSlug === 'negociacao-propria'
   const [itens, setItens] = useState<ItemProposta[]>([])
   const [loading, setLoading] = useState(true)
   const [valores, setValores] = useState<Record<string, string>>({})
@@ -104,68 +107,78 @@ export default function Propostas() {
                     </p>
                   </div>
                 )}
-                <div className="space-y-2">
-                  <Label htmlFor={`proposta-${item.negocio.id}`}>
-                    {!p
-                      ? 'Valor total em reais'
-                      : p.estado === 'rascunho' && p.aprovada
-                        ? 'Destinatário para emissão'
-                        : p.estado === 'enviada'
-                          ? 'Evidência da decisão'
-                          : 'Informação complementar'}
-                  </Label>
-                  <Input
-                    id={`proposta-${item.negocio.id}`}
-                    value={valores[item.negocio.id] ?? ''}
-                    onChange={(e) =>
-                      setValores((v) => ({ ...v, [item.negocio.id]: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {!p && (
-                    <Button
-                      size="sm"
-                      disabled={!Number(valores[item.negocio.id])}
-                      onClick={() => void executar(item, 'preparar')}
-                    >
-                      <FileCheck2 className="mr-2 h-4 w-4" />
-                      Preparar
-                    </Button>
-                  )}
-                  {p?.estado === 'rascunho' && !p.aprovada && (
-                    <Button size="sm" onClick={() => void executar(item, 'aprovar')}>
-                      Aprovar
-                    </Button>
-                  )}
-                  {p?.estado === 'rascunho' && p.aprovada && (
-                    <Button
-                      size="sm"
-                      disabled={!valores[item.negocio.id]?.trim()}
-                      onClick={() => void executar(item, 'emitir')}
-                    >
-                      Emitir
-                    </Button>
-                  )}
-                  {p?.estado === 'enviada' && !p.visualizada && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void executar(item, 'visualizar')}
-                    >
-                      Registrar visualização
-                    </Button>
-                  )}
-                  {p?.estado === 'enviada' && (
-                    <Button
-                      size="sm"
-                      disabled={!valores[item.negocio.id]?.trim()}
-                      onClick={() => void executar(item, 'decidir')}
-                    >
-                      Registrar aceite
-                    </Button>
-                  )}
-                </div>
+                {!somenteNegociacao && (
+                  <div className="space-y-2">
+                    <Label htmlFor={`proposta-${item.negocio.id}`}>
+                      {!p
+                        ? 'Valor total em reais'
+                        : p.estado === 'rascunho' && p.aprovada
+                          ? 'Destinatário para emissão'
+                          : p.estado === 'enviada'
+                            ? 'Evidência da decisão'
+                            : 'Informação complementar'}
+                    </Label>
+                    <Input
+                      id={`proposta-${item.negocio.id}`}
+                      value={valores[item.negocio.id] ?? ''}
+                      onChange={(e) =>
+                        setValores((v) => ({ ...v, [item.negocio.id]: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
+                {!somenteNegociacao && (
+                  <div className="flex flex-wrap gap-2">
+                    {!p && (
+                      <Button
+                        size="sm"
+                        disabled={!Number(valores[item.negocio.id])}
+                        onClick={() => void executar(item, 'preparar')}
+                      >
+                        <FileCheck2 className="mr-2 h-4 w-4" />
+                        Preparar
+                      </Button>
+                    )}
+                    {p?.estado === 'rascunho' && !p.aprovada && (
+                      <Button size="sm" onClick={() => void executar(item, 'aprovar')}>
+                        Aprovar
+                      </Button>
+                    )}
+                    {p?.estado === 'rascunho' && p.aprovada && (
+                      <Button
+                        size="sm"
+                        disabled={!valores[item.negocio.id]?.trim()}
+                        onClick={() => void executar(item, 'emitir')}
+                      >
+                        Emitir
+                      </Button>
+                    )}
+                    {p?.estado === 'enviada' && !p.visualizada && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void executar(item, 'visualizar')}
+                      >
+                        Registrar visualização
+                      </Button>
+                    )}
+                    {p?.estado === 'enviada' && (
+                      <Button
+                        size="sm"
+                        disabled={!valores[item.negocio.id]?.trim()}
+                        onClick={() => void executar(item, 'decidir')}
+                      >
+                        Registrar aceite
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {somenteNegociacao && (
+                  <p className="text-sm text-muted-foreground">
+                    Acompanhamento somente leitura. As atividades e os alertas deste negócio ficam
+                    disponíveis na Operação do Dia.
+                  </p>
+                )}
                 {p && (
                   <p className="text-xs text-muted-foreground">
                     {p.eventos.length} evento(s) permanente(s) no histórico

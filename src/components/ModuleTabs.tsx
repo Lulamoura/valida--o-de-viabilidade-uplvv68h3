@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { ADMIN_TABS, PIPELINE_TABS, type NavigationEntry } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
+import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 
 interface ModuleTabsProps {
   showSubstituicoes: boolean
@@ -9,6 +10,7 @@ interface ModuleTabsProps {
 
 export function ModuleTabs({ showSubstituicoes }: ModuleTabsProps) {
   const location = useLocation()
+  const { perfilSlug } = useIsSuperAdmin()
   let tabs: NavigationEntry[] = []
   let label = ''
 
@@ -17,7 +19,10 @@ export function ModuleTabs({ showSubstituicoes }: ModuleTabsProps) {
       (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
     )
   ) {
-    tabs = PIPELINE_TABS
+    tabs =
+      perfilSlug === 'negociacao-propria'
+        ? PIPELINE_TABS.filter((item) => item.path === '/pipeline' || item.path === '/propostas')
+        : PIPELINE_TABS
     label = 'Etapas do Pipeline Comercial'
   } else if (
     ['/foundation', '/slas', '/substituicoes'].some(

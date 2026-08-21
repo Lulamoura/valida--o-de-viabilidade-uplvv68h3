@@ -29,6 +29,13 @@
     )
   }
 
+  function propostaPodeExecutar(app, user, tipo) {
+    var perfil = propostaPerfil(app, user)
+    if (perfil === 'superadministrador') return true
+    if (perfil === 'negociacao-propria') return false
+    return true
+  }
+
   function propostaAuditoria(app, ator, perfil, comando, versao, chave, justificativa, evidencia) {
     var a = new Record(app.findCollectionByNameOrId('com_auditoria'))
     a.set('collection_name', 'com_proposta_versoes')
@@ -294,6 +301,8 @@
       )
         return e.json(400, { error: 'EVIDENCIA_DECISAO_OBRIGATORIA' })
       var perfil = propostaPerfil($app, ator)
+      if (!propostaPodeExecutar($app, ator, body.tipo))
+        return e.json(403, { error: 'ACAO_NAO_AUTORIZADA' })
       var payload = {
         negocio_id: body.negocio_id,
         tipo: body.tipo,

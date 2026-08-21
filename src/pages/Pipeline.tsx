@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ClipboardCheck, FileCheck2, ListChecks, Trophy } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 
 const stages = [
   {
@@ -31,6 +32,11 @@ const stages = [
 ]
 
 export default function Pipeline() {
+  const { perfilSlug } = useIsSuperAdmin()
+  const visibleStages =
+    perfilSlug === 'negociacao-propria'
+      ? stages.filter((stage) => stage.path === '/propostas')
+      : stages
   return (
     <div className="space-y-6">
       <div>
@@ -43,7 +49,7 @@ export default function Pipeline() {
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        {stages.map((stage, index) => {
+        {visibleStages.map((stage, index) => {
           const Icon = stage.icon
           return (
             <Link key={stage.path} to={stage.path} className="group">

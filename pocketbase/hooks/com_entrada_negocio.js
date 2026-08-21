@@ -3,6 +3,11 @@ routerAdd(
   'POST',
   '/backend/v1/negocios/entrada',
   (e) => {
+    try {
+      var perfilRestrito = $app.findRecordById('com_perfis', e.auth.getString('perfil_id'))
+      if (perfilRestrito.getString('slug') === 'negociacao-propria')
+        return e.json(403, { error: 'ACAO_NAO_AUTORIZADA' })
+    } catch (_) {}
     function canonicalize(obj) {
       if (obj === null || obj === undefined) return 'null'
       if (typeof obj !== 'object') return JSON.stringify(obj)

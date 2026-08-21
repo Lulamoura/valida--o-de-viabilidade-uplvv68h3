@@ -23,7 +23,30 @@ import Layout from './components/Layout'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './hooks/use-auth'
 import { PermissionsProvider } from './hooks/use-permissions'
+import { usePermissions } from './hooks/use-permissions'
+import { useIsSuperAdmin } from './hooks/use-is-superadmin'
 import { MUTATIONS_ENABLED } from './lib/feature-flags'
+
+function AdministrationRoute({ children }: { children: React.ReactNode }) {
+  const { hasPermission, loading } = usePermissions()
+  const allowed = [
+    'foundation.manage',
+    'usuarios.admin',
+    'equipes.admin',
+    'perfis.admin',
+    'permissoes.admin',
+    'vinculos.admin',
+    'parametros.gerenciar',
+  ].some(hasPermission)
+  if (loading) return null
+  return allowed ? children : <NotFound />
+}
+
+function FullPipelineRoute({ children }: { children: React.ReactNode }) {
+  const { perfilSlug, loading } = useIsSuperAdmin()
+  if (loading) return null
+  return perfilSlug === 'negociacao-propria' ? <NotFound /> : children
+}
 
 const App = () => (
   <BrowserRouter>
@@ -63,7 +86,9 @@ const App = () => (
                 path="/foundation"
                 element={
                   <ProtectedRoute>
-                    <Foundation />
+                    <AdministrationRoute>
+                      <Foundation />
+                    </AdministrationRoute>
                   </ProtectedRoute>
                 }
               />
@@ -71,7 +96,9 @@ const App = () => (
                 path="/qualificacao"
                 element={
                   <ProtectedRoute>
-                    <Qualificacoes />
+                    <FullPipelineRoute>
+                      <Qualificacoes />
+                    </FullPipelineRoute>
                   </ProtectedRoute>
                 }
               />
@@ -103,7 +130,9 @@ const App = () => (
                 path="/fechamentos"
                 element={
                   <ProtectedRoute>
-                    <Fechamentos />
+                    <FullPipelineRoute>
+                      <Fechamentos />
+                    </FullPipelineRoute>
                   </ProtectedRoute>
                 }
               />
@@ -111,7 +140,9 @@ const App = () => (
                 path="/ordens-execucao"
                 element={
                   <ProtectedRoute>
-                    <OrdensExecucao />
+                    <FullPipelineRoute>
+                      <OrdensExecucao />
+                    </FullPipelineRoute>
                   </ProtectedRoute>
                 }
               />
