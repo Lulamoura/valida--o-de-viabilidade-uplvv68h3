@@ -14,6 +14,7 @@ import Atividades from './pages/Atividades'
 import Slas from './pages/Slas'
 import Propostas from './pages/Propostas'
 import Fechamentos from './pages/Fechamentos'
+import OrdensExecucao from './pages/OrdensExecucao'
 
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
@@ -85,6 +86,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Fechamentos />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/ordens-execucao"
+                element={
+                  <ProtectedRoute>
+                    <OrdensExecucao />
                   </ProtectedRoute>
                 }
               />

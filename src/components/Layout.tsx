@@ -5,6 +5,7 @@ import {
   BellRing,
   Building2,
   CalendarClock,
+  ClipboardCheck,
   ChevronRight,
   FileCheck2,
   KeyRound,
@@ -85,6 +86,7 @@ function LayoutContent() {
           { label: 'SLAs e alertas', path: '/slas', icon: BellRing },
           { label: 'Propostas', path: '/propostas', icon: FileCheck2 },
           { label: 'Fechamentos', path: '/fechamentos', icon: Trophy },
+          { label: 'Ordens de Execução', path: '/ordens-execucao', icon: ClipboardCheck },
         ]
       : []),
     { label: 'Administração', path: '/foundation', icon: Layers },
