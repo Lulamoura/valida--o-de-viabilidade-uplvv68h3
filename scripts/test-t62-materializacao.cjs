@@ -4,10 +4,10 @@ const source = fs.readFileSync('pocketbase/hooks/com_t62_materializacao.js', 'ut
 const checks = [
   [
     'diagnóstico GET autenticado e versionado',
-    source.includes("ROTA + '/diagnostico'") &&
+    source.includes("ROTA + '/diagnostico-v4'") &&
       source.includes("HOOK_VERSION = 't62-materializacao-precheck-v4'") &&
       source.includes('handler_alcancado: true') &&
-      source.match(/ROTA \+ '\/diagnostico'[\s\S]{0,300}autenticarSeguro\(e\)/),
+      source.match(/ROTA \+ '\/diagnostico-v4'[\s\S]{0,300}autenticarSeguro\(e\)/),
   ],
   [
     'rotas dry-run e execução separadas',
@@ -20,7 +20,7 @@ const checks = [
   [
     'diagnóstico autentica internamente sem middleware pré-handler',
     (() => {
-      const start = source.indexOf("ROTA + '/diagnostico'")
+      const start = source.indexOf("ROTA + '/diagnostico-v4'")
       const end = source.indexOf("ROTA + '/dry-run'", start)
       const block = source.slice(start, end)
       return block.includes('autenticarSeguro(e)') && !block.includes('$apis.requireAuth()')
