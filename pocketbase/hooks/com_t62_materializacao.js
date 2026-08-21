@@ -243,7 +243,7 @@
     }
   }
 
-  routerAdd('GET', ROTA + '/diagnostico', function (e) {
+  routerAdd('GET', ROTA + '/diagnostico-v4', function (e) {
     var auth = autenticarSeguro(e)
     if (auth.erro) return auth.erro
     return e.json(200, {
