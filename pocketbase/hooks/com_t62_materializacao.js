@@ -30,6 +30,26 @@
     'REGRAS',
   ]
 
+  function autenticarSeguro(e) {
+    try {
+      return exigirSuperadmin(e)
+    } catch (_) {
+      return { erro: e.json(409, { error: 'PRECHECK_AUTH' }) }
+    }
+  }
+
+  function corpoSeguro(e) {
+    try {
+      var info = e.requestInfo()
+      var body = info && info.body
+      if (!body || typeof body !== 'object' || Array.isArray(body))
+        return { erro: e.json(400, { error: 'PRECHECK_BODY' }) }
+      return { body: body }
+    } catch (_) {
+      return { erro: e.json(400, { error: 'PRECHECK_BODY' }) }
+    }
+  }
+
   function canonicalize(obj) {
     if (obj === null || obj === undefined) return 'null'
     if (typeof obj !== 'object') return JSON.stringify(obj)
@@ -226,14 +246,11 @@
     'POST',
     ROTA + '/dry-run',
     function (e) {
-      var auth = exigirSuperadmin(e)
+      var auth = autenticarSeguro(e)
       if (auth.erro) return auth.erro
-      var body
-      try {
-        body = JSON.parse(toString(e.request.body))
-      } catch (_) {
-        return e.json(400, { error: 'JSON_INVALIDO' })
-      }
+      var parsed = corpoSeguro(e)
+      if (parsed.erro) return parsed.erro
+      var body = parsed.body
       if (
         Object.keys(body || {})
           .sort()
@@ -264,15 +281,12 @@
     'POST',
     ROTA + '/executar',
     function (e) {
-      var auth = exigirSuperadmin(e)
+      var auth = autenticarSeguro(e)
       if (auth.erro) return auth.erro
       var ator = auth.ator
-      var body
-      try {
-        body = JSON.parse(toString(e.request.body))
-      } catch (_) {
-        return e.json(400, { error: 'JSON_INVALIDO' })
-      }
+      var parsed = corpoSeguro(e)
+      if (parsed.erro) return parsed.erro
+      var body = parsed.body
       var keys = Object.keys(body || {})
         .sort()
         .join(',')
