@@ -3,6 +3,8 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Index from './pages/Index'
+import OperacaoDia from './pages/OperacaoDia'
+import Pipeline from './pages/Pipeline'
 import Login from './pages/Login'
 import Foundation from './pages/Foundation'
 import SubstituicoesLista from './pages/SubstituicoesLista'
@@ -37,7 +39,23 @@ const App = () => (
                 path="/"
                 element={
                   <ProtectedRoute>
+                    <OperacaoDia />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/analises"
+                element={
+                  <ProtectedRoute>
                     <Index />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/pipeline"
+                element={
+                  <ProtectedRoute>
+                    <Pipeline />
                   </ProtectedRoute>
                 }
               />

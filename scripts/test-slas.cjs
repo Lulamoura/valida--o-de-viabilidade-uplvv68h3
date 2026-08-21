@@ -5,6 +5,7 @@ const page = fs.readFileSync('src/pages/Slas.tsx', 'utf8')
 const service = fs.readFileSync('src/services/slas.ts', 'utf8')
 const app = fs.readFileSync('src/App.tsx', 'utf8')
 const layout = fs.readFileSync('src/components/Layout.tsx', 'utf8')
+const navigation = fs.readFileSync('src/lib/navigation.ts', 'utf8')
 const checks = [
   [
     'rotas GET e POST',
@@ -58,7 +59,12 @@ const checks = [
     page.includes('SLAs, calendário e alertas') && page.includes('Agenda de vencimentos'),
   ],
   ['rota protegida', app.includes('path="/slas"') && app.includes('<Slas />')],
-  ['navegacao', layout.includes("path: '/slas'")],
+  [
+    'navegacao modular',
+    layout.includes('ModuleTabs') &&
+      navigation.includes("path: '/slas'") &&
+      navigation.includes('ADMIN_TABS'),
+  ],
 ]
 let ok = 0
 for (const [nome, passou] of checks) {
