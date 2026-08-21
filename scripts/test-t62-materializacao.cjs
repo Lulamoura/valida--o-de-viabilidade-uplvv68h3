@@ -1,7 +1,20 @@
 const fs = require('fs')
 
 const source = fs.readFileSync('pocketbase/hooks/com_t62_materializacao.js', 'utf8')
+const probe = fs.readFileSync('pocketbase/hooks/com_t62_runtime_probe.js', 'utf8')
 const checks = [
+  [
+    'sonda v6 em hook e prefixo independentes',
+    probe.includes("'/backend/v1/t6-2/runtime-probe-v6'") &&
+      probe.includes("probe_version: 't62-runtime-probe-v6'") &&
+      probe.includes('handler_alcancado: true'),
+  ],
+  [
+    'sonda v6 não acessa autenticação, dados, segredos ou rede',
+    !/(requireAuth|e\.auth|\$app|\$secrets|\$http|fetch|save|runInTransaction|delete|POST)/.test(
+      probe,
+    ) && probe.includes('mutacoes_executadas: 0'),
+  ],
   [
     'diagnóstico GET autenticado e versionado',
     source.includes("ROTA + '/diagnostico-v5'") &&
