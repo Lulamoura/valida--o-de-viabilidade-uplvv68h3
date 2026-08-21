@@ -98,6 +98,16 @@ const checks = [
       source.includes('error: codigoSnapshot(err)') &&
       !source.includes('error: String(err)'),
   ],
+  [
+    'parsing usa requestInfo nas duas rotas',
+    (source.match(/e\.requestInfo\(\)/g) || []).length === 1 &&
+      !source.includes('e.request.body') &&
+      source.includes('var parsed = corpoSeguro(e)'),
+  ],
+  [
+    'pré-handler possui códigos fechados',
+    source.includes("error: 'PRECHECK_AUTH'") && source.includes("error: 'PRECHECK_BODY'"),
+  ],
 ]
 
 let passed = 0
