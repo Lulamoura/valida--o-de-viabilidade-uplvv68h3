@@ -5,6 +5,7 @@
 ;(function () {
   var ROTA = '/backend/v1/admin/t6-2/materializacao'
   var COMANDO = 't62_materializar_menor_privilegio'
+  var ID_SHIRLEIDE = 'pmdghnoqc5x3rnn'
   var EMAIL_SHIRLEIDE = 'comercial06@pmaisservicos.com.br'
   var PERFIL_SLUG = 'negociacao-propria'
   var CONFIRMACAO = 'MATERIALIZAR_T62_MENOR_PRIVILEGIO'
@@ -57,7 +58,12 @@
   }
 
   function snapshot(app) {
-    var shirleide = app.findAuthRecordByEmail('users', EMAIL_SHIRLEIDE)
+    // A conta-alvo é fechada pelo ID imutável criado no gate T6.2. O e-mail
+    // permanece como segunda trava, mas não é usado como índice de busca:
+    // campos de autenticação podem estar ocultos pelas regras da coleção.
+    var shirleide = app.findRecordById('users', ID_SHIRLEIDE)
+    if (shirleide.getString('email').toLowerCase() !== EMAIL_SHIRLEIDE)
+      throw new Error('CONTA_ALVO_DIVERGENTE')
     var profile = primeiro(app, 'com_perfis', "slug='" + PERFIL_SLUG + "'")
     var bindings = app.findRecordsByFilter(
       'com_usuarios_equipes',
@@ -368,7 +374,9 @@
             linkIds.push(link.id)
           }
 
-          var shirleide = tx.findAuthRecordByEmail('users', EMAIL_SHIRLEIDE)
+          var shirleide = tx.findRecordById('users', ID_SHIRLEIDE)
+          if (shirleide.getString('email').toLowerCase() !== EMAIL_SHIRLEIDE)
+            throw new Error('CONTA_ALVO_DIVERGENTE')
           if (shirleide.getBool('ativo_comercial')) throw new Error('CONTA_ALVO_ATIVA')
           var perfilAnterior = perfilSlug(tx, shirleide)
           shirleide.set('perfil_id', perfil.id)
