@@ -118,6 +118,11 @@
     'POST',
     '/backend/v1/fechamentos/decidir',
     (e) => {
+      try {
+        var perfilRestrito = $app.findRecordById('com_perfis', e.auth.getString('perfil_id'))
+        if (perfilRestrito.getString('slug') === 'negociacao-propria')
+          return e.json(403, { error: 'ACAO_NAO_AUTORIZADA' })
+      } catch (_) {}
       function fechamentoPerfil(user) {
         try {
           return $app.findRecordById('com_perfis', user.getString('perfil_id')).getString('slug')
@@ -321,6 +326,11 @@
     'POST',
     '/backend/v1/fechamentos/reativar',
     (e) => {
+      try {
+        var perfilRestrito = $app.findRecordById('com_perfis', e.auth.getString('perfil_id'))
+        if (perfilRestrito.getString('slug') === 'negociacao-propria')
+          return e.json(403, { error: 'ACAO_NAO_AUTORIZADA' })
+      } catch (_) {}
       function fechamentoPerfil(user) {
         try {
           return $app.findRecordById('com_perfis', user.getString('perfil_id')).getString('slug')

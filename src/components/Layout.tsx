@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
+import { usePermissions } from '@/hooks/use-permissions'
 import { MUTATIONS_ENABLED } from '@/lib/feature-flags'
 import { cn } from '@/lib/utils'
 import { MAIN_MODULES, modulePathFor } from '@/lib/navigation'
@@ -49,6 +50,7 @@ export function getSubstituicoesPageTitle(pathname: string, mutationsEnabled = t
 function LayoutContent() {
   const { user, signOut } = useAuth()
   const { perfilSlug, loading: perfilLoading } = useIsSuperAdmin()
+  const { hasPermission, loading: permissionsLoading } = usePermissions()
   const { setOpenMobile } = useSidebar()
   const location = useLocation()
   const navigate = useNavigate()
@@ -59,9 +61,23 @@ function LayoutContent() {
     user?.ativo_comercial === true &&
     SUBSTITUICOES_ALLOWLIST.has(perfilSlug ?? '')
 
-  const navigation = MAIN_MODULES.filter(
-    (item) => user?.ativo_comercial === true || item.path === '/foundation',
-  )
+  const podeAdministrar =
+    !permissionsLoading &&
+    [
+      'foundation.manage',
+      'usuarios.admin',
+      'equipes.admin',
+      'perfis.admin',
+      'permissoes.admin',
+      'vinculos.admin',
+      'parametros.gerenciar',
+    ].some(hasPermission)
+
+  const navigation = MAIN_MODULES.filter((item) => {
+    if (user?.ativo_comercial !== true) return false
+    if (item.path === '/foundation') return podeAdministrar
+    return true
+  })
 
   const handleLogout = () => {
     signOut()

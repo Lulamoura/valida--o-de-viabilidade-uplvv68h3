@@ -2,6 +2,7 @@ onRecordListRequest((e) => {
   var colName = e.collection.name
 
   var permMap = {
+    users: ['usuarios.admin'],
     com_perfis: ['perfis.admin'],
     com_permissoes: ['permissoes.admin'],
     com_perfil_permissoes: ['permissoes.admin'],
