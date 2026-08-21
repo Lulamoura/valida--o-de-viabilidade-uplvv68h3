@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-18T19:39:38.697Z",
+  "generatedAt": "2026-08-21T20:45:41.923Z",
   "collections": [
     {
       "name": "users",
@@ -751,6 +751,37 @@
         {
           "name": "prospectivo",
           "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modalidade",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pontual", "recorrente"]
+        },
+        {
+          "name": "necessidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "localizacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dimensao_estimada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prazo_cliente",
+          "type": "date",
           "required": false,
           "system": false
         }
