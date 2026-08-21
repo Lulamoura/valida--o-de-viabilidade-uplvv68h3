@@ -86,6 +86,18 @@ const checks = [
     !source.includes("set('ativo_comercial', true)") && source.includes('contas_ativadas: 0'),
   ],
   ['nenhuma exclusão', !source.includes('$app.delete') && !source.includes('tx.delete')],
+  [
+    'snapshot dividido em etapas fechadas',
+    ['CONTA_ALVO', 'PERFIL_DESTINO', 'VINCULOS', 'PERMISSOES', 'SLA', 'CALENDARIO', 'REGRAS'].every(
+      (code) => source.includes(`'${code}'`),
+    ),
+  ],
+  [
+    'diagnóstico não expõe mensagem interna',
+    source.includes("return 'SNAPSHOT_INDISPONIVEL'") &&
+      source.includes('error: codigoSnapshot(err)') &&
+      !source.includes('error: String(err)'),
+  ],
 ]
 
 let passed = 0
