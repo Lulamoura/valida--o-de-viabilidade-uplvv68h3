@@ -4,6 +4,7 @@ const service = fs.readFileSync('src/services/propostas.ts', 'utf8')
 const page = fs.readFileSync('src/pages/Propostas.tsx', 'utf8')
 const app = fs.readFileSync('src/App.tsx', 'utf8')
 const layout = fs.readFileSync('src/components/Layout.tsx', 'utf8')
+const navigation = fs.readFileSync('src/lib/navigation.ts', 'utf8')
 const checks = [
   [
     'rotas GET e POST',
@@ -59,7 +60,12 @@ const checks = [
     ),
   ],
   ['rota protegida', app.includes('path="/propostas"') && app.includes('<Propostas />')],
-  ['navegação', layout.includes("path: '/propostas'")],
+  [
+    'navegação modular',
+    layout.includes('ModuleTabs') &&
+      navigation.includes("path: '/propostas'") &&
+      navigation.includes('PIPELINE_TABS'),
+  ],
 ]
 let ok = 0
 for (const [nome, passou] of checks) {

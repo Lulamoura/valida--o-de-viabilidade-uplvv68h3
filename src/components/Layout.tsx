@@ -1,22 +1,9 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import {
-  ArrowLeftRight,
-  BellRing,
-  Building2,
-  CalendarClock,
-  ClipboardCheck,
-  ChevronRight,
-  FileCheck2,
-  KeyRound,
-  Layers,
-  LayoutDashboard,
-  ListChecks,
-  LogOut,
-  Trophy,
-} from 'lucide-react'
+import { Building2, ChevronRight, KeyRound, LogOut } from 'lucide-react'
 
 import { ChangePasswordDialog } from '@/components/foundation/ChangePasswordDialog'
+import { ModuleTabs } from '@/components/ModuleTabs'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,6 +24,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useIsSuperAdmin } from '@/hooks/use-is-superadmin'
 import { MUTATIONS_ENABLED } from '@/lib/feature-flags'
 import { cn } from '@/lib/utils'
+import { MAIN_MODULES, modulePathFor } from '@/lib/navigation'
 
 const SUBSTITUICOES_ALLOWLIST = new Set([
   'superadministrador',
@@ -45,12 +33,6 @@ const SUBSTITUICOES_ALLOWLIST = new Set([
   'operador-comercial',
   'prospeccao',
 ])
-
-type NavigationItem = {
-  label: string
-  path: string
-  icon: typeof LayoutDashboard
-}
 
 export function getSubstituicoesPageTitle(pathname: string, mutationsEnabled = true) {
   if (pathname === '/substituicoes' || pathname === '/substituicoes/') return 'Substituições'
@@ -77,23 +59,9 @@ function LayoutContent() {
     user?.ativo_comercial === true &&
     SUBSTITUICOES_ALLOWLIST.has(perfilSlug ?? '')
 
-  const navigation: NavigationItem[] = [
-    { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-    ...(user?.ativo_comercial === true
-      ? [
-          { label: 'Qualificação', path: '/qualificacao', icon: ListChecks },
-          { label: 'Atividades', path: '/atividades', icon: CalendarClock },
-          { label: 'SLAs e alertas', path: '/slas', icon: BellRing },
-          { label: 'Propostas', path: '/propostas', icon: FileCheck2 },
-          { label: 'Fechamentos', path: '/fechamentos', icon: Trophy },
-          { label: 'Ordens de Execução', path: '/ordens-execucao', icon: ClipboardCheck },
-        ]
-      : []),
-    { label: 'Administração', path: '/foundation', icon: Layers },
-    ...(podeVerSubstituicoes
-      ? [{ label: 'Substituições', path: '/substituicoes', icon: ArrowLeftRight }]
-      : []),
-  ]
+  const navigation = MAIN_MODULES.filter(
+    (item) => user?.ativo_comercial === true || item.path === '/foundation',
+  )
 
   const handleLogout = () => {
     signOut()
@@ -111,14 +79,12 @@ function LayoutContent() {
       ? user.email.slice(0, 2).toUpperCase()
       : 'PM'
 
-  const isActive = (path: string) =>
-    path === '/'
-      ? location.pathname === '/'
-      : location.pathname === path || location.pathname.startsWith(`${path}/`)
+  const activeModulePath = modulePathFor(location.pathname)
+  const isActive = (path: string) => path === activeModulePath
 
   const pageTitle =
     getSubstituicoesPageTitle(location.pathname, MUTATIONS_ENABLED) ??
-    navigation.find((item) => isActive(item.path))?.label ??
+    navigation.find((item) => item.path === activeModulePath)?.label ??
     'Gestão Comercial PMais'
 
   return (
@@ -266,6 +232,8 @@ function LayoutContent() {
             </Button>
           </div>
         </header>
+
+        <ModuleTabs showSubstituicoes={podeVerSubstituicoes} />
 
         <main id="conteudo-principal" className="mx-auto w-full max-w-7xl flex-1 p-4 lg:p-8">
           <Outlet />

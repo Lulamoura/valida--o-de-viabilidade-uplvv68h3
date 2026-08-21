@@ -6,6 +6,7 @@ const service = read('src/services/fechamentos.ts')
 const page = read('src/pages/Fechamentos.tsx')
 const app = read('src/App.tsx')
 const layout = read('src/components/Layout.tsx')
+const navigation = read('src/lib/navigation.ts')
 
 const checks = [
   [
@@ -63,7 +64,9 @@ const checks = [
   ],
   [
     'rota protegida e navegação',
-    app.includes('path="/fechamentos"') && layout.includes("path: '/fechamentos'"),
+    app.includes('path="/fechamentos"') &&
+      layout.includes('ModuleTabs') &&
+      navigation.includes("path: '/fechamentos'"),
   ],
 ]
 

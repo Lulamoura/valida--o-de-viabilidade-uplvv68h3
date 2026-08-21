@@ -6,6 +6,7 @@ const service = read('src/services/ordens-execucao.ts')
 const page = read('src/pages/OrdensExecucao.tsx')
 const app = read('src/App.tsx')
 const layout = read('src/components/Layout.tsx')
+const navigation = read('src/lib/navigation.ts')
 
 const checks = [
   [
@@ -65,7 +66,9 @@ const checks = [
   ],
   [
     'rota protegida e navegação',
-    app.includes('path="/ordens-execucao"') && layout.includes("path: '/ordens-execucao'"),
+    app.includes('path="/ordens-execucao"') &&
+      layout.includes('ModuleTabs') &&
+      navigation.includes("path: '/ordens-execucao'"),
   ],
 ]
 
