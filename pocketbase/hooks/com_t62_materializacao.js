@@ -5,7 +5,7 @@
 ;(function () {
   var ROTA = '/backend/v1/admin/t6-2/materializacao'
   var COMANDO = 't62_materializar_menor_privilegio'
-  var HOOK_VERSION = 't62-materializacao-precheck-v5'
+  var HOOK_VERSION = 't62-materializacao-precheck-v7'
   var ID_SHIRLEIDE = 'pmdghnoqc5x3rnn'
   var EMAIL_SHIRLEIDE = 'comercial06@pmaisservicos.com.br'
   var PERFIL_SLUG = 'negociacao-propria'
@@ -245,12 +245,23 @@
 
   routerAdd(
     'GET',
-    ROTA + '/diagnostico-v5',
+    ROTA + '/diagnostico-v7',
     function (e) {
-      var auth = autenticarSeguro(e)
-      if (auth.erro) return auth.erro
+      // O SKIP serializa cada callback de rota em um wrapper /pb.js próprio.
+      // Por isso este diagnóstico é deliberadamente autocontido e não usa
+      // constantes ou funções do fechamento lexical da IIFE.
+      var ator = e.auth
+      if (!ator) return e.unauthorizedError('Autenticacao necessaria')
+      if (!ator.getBool('ativo_comercial')) return e.forbiddenError('Usuario comercial inativo')
+      var perfilSlug = ''
+      try {
+        perfilSlug = $app
+          .findRecordById('com_perfis', ator.getString('perfil_id'))
+          .getString('slug')
+      } catch (_) {}
+      if (perfilSlug !== 'superadministrador') return e.forbiddenError('SuperAdmin necessario')
       return e.json(200, {
-        hook_version: HOOK_VERSION,
+        hook_version: 't62-materializacao-precheck-v7',
         handler_alcancado: true,
         somente_leitura: true,
         mutacoes_executadas: 0,

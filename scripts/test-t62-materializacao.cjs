@@ -17,10 +17,10 @@ const checks = [
   ],
   [
     'diagnóstico GET autenticado e versionado',
-    source.includes("ROTA + '/diagnostico-v5'") &&
-      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v5'") &&
+    source.includes("ROTA + '/diagnostico-v7'") &&
+      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v7'") &&
       source.includes('handler_alcancado: true') &&
-      source.match(/ROTA \+ '\/diagnostico-v5'[\s\S]{0,300}autenticarSeguro\(e\)/),
+      source.match(/ROTA \+ '\/diagnostico-v7'[\s\S]{0,900}var ator = e\.auth/),
   ],
   [
     'rotas dry-run e execução separadas',
@@ -33,10 +33,16 @@ const checks = [
   [
     'diagnóstico exige coleção users e valida SuperAdmin internamente',
     (() => {
-      const start = source.indexOf("ROTA + '/diagnostico-v5'")
+      const start = source.indexOf("ROTA + '/diagnostico-v7'")
       const end = source.indexOf("ROTA + '/dry-run'", start)
       const block = source.slice(start, end)
-      return block.includes('autenticarSeguro(e)') && block.includes("$apis.requireAuth('users')")
+      return (
+        block.includes('var ator = e.auth') &&
+        block.includes("perfilSlug !== 'superadministrador'") &&
+        block.includes("$apis.requireAuth('users')") &&
+        !block.includes('autenticarSeguro(e)') &&
+        !block.includes('HOOK_VERSION')
+      )
     })(),
   ],
   [
