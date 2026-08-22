@@ -27,6 +27,37 @@ const checks = [
     source.includes("ROTA + '/dry-run'") && source.includes("ROTA + '/executar'"),
   ],
   [
+    'callback dry-run autocontido no wrapper do SKIP',
+    (() => {
+      const start = source.indexOf("ROTA + '/dry-run'")
+      const end = source.indexOf("ROTA + '/executar'", start)
+      const block = source.slice(start, end)
+      return (
+        block.includes('function autenticarSeguro(evento)') &&
+        block.includes('function corpoSeguro(evento)') &&
+        block.includes('function snapshot(app)') &&
+        block.includes('function codigoSnapshot(err)') &&
+        block.includes('function previsto(state)')
+      )
+    })(),
+  ],
+  [
+    'callback executar autocontido no wrapper do SKIP',
+    (() => {
+      const start = source.indexOf("ROTA + '/executar'")
+      const block = source.slice(start)
+      return (
+        block.includes("var COMANDO = 't62_materializar_menor_privilegio'") &&
+        block.includes("var CONFIRMACAO = 'MATERIALIZAR_T62_MENOR_PRIVILEGIO'") &&
+        block.includes('function autenticarSeguro(evento)') &&
+        block.includes('function corpoSeguro(evento)') &&
+        block.includes('function snapshot(app)') &&
+        block.includes('function codigoSnapshot(err)') &&
+        block.includes('function fingerprint(app)')
+      )
+    })(),
+  ],
+  [
     'middleware genérico preservado nas duas rotas mutantes',
     (source.match(/\$apis\.requireAuth\(\)/g) || []).length === 2,
   ],
