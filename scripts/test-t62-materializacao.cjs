@@ -17,14 +17,45 @@ const checks = [
   ],
   [
     'diagnóstico GET autenticado e versionado',
-    source.includes("ROTA + '/diagnostico-v5'") &&
-      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v5'") &&
+    source.includes("ROTA + '/diagnostico-v7'") &&
+      source.includes("HOOK_VERSION = 't62-materializacao-precheck-v7'") &&
       source.includes('handler_alcancado: true') &&
-      source.match(/ROTA \+ '\/diagnostico-v5'[\s\S]{0,300}autenticarSeguro\(e\)/),
+      source.match(/ROTA \+ '\/diagnostico-v7'[\s\S]{0,900}var ator = e\.auth/),
   ],
   [
     'rotas dry-run e execução separadas',
     source.includes("ROTA + '/dry-run'") && source.includes("ROTA + '/executar'"),
+  ],
+  [
+    'callback dry-run autocontido no wrapper do SKIP',
+    (() => {
+      const start = source.indexOf("ROTA + '/dry-run'")
+      const end = source.indexOf("ROTA + '/executar'", start)
+      const block = source.slice(start, end)
+      return (
+        block.includes('function autenticarSeguro(evento)') &&
+        block.includes('function corpoSeguro(evento)') &&
+        block.includes('function snapshot(app)') &&
+        block.includes('function codigoSnapshot(err)') &&
+        block.includes('function previsto(state)')
+      )
+    })(),
+  ],
+  [
+    'callback executar autocontido no wrapper do SKIP',
+    (() => {
+      const start = source.indexOf("ROTA + '/executar'")
+      const block = source.slice(start)
+      return (
+        block.includes("var COMANDO = 't62_materializar_menor_privilegio'") &&
+        block.includes("var CONFIRMACAO = 'MATERIALIZAR_T62_MENOR_PRIVILEGIO'") &&
+        block.includes('function autenticarSeguro(evento)') &&
+        block.includes('function corpoSeguro(evento)') &&
+        block.includes('function snapshot(app)') &&
+        block.includes('function codigoSnapshot(err)') &&
+        block.includes('function fingerprint(app)')
+      )
+    })(),
   ],
   [
     'middleware genérico preservado nas duas rotas mutantes',
@@ -33,10 +64,16 @@ const checks = [
   [
     'diagnóstico exige coleção users e valida SuperAdmin internamente',
     (() => {
-      const start = source.indexOf("ROTA + '/diagnostico-v5'")
+      const start = source.indexOf("ROTA + '/diagnostico-v7'")
       const end = source.indexOf("ROTA + '/dry-run'", start)
       const block = source.slice(start, end)
-      return block.includes('autenticarSeguro(e)') && block.includes("$apis.requireAuth('users')")
+      return (
+        block.includes('var ator = e.auth') &&
+        block.includes("perfilSlug !== 'superadministrador'") &&
+        block.includes("$apis.requireAuth('users')") &&
+        !block.includes('autenticarSeguro(e)') &&
+        !block.includes('HOOK_VERSION')
+      )
     })(),
   ],
   [

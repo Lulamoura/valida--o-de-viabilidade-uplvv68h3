@@ -5,7 +5,7 @@
 ;(function () {
   var ROTA = '/backend/v1/admin/t6-2/materializacao'
   var COMANDO = 't62_materializar_menor_privilegio'
-  var HOOK_VERSION = 't62-materializacao-precheck-v5'
+  var HOOK_VERSION = 't62-materializacao-precheck-v7'
   var ID_SHIRLEIDE = 'pmdghnoqc5x3rnn'
   var EMAIL_SHIRLEIDE = 'comercial06@pmaisservicos.com.br'
   var PERFIL_SLUG = 'negociacao-propria'
@@ -245,12 +245,23 @@
 
   routerAdd(
     'GET',
-    ROTA + '/diagnostico-v5',
+    ROTA + '/diagnostico-v7',
     function (e) {
-      var auth = autenticarSeguro(e)
-      if (auth.erro) return auth.erro
+      // O SKIP serializa cada callback de rota em um wrapper /pb.js próprio.
+      // Por isso este diagnóstico é deliberadamente autocontido e não usa
+      // constantes ou funções do fechamento lexical da IIFE.
+      var ator = e.auth
+      if (!ator) return e.unauthorizedError('Autenticacao necessaria')
+      if (!ator.getBool('ativo_comercial')) return e.forbiddenError('Usuario comercial inativo')
+      var perfilSlug = ''
+      try {
+        perfilSlug = $app
+          .findRecordById('com_perfis', ator.getString('perfil_id'))
+          .getString('slug')
+      } catch (_) {}
+      if (perfilSlug !== 'superadministrador') return e.forbiddenError('SuperAdmin necessario')
       return e.json(200, {
-        hook_version: HOOK_VERSION,
+        hook_version: 't62-materializacao-precheck-v7',
         handler_alcancado: true,
         somente_leitura: true,
         mutacoes_executadas: 0,
@@ -263,6 +274,212 @@
     'POST',
     ROTA + '/dry-run',
     function (e) {
+      var ID_SHIRLEIDE = 'pmdghnoqc5x3rnn'
+      var EMAIL_SHIRLEIDE = 'comercial06@pmaisservicos.com.br'
+      var PERFIL_SLUG = 'negociacao-propria'
+      var SLA = [
+        ['sla.lead_dias_uteis', '1'],
+        ['sla.proposta_dias_uteis', '5'],
+        ['sla.negociacao_dias_uteis', '2'],
+        ['sla.alerta_antecedencia_dias_uteis', '1'],
+      ]
+      var PERMISSOES = ['empresas.view', 'negocios.view', 'dashboard.view']
+      var ETAPAS_SNAPSHOT = [
+        'CONTA_ALVO',
+        'PERFIL_DESTINO',
+        'VINCULOS',
+        'PERMISSOES',
+        'SLA',
+        'CALENDARIO',
+        'REGRAS',
+      ]
+      function perfilSlug(app, user) {
+        try {
+          return app.findRecordById('com_perfis', user.getString('perfil_id')).getString('slug')
+        } catch (_) {
+          return ''
+        }
+      }
+      function autenticarSeguro(evento) {
+        try {
+          var ator = evento.auth
+          if (!ator) return { erro: evento.unauthorizedError('Autenticacao necessaria') }
+          if (!ator.getBool('ativo_comercial'))
+            return { erro: evento.forbiddenError('Usuario comercial inativo') }
+          if (perfilSlug($app, ator) !== 'superadministrador')
+            return { erro: evento.forbiddenError('SuperAdmin necessario') }
+          return { ator: ator }
+        } catch (_) {
+          return { erro: evento.json(409, { error: 'PRECHECK_AUTH' }) }
+        }
+      }
+      function corpoSeguro(evento) {
+        try {
+          var info = evento.requestInfo()
+          var body = info && info.body
+          if (!body || typeof body !== 'object' || Array.isArray(body))
+            return { erro: evento.json(400, { error: 'PRECHECK_BODY' }) }
+          return { body: body }
+        } catch (_) {
+          return { erro: evento.json(400, { error: 'PRECHECK_BODY' }) }
+        }
+      }
+      function canonicalize(obj) {
+        if (obj === null || obj === undefined) return 'null'
+        if (typeof obj !== 'object') return JSON.stringify(obj)
+        if (Array.isArray(obj)) {
+          var arr = []
+          for (var a = 0; a < obj.length; a++) arr.push(canonicalize(obj[a]))
+          return '[' + arr.join(',') + ']'
+        }
+        var keys = Object.keys(obj).sort()
+        var parts = []
+        for (var i = 0; i < keys.length; i++)
+          parts.push(JSON.stringify(keys[i]) + ':' + canonicalize(obj[keys[i]]))
+        return '{' + parts.join(',') + '}'
+      }
+      function regra(collection, name) {
+        var value = collection[name]
+        return value === null || value === undefined ? null : String(value)
+      }
+      function primeiro(app, collection, filter) {
+        try {
+          return app.findFirstRecordByFilter(collection, filter)
+        } catch (_) {
+          return null
+        }
+      }
+      function snapshot(app) {
+        var etapa = 'CONTA_ALVO'
+        try {
+          var shirleide = app.findRecordById('users', ID_SHIRLEIDE)
+          if (shirleide.getString('email').toLowerCase() !== EMAIL_SHIRLEIDE)
+            throw new Error('CONTA_ALVO_DIVERGENTE')
+          etapa = 'PERFIL_DESTINO'
+          var profile = primeiro(app, 'com_perfis', "slug='" + PERFIL_SLUG + "'")
+          etapa = 'VINCULOS'
+          var bindings = app.findRecordsByFilter(
+            'com_usuarios_equipes',
+            "usuario_id='" + shirleide.id + "'",
+            'id',
+            50,
+            0,
+          )
+          var bindingState = []
+          for (var b = 0; b < bindings.length; b++)
+            bindingState.push({
+              id: bindings[b].id,
+              perfil_id: bindings[b].getString('perfil_id'),
+              escopo: bindings[b].getString('escopo'),
+              ativo: bindings[b].getBool('ativo'),
+            })
+          etapa = 'PERMISSOES'
+          var profilePermissions = []
+          if (profile) {
+            var links = app.findRecordsByFilter(
+              'com_perfil_permissoes',
+              "perfil_id='" + profile.id + "'",
+              'id',
+              100,
+              0,
+            )
+            for (var p = 0; p < links.length; p++) {
+              var permissionSlug = ''
+              try {
+                permissionSlug = app
+                  .findRecordById('com_permissoes', links[p].getString('permissao_id'))
+                  .getString('slug')
+              } catch (_) {}
+              profilePermissions.push({
+                id: links[p].id,
+                slug: permissionSlug,
+                escopo: links[p].getString('escopo'),
+              })
+            }
+          }
+          etapa = 'SLA'
+          var slaState = []
+          for (var s = 0; s < SLA.length; s++) {
+            var parametro = primeiro(app, 'com_parametros', "chave='" + SLA[s][0] + "'")
+            slaState.push(
+              parametro
+                ? {
+                    chave: SLA[s][0],
+                    id: parametro.id,
+                    valor: parametro.getString('valor'),
+                    ativo: parametro.getBool('ativo'),
+                  }
+                : { chave: SLA[s][0], id: null, valor: null, ativo: false },
+            )
+          }
+          etapa = 'CALENDARIO'
+          var calendarioExiste = true
+          try {
+            app.findCollectionByNameOrId('com_calendario_feriados')
+          } catch (_) {
+            calendarioExiste = false
+          }
+          etapa = 'REGRAS'
+          var users = app.findCollectionByNameOrId('users')
+          var audit = app.findCollectionByNameOrId('com_auditoria')
+          return {
+            shirleide: {
+              id: shirleide.id,
+              ativo_comercial: shirleide.getBool('ativo_comercial'),
+              perfil_id: shirleide.getString('perfil_id'),
+              perfil_slug: perfilSlug(app, shirleide),
+              updated: shirleide.getString('updated'),
+            },
+            perfil: profile
+              ? { id: profile.id, ativo: profile.getBool('ativo'), nome: profile.getString('nome') }
+              : null,
+            bindings: bindingState,
+            permissoes: profilePermissions,
+            sla: slaState,
+            calendario_existe: calendarioExiste,
+            regras: {
+              users_list: regra(users, 'listRule'),
+              users_view: regra(users, 'viewRule'),
+              auditoria_list: regra(audit, 'listRule'),
+              auditoria_view: regra(audit, 'viewRule'),
+            },
+          }
+        } catch (_) {
+          throw new Error('SNAPSHOT_' + etapa)
+        }
+      }
+      function codigoSnapshot(err) {
+        var text = String(err || '')
+        for (var i = 0; i < ETAPAS_SNAPSHOT.length; i++) {
+          var code = 'SNAPSHOT_' + ETAPAS_SNAPSHOT[i]
+          if (text.indexOf(code) >= 0) return code
+        }
+        return 'SNAPSHOT_INDISPONIVEL'
+      }
+      function previsto(state) {
+        var permissionSlugs = []
+        for (var p = 0; p < state.permissoes.length; p++)
+          permissionSlugs.push(state.permissoes[p].slug + ':' + state.permissoes[p].escopo)
+        permissionSlugs.sort()
+        return {
+          calendario_criar: !state.calendario_existe,
+          parametros_sla_criar: state.sla.filter(function (item) {
+            return !item.id
+          }).length,
+          perfil_criar: !state.perfil,
+          perfil_ativar_ou_normalizar:
+            !!state.perfil &&
+            (state.perfil.ativo !== true || state.perfil.nome !== 'Negociação Própria'),
+          permissoes_esperadas: PERMISSOES,
+          permissoes_atuais: permissionSlugs,
+          shirleide_perfil_atual: state.shirleide.perfil_slug,
+          shirleide_perfil_destino: PERFIL_SLUG,
+          vinculos_atualizar: state.bindings.filter(function (item) {
+            return !state.perfil || item.perfil_id !== state.perfil.id || item.escopo !== 'proprios'
+          }).length,
+          regras_users_auditoria_atualizar: true,
+        }
+      }
       var auth = autenticarSeguro(e)
       if (auth.erro) return auth.erro
       var parsed = corpoSeguro(e)
@@ -298,6 +515,197 @@
     'POST',
     ROTA + '/executar',
     function (e) {
+      var COMANDO = 't62_materializar_menor_privilegio'
+      var ID_SHIRLEIDE = 'pmdghnoqc5x3rnn'
+      var EMAIL_SHIRLEIDE = 'comercial06@pmaisservicos.com.br'
+      var PERFIL_SLUG = 'negociacao-propria'
+      var CONFIRMACAO = 'MATERIALIZAR_T62_MENOR_PRIVILEGIO'
+      var SLA = [
+        ['sla.lead_dias_uteis', '1', 'Lead vence no fim do próximo dia útil'],
+        ['sla.proposta_dias_uteis', '5', 'Proposta vence em cinco dias úteis'],
+        [
+          'sla.negociacao_dias_uteis',
+          '2',
+          'Primeiro acompanhamento da negociação vence em dois dias úteis',
+        ],
+        ['sla.alerta_antecedencia_dias_uteis', '1', 'Antecedência padrão dos alertas de SLA'],
+      ]
+      var PERMISSOES = ['empresas.view', 'negocios.view', 'dashboard.view']
+      var ETAPAS_SNAPSHOT = [
+        'CONTA_ALVO',
+        'PERFIL_DESTINO',
+        'VINCULOS',
+        'PERMISSOES',
+        'SLA',
+        'CALENDARIO',
+        'REGRAS',
+      ]
+      function perfilSlug(app, user) {
+        try {
+          return app.findRecordById('com_perfis', user.getString('perfil_id')).getString('slug')
+        } catch (_) {
+          return ''
+        }
+      }
+      function autenticarSeguro(evento) {
+        try {
+          var ator = evento.auth
+          if (!ator) return { erro: evento.unauthorizedError('Autenticacao necessaria') }
+          if (!ator.getBool('ativo_comercial'))
+            return { erro: evento.forbiddenError('Usuario comercial inativo') }
+          if (perfilSlug($app, ator) !== 'superadministrador')
+            return { erro: evento.forbiddenError('SuperAdmin necessario') }
+          return { ator: ator }
+        } catch (_) {
+          return { erro: evento.json(409, { error: 'PRECHECK_AUTH' }) }
+        }
+      }
+      function corpoSeguro(evento) {
+        try {
+          var info = evento.requestInfo()
+          var body = info && info.body
+          if (!body || typeof body !== 'object' || Array.isArray(body))
+            return { erro: evento.json(400, { error: 'PRECHECK_BODY' }) }
+          return { body: body }
+        } catch (_) {
+          return { erro: evento.json(400, { error: 'PRECHECK_BODY' }) }
+        }
+      }
+      function canonicalize(obj) {
+        if (obj === null || obj === undefined) return 'null'
+        if (typeof obj !== 'object') return JSON.stringify(obj)
+        if (Array.isArray(obj)) {
+          var arr = []
+          for (var a = 0; a < obj.length; a++) arr.push(canonicalize(obj[a]))
+          return '[' + arr.join(',') + ']'
+        }
+        var keys = Object.keys(obj).sort()
+        var parts = []
+        for (var i = 0; i < keys.length; i++)
+          parts.push(JSON.stringify(keys[i]) + ':' + canonicalize(obj[keys[i]]))
+        return '{' + parts.join(',') + '}'
+      }
+      function regra(collection, name) {
+        var value = collection[name]
+        return value === null || value === undefined ? null : String(value)
+      }
+      function primeiro(app, collection, filter) {
+        try {
+          return app.findFirstRecordByFilter(collection, filter)
+        } catch (_) {
+          return null
+        }
+      }
+      function snapshot(app) {
+        var etapa = 'CONTA_ALVO'
+        try {
+          var shirleide = app.findRecordById('users', ID_SHIRLEIDE)
+          if (shirleide.getString('email').toLowerCase() !== EMAIL_SHIRLEIDE)
+            throw new Error('CONTA_ALVO_DIVERGENTE')
+          etapa = 'PERFIL_DESTINO'
+          var profile = primeiro(app, 'com_perfis', "slug='" + PERFIL_SLUG + "'")
+          etapa = 'VINCULOS'
+          var bindings = app.findRecordsByFilter(
+            'com_usuarios_equipes',
+            "usuario_id='" + shirleide.id + "'",
+            'id',
+            50,
+            0,
+          )
+          var bindingState = []
+          for (var b = 0; b < bindings.length; b++)
+            bindingState.push({
+              id: bindings[b].id,
+              perfil_id: bindings[b].getString('perfil_id'),
+              escopo: bindings[b].getString('escopo'),
+              ativo: bindings[b].getBool('ativo'),
+            })
+          etapa = 'PERMISSOES'
+          var profilePermissions = []
+          if (profile) {
+            var links = app.findRecordsByFilter(
+              'com_perfil_permissoes',
+              "perfil_id='" + profile.id + "'",
+              'id',
+              100,
+              0,
+            )
+            for (var p = 0; p < links.length; p++) {
+              var permissionSlug = ''
+              try {
+                permissionSlug = app
+                  .findRecordById('com_permissoes', links[p].getString('permissao_id'))
+                  .getString('slug')
+              } catch (_) {}
+              profilePermissions.push({
+                id: links[p].id,
+                slug: permissionSlug,
+                escopo: links[p].getString('escopo'),
+              })
+            }
+          }
+          etapa = 'SLA'
+          var slaState = []
+          for (var s = 0; s < SLA.length; s++) {
+            var parametro = primeiro(app, 'com_parametros', "chave='" + SLA[s][0] + "'")
+            slaState.push(
+              parametro
+                ? {
+                    chave: SLA[s][0],
+                    id: parametro.id,
+                    valor: parametro.getString('valor'),
+                    ativo: parametro.getBool('ativo'),
+                  }
+                : { chave: SLA[s][0], id: null, valor: null, ativo: false },
+            )
+          }
+          etapa = 'CALENDARIO'
+          var calendarioExiste = true
+          try {
+            app.findCollectionByNameOrId('com_calendario_feriados')
+          } catch (_) {
+            calendarioExiste = false
+          }
+          etapa = 'REGRAS'
+          var users = app.findCollectionByNameOrId('users')
+          var audit = app.findCollectionByNameOrId('com_auditoria')
+          return {
+            shirleide: {
+              id: shirleide.id,
+              ativo_comercial: shirleide.getBool('ativo_comercial'),
+              perfil_id: shirleide.getString('perfil_id'),
+              perfil_slug: perfilSlug(app, shirleide),
+              updated: shirleide.getString('updated'),
+            },
+            perfil: profile
+              ? { id: profile.id, ativo: profile.getBool('ativo'), nome: profile.getString('nome') }
+              : null,
+            bindings: bindingState,
+            permissoes: profilePermissions,
+            sla: slaState,
+            calendario_existe: calendarioExiste,
+            regras: {
+              users_list: regra(users, 'listRule'),
+              users_view: regra(users, 'viewRule'),
+              auditoria_list: regra(audit, 'listRule'),
+              auditoria_view: regra(audit, 'viewRule'),
+            },
+          }
+        } catch (_) {
+          throw new Error('SNAPSHOT_' + etapa)
+        }
+      }
+      function codigoSnapshot(err) {
+        var text = String(err || '')
+        for (var i = 0; i < ETAPAS_SNAPSHOT.length; i++) {
+          var code = 'SNAPSHOT_' + ETAPAS_SNAPSHOT[i]
+          if (text.indexOf(code) >= 0) return code
+        }
+        return 'SNAPSHOT_INDISPONIVEL'
+      }
+      function fingerprint(app) {
+        return $security.sha256(canonicalize(snapshot(app)))
+      }
       var auth = autenticarSeguro(e)
       if (auth.erro) return auth.erro
       var ator = auth.ator
