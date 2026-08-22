@@ -20,6 +20,10 @@ const hooks = [
   'com_fechamentos_operacao.js',
   'com_ordens_execucao.js',
 ].map((name) => read(`pocketbase/hooks/${name}`))
+const propostasHook = hooks[2]
+const eventosCallback = propostasHook.slice(
+  propostasHook.indexOf("'/backend/v1/propostas/eventos'"),
+)
 
 check('menu Administração depende de permissões', layout.includes('podeAdministrar'))
 check('rota Administração possui barreira', app.includes('AdministrationRoute'))
@@ -59,6 +63,12 @@ check(
   hooks.every(
     (source) => source.includes("'negociacao-propria'") && source.includes("'ACAO_NAO_AUTORIZADA'"),
   ),
+)
+check(
+  'callback de eventos de proposta decide o perfil sem fechamento lexical',
+  eventosCallback.includes('function propostaPodeExecutar(perfil)') &&
+    eventosCallback.includes('if (!propostaPodeExecutar(perfil))') &&
+    !eventosCallback.includes('propostaPodeExecutar($app, ator, body.tipo)'),
 )
 
 let failures = 0

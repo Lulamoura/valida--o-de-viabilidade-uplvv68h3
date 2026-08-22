@@ -213,6 +213,9 @@
           return ''
         }
       }
+      function propostaPodeExecutar(perfil) {
+        return perfil !== 'negociacao-propria'
+      }
       function propostaPodeAcessar(user, perfil, negocio) {
         if (perfil === 'superadministrador') return true
         if (negocio.getString('responsavel_id') === user.id) return true
@@ -301,8 +304,7 @@
       )
         return e.json(400, { error: 'EVIDENCIA_DECISAO_OBRIGATORIA' })
       var perfil = propostaPerfil($app, ator)
-      if (!propostaPodeExecutar($app, ator, body.tipo))
-        return e.json(403, { error: 'ACAO_NAO_AUTORIZADA' })
+      if (!propostaPodeExecutar(perfil)) return e.json(403, { error: 'ACAO_NAO_AUTORIZADA' })
       var payload = {
         negocio_id: body.negocio_id,
         tipo: body.tipo,
